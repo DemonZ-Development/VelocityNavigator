@@ -70,10 +70,8 @@ class BedrockHandlerTest {
         ProxyServer mockProxy = createMockProxyServer(false, false);
         BedrockHandler handler = new BedrockHandler(mockProxy);
 
-        // Null config
         assertFalse(handler.isBedrockSupported(null));
 
-        // Enabled = true config
         Config defaults = Config.defaults();
         Config configEnabled = new Config(
                 defaults.configVersion(),
@@ -95,7 +93,6 @@ class BedrockHandlerTest {
         );
         assertTrue(handler.isBedrockSupported(configEnabled));
 
-        // Auto-detect with no plugins (adapted to test classpath containing Floodgate API)
         Config configAutoNoPlugins = new Config(
                 defaults.configVersion(),
                 defaults.commands(),
@@ -150,12 +147,10 @@ class BedrockHandlerTest {
 
     @Test
     void formatForBedrockStripsAdvancedFormattingAndHandlesNulls() {
-        // Null component -> empty component
         Component nullResult = BedrockHandler.formatForBedrock(null);
         assertNotNull(nullResult);
         assertEquals(Component.empty(), nullResult);
 
-        // Complex component with hover, click, font, and children
         Component original = Component.text("Click Me", NamedTextColor.RED, TextDecoration.BOLD)
                 .hoverEvent(HoverEvent.showText(Component.text("Hover text")))
                 .clickEvent(ClickEvent.runCommand("/lobby"))
@@ -165,16 +160,13 @@ class BedrockHandlerTest {
 
         Component stripped = BedrockHandler.formatForBedrock(original);
 
-        // Check formatting preserved
         assertEquals(NamedTextColor.RED, stripped.color());
         assertTrue(stripped.hasDecoration(TextDecoration.BOLD));
 
-        // Check advanced events stripped
         assertNull(stripped.hoverEvent());
         assertNull(stripped.clickEvent());
         assertNull(stripped.font());
 
-        // Check children stripped recursively
         assertEquals(1, stripped.children().size());
         Component child = stripped.children().get(0);
         assertEquals(" Child text", ((net.kyori.adventure.text.TextComponent) child).content());

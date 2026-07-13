@@ -1,6 +1,6 @@
 ---
-[🏠 Home](Home) · [⚙️ Configuration](Configuration-Guide) · [🔌 Developer API](Developer-API) · [📋 Operations Runbook](Operations-Runbook) · [❓ FAQ](FAQ)
+[Home](Home) · [Quick Start](Quick-Start-Guide) · [Configuration](Configuration-Guide) · [Operations](Operations-Runbook) · [FAQ](FAQ)
 
-**[GitHub](https://github.com/sdemonzdevelopment-spec/VelocityNavigator)** · [Support / Discord](https://discord.com/invite/GYsTt96ypf) · [🐛 Report a Bug](https://github.com/sdemonzdevelopment-spec/VelocityNavigator/issues)
+**[GitHub](https://github.com/DemonZ-Development/VelocityNavigator)** · [Support / Discord](https://discord.com/invite/GYsTt96ypf) · [Report a Bug](https://github.com/DemonZ-Development/VelocityNavigator/issues)
 
-*VelocityNavigator v4.2.0 · by [DemonZ Development](https://github.com/sdemonzdevelopment-spec)*
+*VelocityNavigator v4.3.0 · by [DemonZ Development](https://github.com/DemonZ-Development)*

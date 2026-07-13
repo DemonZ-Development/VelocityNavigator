@@ -32,7 +32,6 @@ class CooldownServiceTest {
         UUID playerId = UUID.randomUUID();
 
         service.apply(playerId, 1);
-        // Sleep past the 1-second cooldown
         Thread.sleep(1100);
 
         OptionalLong remaining = service.secondsRemaining(playerId);
@@ -54,17 +53,11 @@ class CooldownServiceTest {
 
     @Test
     void secondsRemainingCapturesInstantOnce() {
-        // Verifies the single-Instant.now() capture fix: the same instant is used
-        // for both the expiry check and the Duration calculation, so the result
-        // is always consistent and never negative/zero.
         CooldownService service = new CooldownService();
         UUID playerId = UUID.randomUUID();
 
-        // Apply a very short cooldown and immediately query — there should be no
-        // race between the check and the duration calculation.
         service.apply(playerId, 2);
 
-        // Query rapidly many times; none should return a value < 1
         for (int i = 0; i < 100; i++) {
             OptionalLong remaining = service.secondsRemaining(playerId);
             if (remaining.isPresent()) {

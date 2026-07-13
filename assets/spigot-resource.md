@@ -1,140 +1,150 @@
-# VelocityNavigator Spigot Resource Copy
+# VelocityNavigator
 
-![VelocityNavigator Banner](https://raw.githubusercontent.com/sdemonzdevelopment-spec/VelocityNavigator/main/assets/hero-banner.png?v=4)
+![VelocityNavigator banner](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/hero-banner.png?v=7)
 
-## Title
+Velocity's normal `try` list is a fallback list, not a load balancer. If the first lobby is online, nearly everyone lands there. VelocityNavigator fixes that by choosing a suitable lobby for every initial join and every `/lobby` request.
 
-VelocityNavigator | Production-Grade Lobby Routing & Initial Join Load Balancing for Velocity
+It works well on a small network with two lobbies, but it also has the controls needed for larger setups: health checks, drain mode, capacity limits, fallback pools, sticky routing, parties, queues, Redis sync, and clear admin commands.
 
-## Short Description
+> Get the current JAR with the **Download** button on this Spigot page. The same JAR runs on Velocity and, when needed, on Paper or Spigot.
 
-The smartest lobby system for Velocity proxies — true initial join load balancing, health-checked routing, contextual groups, and live debug tools.
+## Better lobby routing
 
-## Important Platform Note
+![A player being routed to a healthy lobby](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/01-smart-routing.png?v=2)
 
-> **This is a Velocity-only plugin.** It does not run on Bukkit, Spigot, or Paper backends.
-> This Spigot listing exists for visibility and download discovery. Install the JAR on your **Velocity proxy**, not your backend servers.
+Choose the routing style that fits your network:
 
-![Routing](https://raw.githubusercontent.com/sdemonzdevelopment-spec/VelocityNavigator/main/assets/feature-routing.png?v=4)
+- `least_players` for a simple, even spread
+- `power_of_two` for a fast all-round choice on busy networks
+- `weighted_round_robin` when some lobbies are larger than others
+- `consistent_hash` when players should usually return to the same lobby
+- `latency` when proxy-to-backend ping matters
+- `round_robin`, `random`, and `least_connections` for more specific setups
 
-## 🚀 v4.2.0 Feature Highlights
+Before a server is selected, VelocityNavigator can skip lobbies that are offline, full, drained for maintenance, temporarily failing, or in the wrong lifecycle state. Contextual groups can also send BedWars players back to a BedWars lobby while SkyWars players return to their own hub.
 
-- **Hardened Security & Menu Selections** — Stale or forged lobby menu selections cannot bypass drain mode, capacity checks, or circuit breakers anymore.
-- **Prometheus Boot Integration** — Exporter starts immediately during initial proxy boot when enabled.
-- **Circuit Breaker Accuracy** — Restored true consecutive-failure tracking behavior for the breaker.
-- **Redesigned Configuration (v6)** — The `navigator.toml` file has been completely redesigned with clean section banners and grouped documentation.
-- **Unified Notifications** — Aligned admin join notifications with the global `[update_checker].notify_admins` configuration and preserved during config writes.
-- **Improved Validation & Normalization** — Support for `latency` routing mode and mixed-case contextual group name matching.
+Initial joins use the same routing rules, so balancing starts before a player types a command.
 
-### v4.1.0 Features Included
+## Real menus for Java and Bedrock
 
-- **Bedrock/Geyser Form GUI Support:** Seamless routing for Bedrock players with Floodgate UUID mapping. Strips gradients, hovers, and clicks. Bedrock players can use a native, interactive Form GUI (popup menu) to select their lobby, which is highly configurable (custom titles, descriptions, and button formats) and toggled via the `use_gui_for_lobby` setting.
-  
-  ![Bedrock Selector](https://raw.githubusercontent.com/sdemonzdevelopment-spec/VelocityNavigator/main/assets/bedrock-selector.png?v=4)
-- **`/vn servers` Dashboard:** Paginated lobby diagnostics showing player count, circuit breaker state, drain status, and per-server capacity.
-- **Legacy Color Code Converter:** Auto-detects `&` and `§` codes and converts to MiniMessage. Supports `auto`, `legacy`, and `minimessage` modes.
-- **Levenshtein Config Validation:** Typo auto-correction with distance-based suggestions for all TOML settings.
-- **Self-Documenting Config:** Every key in `navigator.toml` auto-generates rich comments with wiki anchor links.
-- **First-Run Welcome & Upgrades:** Console dashboard on fresh install, release notes digest on upgrades.
-- **Periodic Update Checker:** Scheduled Modrinth checks with exponential backoff on HTTP 429 (up to 4 hours).
-- **Empty Lobby Fallbacks:** Configurable `disconnect` or `fallback_server` strategy when all lobbies are unreachable.
-- **Permission Default Change:** `/lobby` now defaults to `"none"` — works out of the box without permission plugins.
-- **Initial Join Balancing:** Load-balance players the absolute millisecond they hit the proxy, before they even finish authentication.
-- **7 Selection Algorithms:**
-  - `least_players` - Best for simple even load distribution.
-  - `random` - Uniformly random selection.
-  - `round_robin` - Strict sequential cycle.
-  - `power_of_two` - Selects the best of 2 random choices (3-5x better tail latency).
-  - `weighted_round_robin` - Interleaved WRR with dynamic weights.
-  - `least_connections` - Routes using connection tracking (EMA loads).
-  - `consistent_hash` - Dynamic consistent hashing on player UUID for deterministic session affinity.
-- **Player Affinity (Sticky Sessions):** Send players back to their previously connected lobby with customizable stickiness, configured via the new `[routing.affinity]` block.
-- **Contextual Groups:** Route players to game-specific lobbies based on the server they are leaving (e.g. Bedwars → Bedwars lobbies) with per-group selection overrides.
-- **Automatic Fallback Loop:** Walk through fallback groups in priority order if a contextual lobby pool is down.
+### Java Edition inventory
 
-## Network Resilience & High Availability
-- **Circuit Breaker Pattern:** Skips unhealthy servers instantly. Features a full `CLOSED` ➔ `OPEN` ➔ `HALF_OPEN` state machine to isolate failing nodes before players notice.
-- **Async Health Checks:** Pings backend servers in the background with configurable timeout and TTL caching.
-- **Ping Coalescing:** Consolidates overlapping pings (e.g. 100 simultaneous player connections trigger ONE ping per server, preventing network storms).
-- **Anti-Spam Cooldowns:** Pre-execution locks block command spam before routing calculations even begin.
-- **Connection Retry:** Automatically retries connection attempts on failure, falling back dynamically across candidate servers.
+![VelocityNavigator Java inventory running in Minecraft](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png?v=1)
 
-## Live Diagnostics & Maintenance
-- `/vn reload` — Hot-reload the entire configuration live.
-- `/vn status` — Dashboard of current routing settings, online candidate pools, and health metrics.
-- `/vn version` — Displays the installed version and queries for available updates.
-- `/vn debug player <name>` — Live walkthrough preview of how the routing engine would resolve a connection for a specific player.
-- `/vn debug server <name>` — Detailed health telemetry snapshot of a backend server.
-- `/vn drain <server>` — Gracefully empty a lobby server for maintenance. No new connections will be routed to it.
-- `/vn undrain <server>` — Resume normal routing to a previously drained server.
-- `/vn drain status` — View all currently drained servers.
-- `/vn servers` — Show paginated lobby server status dashboard with health, drain, and capacity info.
-- `/vn updatecheck` — Manually trigger a query to check for the latest plugin releases.
+Java players can use a paginated chest-style inventory rendered by the optional Paper/Spigot backend bridge.
 
-## Installation
+### Bedrock form
 
-1. Install Velocity 3.x on your proxy
-2. Drop the VelocityNavigator JAR into `plugins/`
-3. Start the proxy once — a heavily-commented config is auto-generated
-4. Edit `plugins/velocitynavigator/navigator.toml`
-5. Restart or run `/vn reload`
+![VelocityNavigator Bedrock lobby form running in Minecraft](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png?v=2)
 
-## Permissions
+Geyser/Floodgate players can use a native Bedrock form. Networks without either GUI can keep the clickable chat selector.
 
-| Permission | Purpose |
-|-----------|---------|
-| `velocitynavigator.use` | Use `/lobby` — default changed to `"none"` in v4.1.0 |
-| `velocitynavigator.admin` | Admin commands (hidden from non-admins) |
-| `velocitynavigator.bypasscooldown` | Bypass `/lobby` cooldown |
+Both screenshots come from running Minecraft clients. The layout lives in `gui.toml`; you can change rows, materials, filler items, server icons, fixed slots, titles, lore, navigation buttons, refresh timing, and unavailable-server styling. Menu text supports MiniMessage, classic color codes, and RGB colors.
 
-## FAQ
+## One JAR, optional backend install
 
-**Is this a Spigot/Paper plugin?**
-No. VelocityNavigator runs exclusively on **Velocity proxies**. This Spigot listing is for visibility only.
+![Velocity proxy and optional backend bridge](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/02-universal-jar.png?v=2)
 
-**What Java version do I need?**
-Java **17+**.
+Install VelocityNavigator on the Velocity proxy for routing, commands, health checks, parties, queues, and metrics.
 
-**What Velocity versions are supported?**
-Velocity **3.x**.
+Put the same JAR on a Paper or Spigot backend only if that server needs to open the Java inventory menu or announce itself through Redis. A proxy-only installation is completely valid, and Bedrock forms do not require the backend bridge.
 
-**Does it support metrics?**
-Yes — bStats plugin id `28341`. Can be disabled in config.
+Startup logs clearly say whether the JAR is running in **VELOCITY PROXY** mode or **BACKEND GUI BRIDGE** mode.
 
-**Will it crash if I write the config wrong?**
-No. Every field is validated individually — bad values get a warning log and are replaced with safe defaults. The proxy never crashes from a config typo.
+## Useful extras when your network needs them
+
+![Optional parties, queues, and Redis](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/05-optional-systems.png?v=2)
+
+Every larger feature has its own enable switch.
+
+### Parties
+
+Players can invite, accept, deny, kick, leave, disband, view party members, and use private party chat. When leader follow is enabled, online members follow the leader to another server.
+
+### Capacity queue
+
+If every lobby in a pool is full, players can wait in a lightweight queue with live position updates. They are connected automatically when a slot opens. An optional holding server can be used during the wait.
+
+### Redis sync
+
+Multiple Velocity proxies can share health, circuit-breaker, affinity, and backend-state information through Redis. Backends can also register and unregister themselves with a shared secret and an allowed-host list.
+
+Party membership and queue positions stay on the proxy where they were created, so multi-proxy networks should keep those players pinned to the same proxy.
+
+## Easier day-to-day administration
+
+![VelocityNavigator operations view](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/06-operations.png?v=2)
+
+- Drain a lobby before maintenance without kicking players already there
+- Check health, player counts, latency, capacity, and circuit state
+- See why a player or server was excluded from a route
+- Add or remove Velocity servers with validation and dry-run support
+- Export Prometheus metrics and create the included Grafana dashboard
+- Use the optional local HTML dashboard for a quick browser view
+- Keep player affinity across proxy restarts
+
+The most useful first checks are `/vn health`, `/vn servers`, `/vn bridge status`, and `/vn config validate`.
+
+## Quick setup
+
+1. Download `VelocityNavigator-4.3.0.jar` with this page's **Download** button.
+2. Put it in the Velocity proxy's `plugins` folder.
+3. Start the proxy once to create the configuration files.
+4. Add your lobby names to `navigator.toml` or use `/vn server add lobby`.
+5. Run `/vn config validate`, then `/vn reload`.
+6. Optionally install the same JAR on Paper/Spigot backends for the Java inventory selector.
+
+A small setup can be as short as:
+
+```toml
+[routing]
+selection_mode = "power_of_two"
+balance_initial_join = true
+default_lobbies = ["lobby-1", "lobby-2"]
+```
+
+The server names must already exist in Velocity's `velocity.toml`.
+
+## Main commands
+
+| Command | What it does |
+|---|---|
+| `/lobby`, `/hub`, `/spawn` | Route the player or open the configured selector |
+| `/party ...`, `/p ...` | Party management and private party chat |
+| `/queue`, `/queue leave` | View or leave the capacity queue |
+| `/vn health` | Show a quick network health summary |
+| `/vn servers` | View each lobby's current state |
+| `/vn bridge status` | Check which backends have the optional bridge |
+| `/vn redis status`, `/vn redis test` | Check Redis configuration and connectivity |
+| `/vn debug player <name>` | Explain a player's current routing result |
+| `/vn drain <server>`, `/vn undrain <server>` | Take a server out of or back into rotation |
+| `/vn server add game|lobby ...` | Add a normal game backend or an active routed lobby |
+| `/vn server dry-run ...`, `/vn server list`, `/vn server remove <name>` | Preview, inspect, or remove managed server entries |
+| `/vn config validate` | Check the active configuration for common mistakes |
+| `/vn reload` | Reload proxy-side configuration files |
+
+`velocitynavigator.use` controls the player lobby command. `velocitynavigator.admin` controls the admin commands.
+
+## Compatibility
+
+- Velocity 3.x
+- Java 17 or newer
+- Minecraft versions supported by your Velocity build
+- Optional Paper/Spigot bridge built against the 1.16.5 API without version-specific NMS
+- Geyser and Floodgate for native Bedrock forms
+
+VelocityNavigator does not run on BungeeCord or Waterfall. Redis Cluster and Sentinel discovery are not included. GeoIP routing is not available in 4.3.0.
+
+## Updating from 4.2
+
+Keep a copy of your current JAR and plugin folder, replace the JAR, then start one proxy first. Version 4.3 updates the configuration layout and keeps a backup of the previous file. Run `/vn config validate` and try `/lobby` before updating the rest of the network.
+
+## Help
+
+Use this Spigot page for downloads and updates. For setup help or bug reports, join [DemonZ Development on Discord](https://discord.com/invite/GYsTt96ypf).
+
+Velocity-side anonymous usage statistics are provided through [bStats](https://bstats.org/plugin/velocity/Velocity%20Navigator/28341) and can be disabled in the configuration. Backend metrics are configured separately.
 
 ---
 
-## ⚡ Sponsored by Nexeu Hosting
-
-[![nexeu-sponsor](https://whodoesntloveavatars.s3.fra.databucket.eu/assets/promo.png)](https://nexeu.zip/)
-
-Looking for high-performance, reliable, and affordable hosting for your Minecraft server proxy? Check out **[Nexeu Hosting](https://nexeu.zip/)**! Premium hardware, instant setup, and 24/7 support.
-
-👉 **[Get Premium Hosting at nexeu.zip](https://nexeu.zip/)**
-
----
-
-## 📖 Documentation & Links
-
-- **GitHub Repository**: [View Source](https://github.com/sdemonzdevelopment-spec/VelocityNavigator)
-- **Configuration Guide**: [Read Here](https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki/Configuration-Guide)
-- **Routing Algorithms**: [Read Here](https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki/Routing-Algorithms)
-- **Initial Join Balancing**: [Read Here](https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki/Initial-Join-Balancing)
-
----
-
-## 📊 Telemetry
-
-[![bStats](https://bstats.org/signatures/velocity/Velocity%20Navigator.svg)](https://bstats.org/plugin/velocity/Velocity%20Navigator/28341)
-
----
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/sdemonzdevelopment-spec/VelocityNavigator/main/assets/plugin-icon.png?v=4" alt="VelocityNavigator Icon" width="64">
-  <br>
-  <strong>Built with ❤️ by DemonZ Development</strong>
-  <br>
-  <em>Premium Minecraft infrastructure, engineered for scale.</em>
-</p>
+[Nexeu Hosting](https://nexeu.zip/) supports the project. VelocityNavigator does not require a specific hosting provider.

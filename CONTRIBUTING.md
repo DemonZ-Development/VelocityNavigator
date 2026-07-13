@@ -1,26 +1,26 @@
 # Contributing to VelocityNavigator
 
-First off, thanks for taking the time to contribute! VelocityNavigator is a premium project by **DemonZ Development**, and we appreciate any help in making it better.
+Thanks for taking the time to contribute. VelocityNavigator is an open-source project maintained by **DemonZ Development**, and contributions of any size are welcome.
 
 ## How Can I Contribute?
 
 ### Reporting Bugs
-Bugs are tracked as GitHub issues. When creating a bug report, please include as many details as possible (logs, Velocity version, etc.).
+Bugs are tracked as GitHub issues. When creating a bug report, include as much detail as possible: the Velocity version, the VelocityNavigator version, the relevant section of `navigator.toml`, and any logs or stack traces.
 
 ### Suggesting Enhancements
-Feature requests are also tracked as GitHub issues. We love hearing your ideas!
+Feature requests are also tracked as GitHub issues. Describe the problem you are trying to solve and the behavior you expect; concrete examples and proposed config shapes help.
 
 ### Pull Requests
 - Fork the repository and create your branch from `main`.
-- If you've added code that should be tested, add tests!
+- If you add code that should be tested, add tests covering it.
 - Ensure the test suite passes (`mvn verify`).
-- Make sure your code lints.
 - Follow the existing code style.
+- Keep commits focused — one logical change per branch makes review faster.
 
 ## Credits & Attribution
-VelocityNavigator is developed and maintained by **DemonZ Development**. 
+VelocityNavigator is developed and maintained by **DemonZ Development**.
 
-Contributors who have their pull requests merged will be listed in the [CHANGELOG.md](CHANGELOG.md) and on the project page.
+Contributors who have pull requests merged are listed in the [CHANGELOG.md](CHANGELOG.md) and on the project page.
 
 ## License
-By contributing to VelocityNavigator, you agree that your contributions will be licensed under its [Apache License 2.0](LICENSE).
+By contributing to VelocityNavigator, you agree that your contributions are licensed under the project's [Apache License 2.0](LICENSE).

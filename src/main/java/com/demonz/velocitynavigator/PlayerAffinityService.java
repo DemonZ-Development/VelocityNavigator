@@ -15,6 +15,15 @@
  */
 package com.demonz.velocitynavigator;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.slf4j.Logger;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -27,6 +36,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class PlayerAffinityService {
 
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(10);
+    private static final Gson GSON = new Gson();
 
     private final ConcurrentMap<UUID, AffinityEntry> affinityMap = new ConcurrentHashMap<>();
     private final double stickiness;
@@ -64,10 +74,6 @@ public final class PlayerAffinityService {
         affinityMap.remove(playerId);
     }
 
-    /**
-     * Check whether the player should stick to their affinity server.
-     * Returns the affinity server name if the player should stick, empty otherwise.
-     */
     public Optional<String> shouldStick(UUID playerId, java.util.List<String> candidates) {
         AffinityEntry entry = affinityMap.get(playerId);
         if (entry == null) {
@@ -99,6 +105,10 @@ public final class PlayerAffinityService {
         return Map.copyOf(snapshot);
     }
 
+    public void applyRemoteAffinity(UUID playerId, String serverName) {
+        setAffinity(playerId, serverName);
+    }
+
     public void purgeExpired() {
         Instant now = Instant.now();
         for (Map.Entry<UUID, AffinityEntry> entry : affinityMap.entrySet()) {
@@ -114,6 +124,58 @@ public final class PlayerAffinityService {
 
     private boolean isExpired(AffinityEntry entry, Instant now) {
         return entry.updatedAt().plus(ttl).isBefore(now);
+    }
+
+    public void saveTo(Path file, Logger logger) {
+        if (file == null) return;
+        Instant now = Instant.now();
+        try {
+            Files.createDirectories(file.getParent());
+            JsonObject root = new JsonObject();
+            for (Map.Entry<UUID, AffinityEntry> entry : affinityMap.entrySet()) {
+                AffinityEntry value = entry.getValue();
+                if (isExpired(value, now)) continue;
+                JsonObject item = new JsonObject();
+                item.addProperty("server", value.serverName());
+                item.addProperty("updated_at", value.updatedAt().toString());
+                root.add(entry.getKey().toString(), item);
+            }
+            Files.writeString(file, GSON.toJson(root), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            if (logger != null) {
+                logger.warn("[VelocityNavigator] Failed to persist affinity store to {}: {}", file, e.getMessage());
+            }
+        }
+    }
+
+    public int loadFrom(Path file, Logger logger) {
+        if (file == null || !Files.exists(file)) return 0;
+        try {
+            String content = Files.readString(file, StandardCharsets.UTF_8);
+            if (content.isBlank()) return 0;
+            JsonObject root = JsonParser.parseString(content).getAsJsonObject();
+            int loaded = 0;
+            Instant now = Instant.now();
+            for (String key : root.keySet()) {
+                try {
+                    UUID id = UUID.fromString(key);
+                    JsonObject item = root.getAsJsonObject(key);
+                    String server = item.get("server").getAsString();
+                    Instant updatedAt = Instant.parse(item.get("updated_at").getAsString());
+                    AffinityEntry entry = new AffinityEntry(server, updatedAt);
+                    if (isExpired(entry, now)) continue;
+                    affinityMap.put(id, entry);
+                    loaded++;
+                } catch (RuntimeException ignored) {
+                }
+            }
+            return loaded;
+        } catch (IOException | RuntimeException e) {
+            if (logger != null) {
+                logger.warn("[VelocityNavigator] Failed to load affinity store from {}: {}", file, e.getMessage());
+            }
+            return 0;
+        }
     }
 
     private record AffinityEntry(String serverName, Instant updatedAt) {

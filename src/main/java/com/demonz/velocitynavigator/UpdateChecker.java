@@ -26,8 +26,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class UpdateChecker {
 
@@ -38,8 +40,9 @@ public final class UpdateChecker {
     private final HttpClient httpClient;
     private final UpdateStatus updateStatus = new UpdateStatus();
 
-    private final java.util.concurrent.atomic.AtomicInteger backoffMultiplier = new java.util.concurrent.atomic.AtomicInteger(1);
-    private volatile java.time.Instant nextAllowedCheck = java.time.Instant.MIN;
+    private final AtomicInteger backoffMultiplier = new AtomicInteger(1);
+    private volatile Instant nextAllowedCheck = Instant.MIN;
+    private final Object backoffLock = new Object();
 
     public UpdateChecker(Logger logger, String currentVersion) {
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -59,10 +62,12 @@ public final class UpdateChecker {
         if (!settings.enabled()) {
             return CompletableFuture.completedFuture(null);
         }
-        java.time.Instant now = java.time.Instant.now();
-        if (now.isBefore(nextAllowedCheck)) {
-            logger.debug("[VelocityNavigator] Update check skipped due to active 429 backoff.");
-            return CompletableFuture.completedFuture(null);
+        synchronized (backoffLock) {
+            Instant now = Instant.now();
+            if (now.isBefore(nextAllowedCheck)) {
+                logger.debug("[VelocityNavigator] Update check skipped due to active 429 backoff.");
+                return CompletableFuture.completedFuture(null);
+            }
         }
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -83,14 +88,16 @@ public final class UpdateChecker {
 
     private void processResponse(HttpResponse<String> response, Config.UpdateCheckerSettings settings) {
         if (response.statusCode() == 429) {
-            int interval = Math.max(30, settings.checkIntervalMinutes());
-            int maxMultiplier = (int) Math.ceil(240.0 / interval);
-            int currentMultiplier = backoffMultiplier.updateAndGet(v -> Math.min(v * 2, maxMultiplier));
-            int backoffMinutes = Math.min(240, interval * currentMultiplier);
-            nextAllowedCheck = java.time.Instant.now().plus(Duration.ofMinutes(backoffMinutes));
-            String message = "Modrinth returned 429 Too Many Requests. Applying update check backoff for " + backoffMinutes + " minutes.";
-            updateStatus.recordFailure(message);
-            logger.warn("[VelocityNavigator] {}", message);
+            synchronized (backoffLock) {
+                int interval = Math.max(30, settings.checkIntervalMinutes());
+                int maxMultiplier = (int) Math.ceil(240.0 / interval);
+                int currentMultiplier = backoffMultiplier.updateAndGet(v -> Math.min(v * 2, maxMultiplier));
+                int backoffMinutes = Math.min(240, interval * currentMultiplier);
+                nextAllowedCheck = Instant.now().plus(Duration.ofMinutes(backoffMinutes));
+                String message = "Modrinth returned 429 Too Many Requests. Applying update check backoff for " + backoffMinutes + " minutes.";
+                updateStatus.recordFailure(message);
+                logger.warn("[VelocityNavigator] {}", message);
+            }
             return;
         }
 
@@ -101,13 +108,13 @@ public final class UpdateChecker {
             return;
         }
 
-        // Reset backoff on success
-        backoffMultiplier.set(1);
-        nextAllowedCheck = java.time.Instant.MIN;
+        synchronized (backoffLock) {
+            backoffMultiplier.set(1);
+            nextAllowedCheck = Instant.MIN;
+        }
 
         try {
-            @SuppressWarnings("deprecation")
-            JsonArray versions = new JsonParser().parse(response.body()).getAsJsonArray();
+            JsonArray versions = JsonParser.parseString(response.body()).getAsJsonArray();
             SemanticVersion installed = SemanticVersion.parse(currentVersion);
             SemanticVersion latestAllowed = installed;
             String latestAllowedRaw = currentVersion;
@@ -131,11 +138,10 @@ public final class UpdateChecker {
 
             boolean updateAvailable = latestAllowed.compareTo(installed) > 0;
             updateStatus.recordSuccess(latestAllowedRaw, updateAvailable);
-            // Always log to console
-            if (updateAvailable) {
+            if (updateAvailable && !settings.silent()) {
                 logger.info("VelocityNavigator update available: {} -> {}", currentVersion, latestAllowedRaw);
                 logger.info("Download: https://modrinth.com/plugin/velocitynavigator");
-            } else {
+            } else if (!updateAvailable && !settings.silent()) {
                 logger.info("VelocityNavigator is up to date ({}).", currentVersion);
             }
         } catch (RuntimeException exception) {
@@ -145,7 +151,6 @@ public final class UpdateChecker {
         }
     }
 
-    // Package-private for testability
     boolean isAllowed(Config.UpdateChannel channel, boolean installedIsPrerelease, Config.RemoteVersionType remoteType) {
         return switch (channel) {
             case RELEASE -> remoteType == Config.RemoteVersionType.RELEASE;

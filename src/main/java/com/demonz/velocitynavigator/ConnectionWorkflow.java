@@ -18,7 +18,6 @@ package com.demonz.velocitynavigator;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -28,8 +27,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 final class ConnectionWorkflow {
+
+    private static final long RETRY_BASE_DELAY_MS = 200L;
+    private static final long RETRY_MAX_DELAY_MS = 2_000L;
 
     private ConnectionWorkflow() {
     }
@@ -83,7 +88,9 @@ final class ConnectionWorkflow {
                                         "max", String.valueOf(maxRetries),
                                         "player", player.getUsername(),
                                         "server", nextServer), player));
-                        connectWithRetry(plugin, player, config, nextTarget.get(), decision, attempt + 1, triedServers, initialReason);
+                        long delay = retryDelayMs(attempt);
+                        CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS)
+                                .execute(() -> connectWithRetry(plugin, player, config, nextTarget.get(), decision, attempt + 1, triedServers, initialReason));
                         return;
                     }
                 }
@@ -92,14 +99,17 @@ final class ConnectionWorkflow {
             plugin.cooldowns().clear(player.getUniqueId());
             if (attempt == 0) {
                 Component reason = result.getReasonComponent()
-                        .orElse(Component.text("Unknown error", NamedTextColor.RED));
-                player.sendMessage(Component.text("Failed to connect: ", NamedTextColor.RED).append(reason));
+                        .orElse(MessageFormatter.render(config.language().text("messages.unknown_error"), player));
+                player.sendMessage(MessageFormatter.render(
+                        config.language().text("messages.connection_failed_prefix"), player).append(reason));
             } else {
-                player.sendMessage(Component.text("Failed to connect after " + (attempt + 1) + " attempt(s).", NamedTextColor.RED));
+                player.sendMessage(MessageFormatter.render(
+                        config.language().text("messages.connection_failed_attempts"),
+                        Map.of("attempts", String.valueOf(attempt + 1)), player));
             }
         }).exceptionally(throwable -> {
             plugin.cooldowns().clear(player.getUniqueId());
-            player.sendMessage(Component.text("An error occurred while connecting to the lobby.", NamedTextColor.RED));
+            player.sendMessage(MessageFormatter.render(config.language().text("messages.connection_error"), player));
             plugin.logger().error("[VelocityNavigator] connectWithRetry failed for {}", player.getUsername(), throwable);
             return null;
         });
@@ -140,5 +150,12 @@ final class ConnectionWorkflow {
             return FloodgateIntegration.getJavaUUID(player);
         }
         return player.getUniqueId();
+    }
+
+    static long retryDelayMs(int attempt) {
+        long base = RETRY_BASE_DELAY_MS * (1L << Math.min(attempt, 6));
+        long capped = Math.min(base, RETRY_MAX_DELAY_MS);
+        long jitter = ThreadLocalRandom.current().nextLong(capped / 2 + 1);
+        return capped + jitter;
     }
 }

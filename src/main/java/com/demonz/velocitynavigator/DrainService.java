@@ -23,10 +23,6 @@ public final class DrainService {
 
     private final ConcurrentMap<String, Boolean> drainState = new ConcurrentHashMap<>();
 
-    /**
-     * Checks if a server is drained. Uses single atomic get() instead of
-     * containsKey()+get() to prevent NPE from concurrent undrain operations.
-     */
     public boolean isDrained(String serverName) {
         Boolean state = drainState.get(normalize(serverName));
         return state != null && state;

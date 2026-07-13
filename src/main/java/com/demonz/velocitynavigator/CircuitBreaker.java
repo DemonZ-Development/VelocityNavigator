@@ -40,10 +40,6 @@ public final class CircuitBreaker {
         this.halfOpenMaxTests = Math.max(1, halfOpenMaxTests);
     }
 
-    /**
-     * Atomically checks availability and increments HALF_OPEN test counter.
-     * Uses compute() to prevent check-then-act race conditions under concurrent access.
-     */
     public boolean isAvailable(String serverName) {
         String normalizedServerName = normalize(serverName);
         BreakerState state = states.get(normalizedServerName);
@@ -53,7 +49,6 @@ public final class CircuitBreaker {
         return switch (state.state) {
             case CLOSED -> true;
             case OPEN -> {
-                // Atomically transition OPEN → HALF_OPEN if cooldown has elapsed
                 AtomicBoolean available = new AtomicBoolean(false);
                 states.compute(normalizedServerName, (key, current) -> {
                     if (current != null && current.state == State.OPEN
@@ -66,7 +61,6 @@ public final class CircuitBreaker {
                 yield available.get();
             }
             case HALF_OPEN -> {
-                // Atomically increment halfOpenTests — enforces the halfOpenMaxTests limit
                 AtomicBoolean available = new AtomicBoolean(false);
                 states.compute(normalizedServerName, (key, current) -> {
                     if (current != null && current.state == State.HALF_OPEN
@@ -82,10 +76,6 @@ public final class CircuitBreaker {
         };
     }
 
-    /**
-     * Records a successful connection and clears prior failure history so the
-     * threshold represents consecutive failures.
-     */
     public void recordSuccess(String serverName) {
         String normalizedServerName = normalize(serverName);
         states.compute(normalizedServerName, (key, current) -> {
@@ -131,10 +121,6 @@ public final class CircuitBreaker {
         });
     }
 
-    /**
-     * Atomically transitions OPEN → HALF_OPEN if cooldown has elapsed.
-     * Uses compute() to prevent race conditions.
-     */
     public State getState(String serverName) {
         String normalizedServerName = normalize(serverName);
         BreakerState state = states.get(normalizedServerName);
@@ -150,7 +136,6 @@ public final class CircuitBreaker {
                 return current;
             });
         }
-        // Read the current state after compute() to avoid returning a stale snapshot.
         BreakerState current = states.get(normalizedServerName);
         return current == null ? State.CLOSED : current.state;
     }
@@ -161,6 +146,23 @@ public final class CircuitBreaker {
             snapshot.put(entry.getKey(), entry.getValue().get());
         }
         return snapshot;
+    }
+
+    public Map<String, State> getStates() {
+        Map<String, State> snapshot = new java.util.LinkedHashMap<>();
+        states.keySet().forEach(server -> snapshot.put(server, getState(server)));
+        return Map.copyOf(snapshot);
+    }
+
+    public void applyRemoteState(String serverName, State state) {
+        String normalized = normalize(serverName);
+        if (state == null || state == State.CLOSED) {
+            states.remove(normalized);
+        } else if (state == State.OPEN) {
+            states.put(normalized, new BreakerState(State.OPEN, failureThreshold, Instant.now(), 0, 0));
+        } else {
+            states.put(normalized, new BreakerState(State.HALF_OPEN, failureThreshold, Instant.now(), 0, 0));
+        }
     }
 
     public void reset(String serverName) {

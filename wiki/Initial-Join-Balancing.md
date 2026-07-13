@@ -1,11 +1,10 @@
 # Initial Join Balancing
 
-> [!TIP]  
-> **New in v4.0.0** *(updated in v4.1.0)* — Load-balance players the moment they connect to the proxy, bypassing the rigid configurations of vanilla Velocity!
+![Initial join balancing](headers/initial-join-balancing.png)
 
----
+Velocity's `try` list is designed for fallback, so it sends everyone to the first online server. Initial-join balancing lets VelocityNavigator choose a healthy lobby as soon as a player logs in.
 
-## 🛑 The Vanilla Velocity Problem
+## The Vanilla Velocity Behavior
 
 By default, Velocity uses a static `try` list in `velocity.toml` to decide which server a new player joins:
 
@@ -14,11 +13,11 @@ By default, Velocity uses a static `try` list in `velocity.toml` to decide which
 try = ["lobby-1", "lobby-2"]
 ```
 
-Velocity always tries the **first server** in the list. If `lobby-1` is online, *every single player* joins `lobby-1`. The second server is only used if the first one crashes or shuts down. This means your expensive second lobby sits entirely empty while the first one bears the brunt of your entire community's weight.
+Velocity always tries the **first server** in the list. If `lobby-1` is online, every player joins `lobby-1`. The second server is only used if the first one crashes or shuts down. The second lobby stays empty while the first one absorbs the entire player load.
 
 ---
 
-## ⚡ The VelocityNavigator Solution
+## How VelocityNavigator Handles It
 
 VelocityNavigator intercepts the `PlayerChooseInitialServerEvent` and applies its routing logic **before** the player's client lands on any server.
 
@@ -38,17 +37,17 @@ sequenceDiagram
     L2-->>Player: Successfully Connected!
 ```
 
-- **`least_players` mode**: The server with the fewest players is selected.
-- **`power_of_two` mode**: Two random candidates are picked; the emptier one wins.
-- **`round_robin` mode**: Players alternate between lobbies in strict rotation.
-- **`random` mode**: Each player gets a random lobby assignment.
-- **`weighted_round_robin` mode**: Servers with higher weight receive proportionally more players.
-- **`least_connections` mode**: Uses EMA of connection rates and load for bursty traffic.
-- **`consistent_hash` mode**: Player UUID deterministically maps to a specific server.
+- **`least_players` mode**: the server with the fewest players is selected.
+- **`power_of_two` mode**: two random candidates are picked; the emptier one wins.
+- **`round_robin` mode**: players alternate between lobbies in strict rotation.
+- **`random` mode**: each player gets a random lobby assignment.
+- **`weighted_round_robin` mode**: servers with higher weight receive proportionally more players.
+- **`least_connections` mode**: uses EMA of connection rates and load for bursty traffic.
+- **`consistent_hash` mode**: player UUID deterministically maps to a specific server.
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Open your `navigator.toml`:
 
@@ -64,13 +63,13 @@ balance_initial_join = true
 
 ---
 
-> [!WARNING]  
-> You might want to temporarily set `balance_initial_join = false` if you have a dedicated "Welcome/Auth" server that *all* unverified players must join first unconditionally.
+> [!WARNING]
+> Set `balance_initial_join = false` if you have a dedicated "Welcome/Auth" server that all unverified players must join first.
 
 ---
 
-## 🔬 Technical Details
+## How initial routing works
 
 - Subscribes to `PlayerChooseInitialServerEvent` (fires immediately after `PostLoginEvent`).
-- The routing ping-health tests run concurrently to prevent artificial sign-in latency.
+- Routing ping-health tests run concurrently to avoid adding sign-in latency.
 - When `verbose_logging = true`, every balanced initial join is debug-logged.

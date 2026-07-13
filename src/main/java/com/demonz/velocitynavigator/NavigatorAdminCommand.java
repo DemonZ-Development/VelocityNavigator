@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 public final class NavigatorAdminCommand implements SimpleCommand {
 
-    private static final List<String> ROOT_SUBCOMMANDS = List.of("reload", "status", "version", "updatecheck", "debug", "drain", "undrain", "servers", "setup", "help");
+    private static final List<String> ROOT_SUBCOMMANDS = List.of("reload", "status", "health", "bridge", "redis", "version", "updatecheck", "debug", "drain", "undrain", "server", "servers", "config", "setup", "help");
     private static final List<String> DEBUG_TYPES = List.of("player", "server");
     private static final List<String> DRAIN_SUBCOMMANDS = List.of("status");
 
@@ -56,12 +56,17 @@ public final class NavigatorAdminCommand implements SimpleCommand {
         switch (arguments[0].toLowerCase(Locale.ROOT)) {
             case "reload" -> reload(invocation.source());
             case "status" -> invocation.source().sendMessage(plugin.buildStatusComponent());
+            case "health" -> invocation.source().sendMessage(plugin.buildHealthComponent());
+            case "bridge" -> bridge(invocation.source(), arguments);
+            case "redis" -> redis(invocation.source(), arguments);
             case "version" -> invocation.source().sendMessage(plugin.buildVersionComponent());
             case "updatecheck" -> updateCheck(invocation.source());
             case "debug" -> debug(invocation.source(), arguments);
             case "drain" -> drain(invocation.source(), arguments);
             case "undrain" -> undrain(invocation.source(), arguments);
+            case "server" -> server(invocation.source(), arguments);
             case "servers" -> ServersSubCommand.execute(invocation.source(), arguments, plugin);
+            case "config" -> config(invocation.source(), arguments);
             case "setup" -> setup(invocation.source(), arguments);
             case "help" -> invocation.source().sendMessage(plugin.buildHelpComponent());
             default -> invocation.source().sendMessage(Component.text("Unknown subcommand. Use /velocitynavigator help.", NamedTextColor.YELLOW));
@@ -121,7 +126,6 @@ public final class NavigatorAdminCommand implements SimpleCommand {
             }
         }
 
-        // Tab completion for top-level /vn undrain <server>.
         if ("undrain".equalsIgnoreCase(args[0])) {
             if (args.length == 2) {
                 String partial = args[1].toLowerCase(Locale.ROOT);
@@ -134,11 +138,22 @@ public final class NavigatorAdminCommand implements SimpleCommand {
         if ("setup".equalsIgnoreCase(args[0])) {
             if (args.length == 2) {
                 String partial = args[1].toLowerCase(Locale.ROOT);
-                return List.of("grafana").stream()
-                        .filter(s -> s.startsWith(partial))
-                        .collect(Collectors.toList());
+                return "grafana".startsWith(partial) ? List.of("grafana") : List.of();
             }
         }
+
+        if ("bridge".equalsIgnoreCase(args[0]) && args.length == 2) {
+            String partial = args[1].toLowerCase(Locale.ROOT);
+            return "status".startsWith(partial) ? List.of("status") : List.of();
+        }
+        if ("redis".equalsIgnoreCase(args[0]) && args.length == 2) return List.of("status", "test").stream().filter(value -> value.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+
+        if ("server".equalsIgnoreCase(args[0])) {
+            if (args.length == 2) return List.of("add", "dry-run", "remove", "list").stream().filter(value -> value.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+            if (args.length == 3 && ("add".equalsIgnoreCase(args[1]) || "dry-run".equalsIgnoreCase(args[1]))) return List.of("game", "lobby").stream().filter(value -> value.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+            if (args.length == 3 && "remove".equalsIgnoreCase(args[1])) return plugin.server().getAllServers().stream().map(server -> server.getServerInfo().getName()).filter(value -> value.toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        }
+        if ("config".equalsIgnoreCase(args[0]) && args.length == 2) return "validate".startsWith(args[1].toLowerCase(Locale.ROOT)) ? List.of("validate") : List.of();
 
         return List.of();
     }
@@ -166,6 +181,104 @@ public final class NavigatorAdminCommand implements SimpleCommand {
                     source.sendMessage(Component.text("Update check failed: " + throwable.getMessage(), NamedTextColor.RED));
                     return null;
                 });
+    }
+
+    private void bridge(CommandSource source, String[] arguments) {
+        if (arguments.length == 1 || "status".equalsIgnoreCase(arguments[1])) {
+            source.sendMessage(plugin.buildBridgeStatusComponent());
+            return;
+        }
+        source.sendMessage(MessageFormatter.render("<yellow>Usage: /vn bridge status</yellow>"));
+    }
+
+    private void redis(CommandSource source, String[] arguments) {
+        if (arguments.length < 2 || "status".equalsIgnoreCase(arguments[1])) {
+            RedisSyncService.Status status = plugin.redisStatus();
+            source.sendMessage(Component.text("Redis: " + (status.enabled() ? (status.connected() ? "connected" : "disconnected") : "disabled"), status.connected() ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+            source.sendMessage(Component.text("Published=" + status.publishedMessages() + ", received=" + status.receivedMessages() + ", reconnects=" + status.reconnects() + ", rejected registrations=" + status.rejectedRegistrations(), NamedTextColor.GRAY));
+            if (!status.lastError().isBlank()) source.sendMessage(Component.text("Last error: " + status.lastError(), NamedTextColor.RED));
+            return;
+        }
+        if ("test".equalsIgnoreCase(arguments[1])) {
+            source.sendMessage(Component.text("Testing Redis connection...", NamedTextColor.GRAY));
+            plugin.redisSyncService().testConnection().thenAccept(result -> source.sendMessage(Component.text(result.message(), result.success() ? NamedTextColor.GREEN : NamedTextColor.RED)));
+            return;
+        }
+        source.sendMessage(Component.text("Usage: /vn redis <status|test>", NamedTextColor.YELLOW));
+    }
+
+    private void server(CommandSource source, String[] arguments) {
+        ManagedServerService service = plugin.managedServerService();
+        if (service == null || !plugin.advancedConfig().serverManagement().enabled()) {
+            source.sendMessage(Component.text("Server management is disabled in navigator.toml.", NamedTextColor.RED));
+            return;
+        }
+        if (arguments.length >= 2 && "list".equalsIgnoreCase(arguments[1])) {
+            List<ManagedServerService.ManagedLobby> lobbies = service.lobbies();
+            source.sendMessage(Component.text("Managed lobby servers: " + (lobbies.isEmpty() ? "none" : lobbies.stream().map(value -> value.name() + "@" + value.group()).collect(Collectors.joining(", "))), NamedTextColor.AQUA));
+            source.sendMessage(Component.text("Velocity config: " + service.velocityConfigPath(), NamedTextColor.GRAY));
+            return;
+        }
+        if (arguments.length >= 3 && "remove".equalsIgnoreCase(arguments[1])) {
+            sendServerResult(source, service.remove(arguments[2]));
+            return;
+        }
+        if (arguments.length < 5 || !"add".equalsIgnoreCase(arguments[1])) {
+            if (arguments.length < 5 || !"dry-run".equalsIgnoreCase(arguments[1])) {
+                serverUsage(source);
+                return;
+            }
+        }
+        boolean dryRun = "dry-run".equalsIgnoreCase(arguments[1]);
+        String type = arguments[2].toLowerCase(Locale.ROOT);
+        String name = arguments[3];
+        String address = arguments[4];
+        if ("game".equals(type)) {
+            sendServerResult(source, dryRun ? service.dryRun(type, name, address, "default", Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT) : service.addGame(name, address));
+            return;
+        }
+        if (!"lobby".equals(type)) {
+            serverUsage(source);
+            return;
+        }
+        String group = arguments.length >= 6 ? arguments[5] : "default";
+        try {
+            int maxPlayers = arguments.length >= 7 ? Integer.parseInt(arguments[6]) : Config.LobbyEntry.UNCAPPED;
+            int weight = arguments.length >= 8 ? Integer.parseInt(arguments[7]) : Config.LobbyEntry.DEFAULT_WEIGHT;
+            sendServerResult(source, dryRun ? service.dryRun(type, name, address, group, maxPlayers, weight) : service.addLobby(name, address, group, maxPlayers, weight));
+        } catch (NumberFormatException error) {
+            source.sendMessage(Component.text("max_players and weight must be whole numbers.", NamedTextColor.RED));
+        }
+    }
+
+    private void sendServerResult(CommandSource source, ManagedServerService.Result result) {
+        source.sendMessage(Component.text(result.message(), result.success() ? NamedTextColor.GREEN : NamedTextColor.RED));
+    }
+
+    private void serverUsage(CommandSource source) {
+        source.sendMessage(Component.text("Usage: /vn server add game <name> <host:port>", NamedTextColor.YELLOW));
+        source.sendMessage(Component.text("Usage: /vn server add lobby <name> <host:port> [group] [max_players] [weight]", NamedTextColor.YELLOW));
+        source.sendMessage(Component.text("Usage: /vn server dry-run <game|lobby> <name> <host:port> [group] [max_players] [weight]", NamedTextColor.YELLOW));
+        source.sendMessage(Component.text("Usage: /vn server remove <name> | /vn server list", NamedTextColor.YELLOW));
+    }
+
+    private void config(CommandSource source, String[] arguments) {
+        if (arguments.length < 2 || !"validate".equalsIgnoreCase(arguments[1])) {
+            source.sendMessage(Component.text("Usage: /vn config validate", NamedTextColor.YELLOW));
+            return;
+        }
+        RuntimeConfigValidator.Validation runtime = plugin.validateRuntimeConfiguration();
+        ManagedServerService.Validation managed = plugin.advancedConfig().serverManagement().enabled()
+                ? plugin.managedServerService().validate()
+                : new ManagedServerService.Validation(List.of(), List.of());
+        List<String> errors = new ArrayList<>(runtime.errors());
+        errors.addAll(managed.errors());
+        List<String> warnings = new ArrayList<>(runtime.warnings());
+        warnings.addAll(managed.warnings());
+        if (errors.isEmpty()) source.sendMessage(Component.text("Configuration validation passed with " + warnings.size() + " warning(s).", NamedTextColor.GREEN));
+        else source.sendMessage(Component.text("Configuration validation found " + errors.size() + " error(s) and " + warnings.size() + " warning(s).", NamedTextColor.RED));
+        errors.forEach(error -> source.sendMessage(Component.text("Error: " + error, NamedTextColor.RED)));
+        warnings.forEach(warning -> source.sendMessage(Component.text("Warning: " + warning, NamedTextColor.YELLOW)));
     }
 
     private void debug(CommandSource source, String[] arguments) {
@@ -210,9 +323,6 @@ public final class NavigatorAdminCommand implements SimpleCommand {
 
         String subCmd = arguments[1].toLowerCase(Locale.ROOT);
 
-        // Check if the argument matches a registered server name first.
-        // This prevents server names like "status" or "undrain" from being
-        // intercepted by the subcommand keywords.
         boolean isRegisteredServer = plugin.server().getAllServers().stream()
                 .anyMatch(rs -> rs.getServerInfo().getName().equalsIgnoreCase(subCmd));
 
@@ -242,7 +352,6 @@ public final class NavigatorAdminCommand implements SimpleCommand {
             return;
         }
 
-        // Default: drain the server (also handles servers named "status"/"undrain")
         String serverName = arguments[1];
         plugin.drainService().drain(serverName.toLowerCase(Locale.ROOT));
         source.sendMessage(Component.text("Server '" + serverName + "' is now drained. No players will be routed to it.", NamedTextColor.YELLOW));

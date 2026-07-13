@@ -1,58 +1,72 @@
 <p align="center">
-  <img src="hero-banner.png" alt="VelocityNavigator Banner">
+  <img src="hero-banner.png" alt="VelocityNavigator health-aware lobby routing banner">
 </p>
 
 # VelocityNavigator
 
-> `v4.2.0` &nbsp;·&nbsp; Velocity 3.x &nbsp;·&nbsp; Java 17+
+> **4.3.0** · Velocity 3.x · Java 17+ · Optional Paper/Spigot bridge
 
-**VelocityNavigator** is an intelligent lobby routing plugin for Velocity proxies. It distributes players across your lobby servers using real-time load balancing — so no single server bears the entire load. With eight selection algorithms, circuit breaker protection, player affinity, contextual routing, and interactive selector menus, it handles everything from a two-server hobby network to a hundred-node infrastructure without breaking a sweat.
+VelocityNavigator stops one lobby from taking every player just because it appears first in Velocity's `try` list. It chooses a healthy, suitable lobby for initial joins and lobby commands, while giving you sensible controls for maintenance and larger networks.
 
----
+A basic setup only needs the JAR on Velocity and a list of lobby names. The same JAR can be added to Paper or Spigot later if you want the Java inventory selector.
 
-## ✨ Feature Highlights
+## Start here
 
-- 🧠 **8 Selection Algorithms** — `least_players`, `round_robin`, `random`, `power_of_two`, `weighted_round_robin`, `least_connections`, `consistent_hash`, `latency` — pick the one that fits, or use different modes per group
-- 📱 **Interactive Selection Menus** — native Bedrock Form GUI (via Geyser/Floodgate) and clickable Java Chat Selector Menu with hover tooltips (diagnostics/latency)
-- 📊 **Prometheus Exporter** — embedded HTTP server serving metrics on player joins, leaves, server status, latency, circuit breaker states, and fallback events
-- 📈 **Grafana Integration** — setup command `/vn setup grafana` that generates premium, pre-configured Grafana dashboards instantly
-- ⚡ **Initial Join Balancing** — players are load-balanced the moment they connect, not just when they type `/lobby`
-- 🛡️ **Circuit Breaker** — automatic failure detection with CLOSED → OPEN → HALF_OPEN state machine; unhealthy servers are skipped until they recover
-- 🔀 **Contextual Routing** — route players to game-specific lobbies based on which server they're leaving, with per-group selection modes and fallback chains
-- 💾 **Player Affinity** — sticky sessions so players tend to return to the same lobby they were on before
-- 🔧 **Server Drain Mode** — gracefully take servers offline for maintenance with `/vn drain`; no players are routed to drained servers
-- 🔄 **Connection Retry** — automatic retry with fallback on connection failure, so a single dead server doesn't strand a player
-- 📊 **Routing Metrics API** — monitor distribution, health check latencies, and circuit breaker states programmatically
+| I want to… | Read this |
+|---|---|
+| Set up two balanced lobbies | [Quick Start Guide](Quick-Start-Guide) |
+| Choose a routing mode | [Routing Algorithms](Routing-Algorithms) |
+| Change commands, messages, or menus | [Configuration Guide](Configuration-Guide) |
+| Find a command or permission | [Commands and Permissions](Commands-and-Permissions) |
+| Add the Java inventory selector | [Backend Bridge Configuration](Backend-Bridge-Configuration) |
+| Keep game modes in separate lobby pools | [Contextual Routing Guide](Contextual-Routing-Guide) |
+| Configure parties, queues, Redis, or storage | [Advanced Proxy Systems](Advanced-Proxy-Systems) |
+| Open the live browser view | [HTML Dashboard](HTML-Dashboard) |
+| Diagnose or maintain a live network | [Operations Runbook](Operations-Runbook) |
 
----
+## What you get
 
-## 🚀 Getting Started
+- Eight routing modes, including least players, weighted routing, sticky routing, and latency
+- Initial-join balancing instead of a first-server-only `try` list
+- Health checks, capacity limits, drain mode, fallback groups, and circuit breakers
+- Java inventory, Bedrock form, and chat selectors
+- Contextual lobby groups for networks with several game modes
+- Optional parties, capacity queues, Redis sync, Prometheus, and an HTML dashboard
+- Clear admin commands for health, bridge status, Redis, routing decisions, and config checks
+- Seven included languages plus custom translations
 
-1. **Install** — Drop the JAR into your Velocity proxy's `plugins/` folder and start the proxy
-2. **Edit** — Open `plugins/velocitynavigator/navigator.toml` and set your lobby server names
-3. **Play** — Type `/lobby` in-game. You're done.
+Every larger feature has its own switch. You can run only the parts that make sense for your network.
 
-→ **[Quick Start Guide](Quick-Start-Guide)** — step-by-step walkthrough (under 10 minutes)
+## A good first configuration
 
----
+```toml
+[routing]
+selection_mode = "power_of_two"
+balance_initial_join = true
+default_lobbies = ["lobby-1", "lobby-2"]
+```
 
-## 📖 Documentation
+Make sure those names already exist in Velocity's `velocity.toml`, then run `/vn config validate` and try joining through the proxy.
 
-| Section | Page |
-|---------|------|
-| Getting Started | [Quick Start Guide](Quick-Start-Guide) |
-| Routing Algorithms | [Routing Algorithms](Routing-Algorithms) · [Visualizations](Algorithm-Visualizations) |
-| Configuration | [Configuration Guide](Configuration-Guide) · [Migration v3 → v4](Migration-Guide-v3-to-v4) |
-| Contextual & Geo Routing | [Contextual Routing Guide](Contextual-Routing-Guide) · [Database Setup](GeoIP-Database-Setup) |
-| Features | [Initial Join Balancing](Initial-Join-Balancing) |
-| Operations | [Operations Runbook](Operations-Runbook) · [Troubleshooting](Troubleshooting-Guide) · [FAQ](FAQ) |
-| Developer | [Developer API](Developer-API) |
+## Compatibility
 
----
+| Part | Requirement |
+|---|---|
+| Proxy | Velocity 3.x |
+| Java | 17 or newer |
+| Minecraft | Any version supported by your Velocity build |
+| Optional backend bridge | Paper or Spigot 1.16.5+ |
+| Native Bedrock form | Geyser and Floodgate |
 
-## 🔗 Compatibility
+BungeeCord and Waterfall are not supported. Party membership and queue positions are local to one proxy.
 
-| Requirement | Version |
-|-------------|---------|
-| Velocity | 3.x |
-| Java | 17+ |
+## More guides
+
+| Area | Pages |
+|---|---|
+| Learn the routing choices | [Routing Algorithms](Routing-Algorithms) · [Visual Examples](Algorithm-Visualizations) · [Initial Join Balancing](Initial-Join-Balancing) · [Retries & Fallbacks](Retries-and-Fallbacks) |
+| Configure the plugin | [Configuration Guide](Configuration-Guide) · [Backend Bridge](Backend-Bridge-Configuration) · [Migration from v3](Migration-Guide-v3-to-v4) |
+| Add player features | [Java & Bedrock Selectors](Java-and-Bedrock-Selectors) · [Language Packs](Language-Packs) · [Parties](Party-System) · [Queue](Capacity-Queue) |
+| Grow to several proxies | [Redis & Multi-Proxy](Redis-and-Multi-Proxy) · [Storage & Databases](Storage-and-Databases) · [Server Management](Server-Management) |
+| Run the network | [Commands & Permissions](Commands-and-Permissions) · [Operations Runbook](Operations-Runbook) · [Prometheus & Grafana](Prometheus-&-Grafana-Setup) |
+| Solve a problem | [Troubleshooting Guide](Troubleshooting-Guide) · [FAQ](FAQ) |

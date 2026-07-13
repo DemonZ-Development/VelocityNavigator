@@ -29,7 +29,6 @@ class PowerOfTwoSelectionTest {
 
     @Test
     void selectsLessLoadedOfTwoRandom() {
-        // With <= 2 candidates, power-of-two falls back to min(playerCount)
         RouteSelectionStrategy strategy = new RouteSelectionStrategy();
         List<ServerCandidate> candidates = List.of(
                 new ServerCandidate("heavy", 50),
@@ -70,9 +69,6 @@ class PowerOfTwoSelectionTest {
 
     @Test
     void distributionIsBetterThanRandom() {
-        // With 4 servers of varying load, power-of-two should favor less-loaded servers.
-        // Over 1000 selections, the least-loaded server should get significantly more
-        // traffic than pure random (25% each), and the deviation should be < 15% from ideal.
         RouteSelectionStrategy strategy = new RouteSelectionStrategy();
         List<ServerCandidate> candidates = List.of(
                 new ServerCandidate("server-a", 5),
@@ -88,30 +84,20 @@ class PowerOfTwoSelectionTest {
 
         int iterations = 1000;
         for (int i = 0; i < iterations; i++) {
-            // Reset strategy to get fresh selections each time
             RouteSelectionStrategy fresh = new RouteSelectionStrategy();
             Optional<ServerCandidate> chosen = fresh.select(candidates, Config.SelectionMode.POWER_OF_TWO, "test-" + i);
             assertTrue(chosen.isPresent());
             counts.merge(chosen.get().name(), 1, Integer::sum);
         }
 
-        // The lightest server (5 players) should get more than random (25% = 250)
-        // and the heaviest (40 players) should get less than random.
         int lightestCount = counts.get("server-a");
         int heaviestCount = counts.get("server-d");
 
-        // For power-of-two with these loads, lightest should get noticeably more than 250
-        // and heaviest should get noticeably less than 250.
-        // We check that deviation from ideal even distribution (250) is reasonable.
-        // With power-of-two, the distribution is not perfectly proportional but
-        // should be much better than random.
         double idealPerServer = iterations / 4.0;
-        double maxAllowedDeviation = idealPerServer * 0.50; // 50% deviation allowed from even distribution
+        double maxAllowedDeviation = idealPerServer * 0.50;
 
-        // The heaviest server should have less than ideal (it's disadvantaged)
         assertTrue(heaviestCount < idealPerServer,
                 "Heaviest server should get less than even distribution; got " + heaviestCount);
-        // The lightest server should have more than ideal (it's advantaged)
         assertTrue(lightestCount > idealPerServer,
                 "Lightest server should get more than even distribution; got " + lightestCount);
     }

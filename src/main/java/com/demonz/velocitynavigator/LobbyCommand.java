@@ -18,13 +18,13 @@ package com.demonz.velocitynavigator;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.function.ToIntFunction;
 
 public final class LobbyCommand implements SimpleCommand {
 
@@ -44,19 +44,18 @@ public final class LobbyCommand implements SimpleCommand {
         }
 
         if (requiresPermission(config.commands().permission()) && !player.hasPermission(config.commands().permission())) {
-            player.sendMessage(Component.text("You do not have permission to use this command.", NamedTextColor.RED));
+            player.sendMessage(MessageFormatter.render(config.language().text("messages.permission_denied"), player));
             return;
         }
 
         String[] args = invocation.arguments();
 
-        // Check for direct connection from menu click event
         if (args.length >= 2 && "connect".equalsIgnoreCase(args[0])) {
             String targetServer = args[1];
             String token = args.length >= 3 ? args[2] : "";
             if (!plugin.consumeMenuToken(player, targetServer, token)) {
-                player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                        Map.of("reason", "The lobby menu selection expired. Run /" + config.commands().primary() + " again.", "player", player.getUsername()), player));
+                player.sendMessage(MessageFormatter.render(config.language().text("messages.menu_expired"),
+                        Map.of("command", config.commands().primary(), "player", player.getUsername()), player));
                 return;
             }
             connectFromMenuSelection(player, config, targetServer);
@@ -71,15 +70,13 @@ public final class LobbyCommand implements SimpleCommand {
             }
         }
 
-        // Apply cooldown pre-execution to block macro spam before the async route resolves.
-        // If routing fails, the cooldown is cleared so the player is not penalized.
         plugin.cooldowns().apply(player.getUniqueId(), config.commands().cooldownSeconds());
 
         plugin.previewRoute(player)
                 .thenAccept(decision -> handleDecision(player, config, decision, args))
                 .exceptionally(throwable -> {
                     plugin.cooldowns().clear(player.getUniqueId());
-                    player.sendMessage(Component.text("VelocityNavigator could not resolve a lobby right now.", NamedTextColor.RED));
+                    player.sendMessage(MessageFormatter.render(config.language().text("messages.route_unavailable"), player));
                     plugin.logger().error("Failed to resolve /lobby for {}", player.getUsername(), throwable);
                     return null;
                 });
@@ -93,7 +90,7 @@ public final class LobbyCommand implements SimpleCommand {
                     if (!stillAvailable) {
                         plugin.cooldowns().clear(player.getUniqueId());
                         player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                                Map.of("reason", "The selected lobby is no longer available.", "player", player.getUsername()), player));
+                                Map.of("reason", config.language().text("reasons.selection_unavailable"), "player", player.getUsername()), player));
                         return;
                     }
 
@@ -111,7 +108,7 @@ public final class LobbyCommand implements SimpleCommand {
                     if (target.isEmpty()) {
                         plugin.cooldowns().clear(player.getUniqueId());
                         player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                                Map.of("reason", "The selected server is no longer registered.", "player", player.getUsername()), player));
+                                Map.of("reason", config.language().text("reasons.selection_unregistered"), "player", player.getUsername()), player));
                         return;
                     }
 
@@ -122,14 +119,13 @@ public final class LobbyCommand implements SimpleCommand {
                 })
                 .exceptionally(throwable -> {
                     plugin.cooldowns().clear(player.getUniqueId());
-                    player.sendMessage(Component.text("VelocityNavigator could not validate that lobby selection right now.", NamedTextColor.RED));
+                    player.sendMessage(MessageFormatter.render(config.language().text("messages.selection_validation_failed"), player));
                     plugin.logger().error("Failed to validate /lobby menu selection for {}", player.getUsername(), throwable);
                     return null;
                 });
     }
 
     private void handleDecision(Player player, Config config, RouteDecision decision, String[] args) {
-        // Show Bedrock Cumulus GUI if applicable
         if (plugin.bedrockHandler() != null && plugin.bedrockHandler().isBedrockPlayer(player, config)) {
             if (config.bedrock().useGuiForLobby() && FloodgateIntegration.isAvailable()) {
                 BedrockFormService.showLobbySelectionForm(player, plugin, decision);
@@ -137,15 +133,36 @@ public final class LobbyCommand implements SimpleCommand {
             }
         }
 
-        // Show Java Interactive Chat Menu if applicable
         boolean forceMenu = args.length >= 1 && "menu".equalsIgnoreCase(args[0]);
-        if (forceMenu || config.routing().useChatMenuForLobby()) {
+        if (forceMenu || config.routing().useMenuForLobby()) {
+            if (config.routing().javaMenuType() == Config.JavaMenuType.INVENTORY) {
+                if (JavaInventoryMenuService.showLobbyMenu(player, plugin, decision)) {
+                    return;
+                }
+                if (config.routing().inventoryMenu().fallbackToChat()) {
+                    player.sendMessage(MessageFormatter.render(
+                            config.language().text("menus.inventory.bridge_unavailable"), player));
+                    JavaMenuService.showLobbyMenu(player, plugin, decision);
+                } else {
+                    plugin.cooldowns().clear(player.getUniqueId());
+                    player.sendMessage(MessageFormatter.render(
+                            config.language().text("menus.inventory.bridge_required"), player));
+                }
+                return;
+            }
             JavaMenuService.showLobbyMenu(player, plugin, decision);
             return;
         }
 
         if (!decision.hasSelection()) {
-            // Graceful degradation
+            if (plugin.queueService() != null && plugin.queueService().canQueue(decision, config)) {
+                if (plugin.queueService().enqueue(player, decision)) {
+                    player.sendMessage(MessageFormatter.render(config.language().text("queue.joined"),
+                            Map.of("position", String.valueOf(plugin.queueService().position(player.getUniqueId())), "size", String.valueOf(plugin.queueService().size())), player));
+                    return;
+                }
+                player.sendMessage(MessageFormatter.render(config.language().text("queue.full"), player));
+            }
             if (config.degradation().enabled()) {
                 Config.SelectionMode degradationMode = Config.SelectionMode.fromString(config.degradation().mode());
                 List<String> allLobbies = decision.orderedCandidates();
@@ -153,7 +170,6 @@ public final class LobbyCommand implements SimpleCommand {
                     allLobbies = decision.onlineCandidates();
                 }
                 if (allLobbies != null && !allLobbies.isEmpty()) {
-                    // Try to pick one using degradation mode
                     String degraded = pickDegraded(allLobbies, degradationMode);
                     if (degraded != null) {
                         Optional<RegisteredServer> target = plugin.server().getServer(degraded);
@@ -199,7 +215,7 @@ public final class LobbyCommand implements SimpleCommand {
         if (target.isEmpty()) {
             plugin.cooldowns().clear(player.getUniqueId());
             player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                    Map.of("reason", "The selected server is no longer registered.", "player", player.getUsername()), player));
+                    Map.of("reason", config.language().text("reasons.selection_unregistered"), "player", player.getUsername()), player));
             return;
         }
 
@@ -208,12 +224,6 @@ public final class LobbyCommand implements SimpleCommand {
         ConnectionWorkflow.connectWithRetry(plugin, player, config, target.get(), decision, decision.reason());
     }
 
-    /**
-     * Picks a server from the degraded candidate list using the configured mode.
-     * Modes that require player-count data (LEAST_PLAYERS, POWER_OF_TWO, etc.)
-     * fall back to random selection since that data is unavailable in the
-     * degradation path. ROUND_ROBIN uses a simple atomic counter.
-     */
     private String pickDegraded(List<String> candidates, Config.SelectionMode mode) {
         if (candidates.isEmpty()) {
             return null;
@@ -221,14 +231,26 @@ public final class LobbyCommand implements SimpleCommand {
         return switch (mode) {
             case RANDOM -> candidates.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(candidates.size()));
             case ROUND_ROBIN -> {
-                // Use independent degraded atomic counter for round-robin rotation
                 long idx = degradedCounter.getAndIncrement();
                 yield candidates.get((int) (idx % candidates.size()));
             }
-            // Modes that need player-count/telemetry data — fall back to random
-            case LEAST_PLAYERS, POWER_OF_TWO, LEAST_CONNECTIONS, WEIGHTED_ROUND_ROBIN, CONSISTENT_HASH, LATENCY ->
+            case LEAST_PLAYERS -> pickLeastPlayers(candidates, this::connectedPlayers);
+            case POWER_OF_TWO, LEAST_CONNECTIONS, WEIGHTED_ROUND_ROBIN, CONSISTENT_HASH, LATENCY ->
                 candidates.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(candidates.size()));
         };
+    }
+
+    static String pickLeastPlayers(List<String> candidates, ToIntFunction<String> playerCount) {
+        return candidates.stream()
+                .min(Comparator.comparingInt((String name) -> playerCount.applyAsInt(name))
+                        .thenComparing(String.CASE_INSENSITIVE_ORDER))
+                .orElse(null);
+    }
+
+    private int connectedPlayers(String serverName) {
+        return plugin.server().getServer(serverName)
+                .map(server -> server.getPlayersConnected().size())
+                .orElse(Integer.MAX_VALUE);
     }
 
     @Override
@@ -241,7 +263,6 @@ public final class LobbyCommand implements SimpleCommand {
     }
 
     private boolean hasBypassCooldown(Player player) {
-        // Check both new and legacy permission nodes
         return player.hasPermission("velocitynavigator.bypass.cooldown")
                 || player.hasPermission("velocitynavigator.bypasscooldown");
     }

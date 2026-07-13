@@ -1,0 +1,6 @@
+name: VelocityNavigator
+version: '4.3.0'
+main: com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge
+api-version: '1.16'
+authors: [DemonZDevelopment]
+description: Backend inventory GUI bridge for VelocityNavigator.

@@ -21,7 +21,10 @@ import java.util.regex.Pattern;
 
 public final class LegacyColorConverter {
 
-    private static final Pattern LEGACY_PATTERN = Pattern.compile("(?i)[&§]([0-9a-fk-or])");
+    private static final Pattern LEGACY_PATTERN = Pattern.compile(
+            "(?i)(?:&(?!lt;|gt;|amp;|quot;|apos;)|§)([0-9a-fk-or])");
+    private static final Pattern INLINE_HEX_PATTERN = Pattern.compile("(?i)&#([0-9a-f]{6})");
+    private static final Pattern BUNGEE_HEX_PATTERN = Pattern.compile("(?i)(?:&|§)x((?:(?:&|§)[0-9a-f]){6})");
 
     private static final Map<Character, String> CONVERSIONS = Map.ofEntries(
             Map.entry('0', "<black>"),
@@ -55,14 +58,24 @@ public final class LegacyColorConverter {
         if (input == null || input.isEmpty()) {
             return false;
         }
-        return LEGACY_PATTERN.matcher(input).find();
+        return LEGACY_PATTERN.matcher(input).find()
+                || INLINE_HEX_PATTERN.matcher(input).find()
+                || BUNGEE_HEX_PATTERN.matcher(input).find();
     }
 
     public static String convert(String input) {
         if (input == null || input.isEmpty()) {
             return input;
         }
-        Matcher matcher = LEGACY_PATTERN.matcher(input);
+        String converted = replaceBungeeHex(input);
+        Matcher inlineHex = INLINE_HEX_PATTERN.matcher(converted);
+        StringBuffer hexBuffer = new StringBuffer();
+        while (inlineHex.find()) {
+            inlineHex.appendReplacement(hexBuffer, Matcher.quoteReplacement("<#" + inlineHex.group(1) + ">"));
+        }
+        inlineHex.appendTail(hexBuffer);
+
+        Matcher matcher = LEGACY_PATTERN.matcher(hexBuffer.toString());
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
             char code = Character.toLowerCase(matcher.group(1).charAt(0));
@@ -75,5 +88,16 @@ public final class LegacyColorConverter {
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    private static String replaceBungeeHex(String input) {
+        Matcher matcher = BUNGEE_HEX_PATTERN.matcher(input);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String hex = matcher.group(1).replace("&", "").replace("§", "");
+            matcher.appendReplacement(result, Matcher.quoteReplacement("<#" + hex + ">"));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 }

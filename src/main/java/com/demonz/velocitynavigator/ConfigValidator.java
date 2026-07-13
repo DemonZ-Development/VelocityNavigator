@@ -16,7 +16,6 @@
 package com.demonz.velocitynavigator;
 
 import com.moandjiezana.toml.Toml;
-import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,23 +33,19 @@ public final class ConfigValidator {
             return warnings;
         }
 
-        // 1. Validate routing.selection_mode
-        List<String> selectionModes = List.of("least_players", "random", "round_robin", "power_of_two", "weighted_round_robin", "least_connections", "consistent_hash", "latency");
+        List<String> selectionModes = Config.SelectionMode.allConfigValues();
         validateKey(toml, "routing.selection_mode", selectionModes, warnings);
+        validateKey(toml, "routing.java_menu.type", List.of("inventory", "chat"), warnings);
 
-        // 2. Validate update_checker.channel
-        List<String> channels = List.of("release", "beta", "alpha");
+        List<String> channels = Config.UpdateChannel.allConfigValues();
         validateKey(toml, "update_checker.channel", channels, warnings);
 
-        // 3. Validate degradation.mode
         List<String> degradationModes = List.of("random", "round_robin", "least_players");
         validateKey(toml, "degradation.mode", degradationModes, warnings);
 
-        // 4. Validate lobby.no_server_strategy
         List<String> strategies = List.of("disconnect", "fallback_server");
         validateKey(toml, "lobby.no_server_strategy", strategies, warnings);
 
-        // 5. Validate messages.formatting
         List<String> formattingOptions = List.of("auto", "minimessage", "legacy");
         validateKey(toml, "messages.formatting", formattingOptions, warnings);
 
@@ -88,7 +83,7 @@ public final class ConfigValidator {
         return current;
     }
 
-    public static String getSuggestion(String input, List<String> validOptions) {
+    static String getSuggestion(String input, List<String> validOptions) {
         String closest = null;
         int minDistance = Integer.MAX_VALUE;
         for (String option : validOptions) {
@@ -105,7 +100,7 @@ public final class ConfigValidator {
         }
     }
 
-    public static int levenshtein(String s1, String s2) {
+    static int levenshtein(String s1, String s2) {
         if (s1 == null || s2 == null) {
             return Integer.MAX_VALUE;
         }

@@ -56,7 +56,6 @@ class NotifyAdminsOnJoinConfigTest {
     @Test
     void notifyAdminsOnJoinIndependentOfNotifyOnStartup() {
         Config d = Config.defaults();
-        // Both disabled
         Config bothOff = new Config(
                 d.configVersion(),
                 d.commands(),
@@ -75,7 +74,6 @@ class NotifyAdminsOnJoinConfigTest {
         assertFalse(bothOff.notifyOnStartup());
         assertFalse(bothOff.notifyAdminsOnJoin());
 
-        // Only admin join enabled
         Config onlyAdmin = new Config(
                 d.configVersion(),
                 d.commands(),

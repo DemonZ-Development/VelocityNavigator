@@ -29,7 +29,6 @@ class WeightedRoundRobinTest {
 
     @Test
     void respectsWeightDistribution() {
-        // Server with weight 3 should get ~3x the traffic of weight 1
         RouteSelectionStrategy strategy = new RouteSelectionStrategy();
         List<ServerCandidate> candidates = List.of(
                 new ServerCandidate("heavy", 0, 3),
@@ -40,7 +39,6 @@ class WeightedRoundRobinTest {
         counts.put("heavy", 0);
         counts.put("light", 0);
 
-        // Interleaved WRR with weights [3, 1]: over 4 selections, heavy gets 3, light gets 1
         for (int i = 0; i < 4; i++) {
             ServerCandidate chosen = strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "wrr-test").orElseThrow();
             counts.merge(chosen.name(), 1, Integer::sum);
@@ -71,16 +69,12 @@ class WeightedRoundRobinTest {
                 new ServerCandidate("b", 0, 1)
         );
 
-        // Do a few selections
         strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "reset-test");
         strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "reset-test");
 
-        // Reset
         strategy.reset();
 
-        // After reset, should start from the beginning of the round-robin cycle
         String first = strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "reset-test").orElseThrow().name();
-        // With equal weights, the first selection after reset should be deterministic (alphabetically first)
         assertEquals("a", first);
     }
 
@@ -93,11 +87,9 @@ class WeightedRoundRobinTest {
                 new ServerCandidate("c", 0, 1)
         );
 
-        // With equal weights, WRR should cycle evenly
         assertEquals("a", strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "equal-test").orElseThrow().name());
         assertEquals("b", strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "equal-test").orElseThrow().name());
         assertEquals("c", strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "equal-test").orElseThrow().name());
-        // Next cycle
         assertEquals("a", strategy.select(candidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "equal-test").orElseThrow().name());
     }
 
@@ -109,11 +101,9 @@ class WeightedRoundRobinTest {
                 new ServerCandidate("light", 0, 1)
         );
 
-        // Select once
         ServerCandidate first = strategy.select(initialCandidates, Config.SelectionMode.WEIGHTED_ROUND_ROBIN, "topology-test").orElseThrow();
         assertEquals("heavy", first.name());
 
-        // Change topology
         List<ServerCandidate> updatedCandidates = List.of(
                 new ServerCandidate("heavy", 0, 5),
                 new ServerCandidate("light", 0, 1),

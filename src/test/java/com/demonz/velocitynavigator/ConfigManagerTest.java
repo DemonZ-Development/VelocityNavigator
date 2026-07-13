@@ -40,6 +40,100 @@ class ConfigManagerTest {
         assertTrue(result.createdDefault());
         assertEquals(Config.CURRENT_VERSION, result.config().configVersion());
         assertTrue(Files.exists(tempDir.resolve("navigator.toml")));
+        assertTrue(Files.exists(tempDir.resolve("messages.toml")));
+        assertTrue(Files.exists(tempDir.resolve("gui.toml")));
+        String navigator = Files.readString(tempDir.resolve("navigator.toml"));
+        assertTrue(navigator.contains("Authorization: Bearer <token>"));
+        assertFalse(navigator.contains("?token"));
+    }
+
+    @Test
+    void migratesLegacyMessagesIntoSeparateFile() throws Exception {
+        Files.writeString(tempDir.resolve("navigator.toml"), """
+                config_version = 7
+
+                [routing]
+                default_lobbies = ["lobby-1"]
+                chat_menu_header = "<gold>Choose a lobby</gold>"
+
+                [messages]
+                connecting = "<green>Viaje a <server></green>"
+                formatting = "minimessage"
+                """);
+
+        Config config = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test")).load().config();
+
+        assertEquals("<green>Viaje a <server></green>", config.messages().connecting());
+        assertEquals("<gold>Choose a lobby</gold>", config.routing().chatMenuHeader());
+        assertTrue(Files.readString(tempDir.resolve("messages.toml")).contains("Viaje a <server>"));
+        assertFalse(Files.readString(tempDir.resolve("navigator.toml")).contains("[messages]"));
+        assertTrue(Files.exists(tempDir.resolve("navigator.toml.pre-messages.bak")));
+    }
+
+    @Test
+    void reloadsCustomizedMessagesFile() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Path messages = tempDir.resolve("messages.toml");
+        String text = Files.readString(messages).replace(
+                "Sending you to <server>...",
+                "Enviándote a <server>..."
+        );
+        Files.writeString(messages, text);
+
+        assertEquals("<aqua>Enviándote a <server>...</aqua>", manager.load().config().messages().connecting());
+    }
+
+    @Test
+    void switchesBuiltInLanguageAndSupportsCustomCodes() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Path messages = tempDir.resolve("messages.toml");
+        Files.writeString(messages, Files.readString(messages).replaceFirst("(?m)^language = \"en\"$", "language = \"ru\""));
+
+        Config russian = manager.load().config();
+        assertTrue(russian.messages().connecting().contains("Подключаем"));
+        assertTrue(Files.readString(messages).contains("active_language = \"ru\""));
+
+        String custom = Files.readString(messages)
+                .replaceFirst("(?m)^language = \"ru\"$", "language = \"pirate\"")
+                .replace("Подключаем вас к", "Плывём к");
+        Files.writeString(messages, custom);
+        Config pirate = manager.load().config();
+        assertEquals("pirate", pirate.language().language());
+        assertTrue(pirate.messages().connecting().contains("Плывём"));
+    }
+
+    @Test
+    void loadsSeparateGuiConfigurationAndServerOverrides() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Files.writeString(tempDir.resolve("gui.toml"), """
+                config_version = 1
+                [layout]
+                rows = 5
+                default_material = "ENDER_PEARL"
+                unavailable_material = "BARRIER"
+                fill_empty_slots = false
+                filler_material = "GRAY_STAINED_GLASS_PANE"
+                refresh_seconds = 9
+                [controls]
+                previous_slot = 36
+                refresh_slot = 40
+                next_slot = 44
+                previous_material = "ARROW"
+                refresh_material = "CLOCK"
+                next_material = "ARROW"
+                [servers]
+                "lobby-1" = { slot = 10, material = "NETHER_STAR", name = "&#55FFFFLobby One", lore = ["&7Custom"] }
+                """);
+
+        manager.load();
+        GuiConfig gui = manager.guiConfig();
+        assertEquals(5, gui.rows());
+        assertEquals("ENDER_PEARL", gui.defaultMaterial());
+        assertEquals(10, gui.server("LOBBY-1").slot());
+        assertEquals("NETHER_STAR", gui.server("lobby-1").material());
     }
 
     @Test

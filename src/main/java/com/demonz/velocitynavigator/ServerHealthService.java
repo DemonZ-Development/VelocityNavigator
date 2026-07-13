@@ -17,6 +17,7 @@ package com.demonz.velocitynavigator;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.slf4j.Logger;
 
 import java.time.Clock;
@@ -31,6 +32,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class ServerHealthService {
 
@@ -43,6 +46,9 @@ public final class ServerHealthService {
 
     private final ConcurrentMap<String, CompletableFuture<ServerStatus>> activePings = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Long> latencies = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> backendStates = new ConcurrentHashMap<>();
+    private volatile AdvancedConfig.BackendStates backendStateSettings = AdvancedConfig.defaults().backendStates();
+    private static final Pattern STATE_MARKER = Pattern.compile("\\[STATE:([A-Za-z0-9_-]+)]", Pattern.CASE_INSENSITIVE);
 
     public Map<String, Long> getLatencies() {
         return java.util.Collections.unmodifiableMap(latencies);
@@ -66,12 +72,36 @@ public final class ServerHealthService {
         this.loadTracker = loadTracker;
     }
 
-    /**
-     * Returns cached player counts from the cache without triggering async operations.
-     * Iterates over entries in the cache, for each fresh entry, checks if the server
-     * exists and is online from the proxy's registered servers, and builds a map of
-     * server name → player count.
-     */
+    public void setBackendStateSettings(AdvancedConfig.BackendStates settings) {
+        backendStateSettings = settings == null ? AdvancedConfig.defaults().backendStates() : settings;
+    }
+
+    public Map<String, String> getBackendStates() {
+        return Map.copyOf(backendStates);
+    }
+
+    public boolean isRoutingStateAllowed(String serverName) {
+        AdvancedConfig.BackendStates settings = backendStateSettings;
+        if (!settings.enabled()) return true;
+        String state = backendStates.get(serverName.toLowerCase(Locale.ROOT));
+        return state == null ? settings.allowUnknown() : settings.allowed().contains(state);
+    }
+
+    public void mergeRemoteHealth(String serverName, boolean online, long checkedAtEpochMilli, long latency, String state) {
+        String normalized = serverName.toLowerCase(Locale.ROOT);
+        Instant checkedAt = Instant.ofEpochMilli(checkedAtEpochMilli);
+        HealthCheckCache.Entry current = cache.getCached(normalized);
+        if (current == null || current.checkedAt().isBefore(checkedAt)) cache.put(normalized, online, checkedAt);
+        if (latency >= 0) latencies.put(normalized, latency);
+        if (state != null && !state.isBlank()) backendStates.put(normalized, state.toUpperCase(Locale.ROOT));
+    }
+
+    public Map<String, HealthSnapshot> getHealthSnapshots() {
+        Map<String, HealthSnapshot> snapshots = new LinkedHashMap<>();
+        cache.entries().forEach((serverName, entry) -> snapshots.put(serverName, new HealthSnapshot(entry.online(), entry.checkedAt().toEpochMilli(), latencies.getOrDefault(serverName, -1L), backendStates.getOrDefault(serverName, ""))));
+        return Map.copyOf(snapshots);
+    }
+
     public Map<String, Integer> getCachedOnlineServers() {
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map.Entry<String, HealthCheckCache.Entry> entry : cache.entries().entrySet()) {
@@ -80,14 +110,12 @@ public final class ServerHealthService {
             if (cached == null || !cached.online()) {
                 continue;
             }
-            // Verify the server still exists and is registered
             Optional<RegisteredServer> registered = server.getServer(serverName);
             if (registered.isEmpty()) {
                 continue;
             }
             int playerCount = registered.get().getPlayersConnected().size();
             result.put(serverName, playerCount);
-            // Keep EMA load estimates fresh when cached health data is reused.
             if (loadTracker != null) {
                 loadTracker.update(serverName, playerCount);
             }
@@ -137,55 +165,54 @@ public final class ServerHealthService {
     }
 
     public CompletableFuture<ServerStatus> inspectServer(String serverName, Config.HealthChecks settings) {
-        Optional<RegisteredServer> optionalServer = server.getServer(serverName);
+        String normalized = serverName == null ? "" : serverName.toLowerCase(Locale.ROOT);
+        Optional<RegisteredServer> optionalServer = server.getServer(normalized);
         if (optionalServer.isEmpty()) {
-            return CompletableFuture.completedFuture(new ServerStatus(serverName, false, false, false, null, 0));
+            return CompletableFuture.completedFuture(new ServerStatus(normalized, false, false, false, null, 0));
         }
 
         RegisteredServer registeredServer = optionalServer.get();
         int players = registeredServer.getPlayersConnected().size();
         Instant now = clock.instant();
         if (!settings.enabled()) {
-            return CompletableFuture.completedFuture(new ServerStatus(serverName, true, true, false, now, players));
+            return CompletableFuture.completedFuture(new ServerStatus(normalized, true, true, false, now, players));
         }
 
-        HealthCheckCache.Entry cachedEntry = cache.getIfFresh(serverName, now, Duration.ofSeconds(settings.cacheSeconds()));
+        HealthCheckCache.Entry cachedEntry = cache.getIfFresh(normalized, now, Duration.ofSeconds(settings.cacheSeconds()));
         if (cachedEntry != null) {
-            return CompletableFuture.completedFuture(new ServerStatus(serverName, true, cachedEntry.online(), true, cachedEntry.checkedAt(), players));
+            return CompletableFuture.completedFuture(new ServerStatus(normalized, true, cachedEntry.online(), true, cachedEntry.checkedAt(), players));
         }
 
         long startTime = System.currentTimeMillis();
 
-        // Coalesce concurrent pings: if a ping is already in-flight for this server,
-        // reuse that Future instead of firing another network request.
-        return activePings.computeIfAbsent(serverName, name -> {
+        return activePings.computeIfAbsent(normalized, name -> {
             CompletableFuture<ServerStatus> pingFuture = registeredServer.ping()
                     .orTimeout(settings.timeoutMs(), TimeUnit.MILLISECONDS)
-                    .thenApply(ignored -> {
+                    .thenApply(ping -> {
                         long latency = System.currentTimeMillis() - startTime;
-                        latencies.put(name.toLowerCase(java.util.Locale.ROOT), latency);
+                        latencies.put(name, latency);
+                        String motd = PlainTextComponentSerializer.plainText().serialize(ping.getDescriptionComponent());
+                        Matcher marker = STATE_MARKER.matcher(motd);
+                        if (marker.find()) backendStates.put(name, marker.group(1).toUpperCase(Locale.ROOT));
+                        else backendStates.remove(name);
                         Instant checkedAt = clock.instant();
                         cache.put(name, true, checkedAt);
                         int currentPlayers = registeredServer.getPlayersConnected().size();
-                        // Record success on circuit breaker
                         if (circuitBreaker != null) {
                             circuitBreaker.recordSuccess(name);
                         }
-                        // Update EMA load tracker on successful health check.
                         if (loadTracker != null) {
                             loadTracker.update(name, currentPlayers);
                         }
                         return new ServerStatus(name, true, true, false, checkedAt, currentPlayers);
                     })
                     .exceptionally(throwable -> {
-                        latencies.remove(name.toLowerCase(java.util.Locale.ROOT));
+                        latencies.remove(name);
                         Instant checkedAt = clock.instant();
                         cache.put(name, false, checkedAt);
-                        // Record failure on circuit breaker
                         if (circuitBreaker != null) {
                             circuitBreaker.recordFailure(name);
                         }
-                        // Update EMA load tracker with 0 for offline servers.
                         if (loadTracker != null) {
                             loadTracker.update(name, 0);
                         }
@@ -193,8 +220,6 @@ public final class ServerHealthService {
                         return new ServerStatus(name, true, false, false, checkedAt, registeredServer.getPlayersConnected().size());
                     });
 
-            // Remove from active pings map once the future completes, so the next
-            // request after cache expiry can fire a fresh ping.
             pingFuture.whenComplete((result, error) -> activePings.remove(name));
             return pingFuture;
         });
@@ -203,14 +228,16 @@ public final class ServerHealthService {
     public void clearCache() {
         cache.clear();
         activePings.clear();
+        backendStates.clear();
     }
 
-    /**
-     * Delegating method to purge expired cache entries.
-     */
     public void purgeExpiredCache(Duration ttl) {
         cache.purgeExpired(ttl);
     }
+
+    public int cacheSize() { return cache.entries().size(); }
+    public int activePingCount() { return activePings.size(); }
+    public int latencyCount() { return latencies.size(); }
 
     public record ServerStatus(
             String serverName,
@@ -220,5 +247,8 @@ public final class ServerHealthService {
             Instant checkedAt,
             int playersConnected
     ) {
+    }
+
+    public record HealthSnapshot(boolean online, long checkedAtEpochMilli, long latency, String state) {
     }
 }

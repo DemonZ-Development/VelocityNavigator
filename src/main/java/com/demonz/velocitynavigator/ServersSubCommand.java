@@ -49,6 +49,7 @@ public final class ServersSubCommand {
                 }
             }
         }
+        uniqueLobbies.addAll(plugin.dynamicLobbyNames());
         List<String> sortedLobbies = new ArrayList<>(uniqueLobbies);
         Collections.sort(sortedLobbies);
 
@@ -103,7 +104,6 @@ public final class ServersSubCommand {
                         boolean isCbOpen = cbStateEnum == CircuitBreaker.State.OPEN;
                         String cbState = cbStateEnum.name();
 
-                        // Determine status text & color
                         String statusText;
                         String colorTag;
 
@@ -121,7 +121,6 @@ public final class ServersSubCommand {
                             colorTag = config.messages().dashboardHealthy();
                         }
 
-                        // Get player count & max players
                         int currentPlayers = 0;
                         String maxPlayersText = "-";
                         Optional<RegisteredServer> registered = plugin.server().getServer(lobbyName);
@@ -129,35 +128,9 @@ public final class ServersSubCommand {
                             currentPlayers = registered.get().getPlayersConnected().size();
                         }
 
-                        // Look up max players config
-                        int maxConfig = -1;
-                        boolean found = false;
-                        if (config.routing().defaultLobbies() != null) {
-                            for (Config.LobbyEntry entry : config.routing().defaultLobbies()) {
-                                if (entry.server().equalsIgnoreCase(lobbyName)) {
-                                    maxConfig = entry.maxPlayers();
-                                    found = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (!found && config.routing().contextual() != null && config.routing().contextual().groups() != null) {
-                            for (Config.GroupConfig groupConfig : config.routing().contextual().groups().values()) {
-                                if (groupConfig.servers() == null) continue;
-                                for (Config.LobbyEntry entry : groupConfig.servers()) {
-                                    if (entry.server().equalsIgnoreCase(lobbyName)) {
-                                        maxConfig = entry.maxPlayers();
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                                if (found) {
-                                    break;
-                                }
-                            }
-                        }
-                        if (maxConfig != -1) {
-                            maxPlayersText = String.valueOf(maxConfig);
+                        Optional<Config.LobbyEntry> lobbyEntry = plugin.lobbyEntry(lobbyName);
+                        if (lobbyEntry.isPresent() && lobbyEntry.get().maxPlayers() != Config.LobbyEntry.UNCAPPED) {
+                            maxPlayersText = String.valueOf(lobbyEntry.get().maxPlayers());
                         }
 
                         source.sendMessage(MessageFormatter.render(

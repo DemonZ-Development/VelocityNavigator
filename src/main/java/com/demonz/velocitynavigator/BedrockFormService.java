@@ -17,38 +17,59 @@ package com.demonz.velocitynavigator;
 
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 public final class BedrockFormService {
+
+    private static final Pattern MINI_MESSAGE_TAG = Pattern.compile("<[^>]*>");
+    private static final Pattern AMP_COLOR_CODE = Pattern.compile("(?i)&[0-9a-fk-or]");
+    private static final Pattern SECTION_COLOR_CODE = Pattern.compile("(?i)§[0-9a-fk-or]");
 
     private BedrockFormService() {
     }
 
     public static void showLobbySelectionForm(Player player, VelocityNavigator plugin, RouteDecision decision) {
         Config config = plugin.config();
-        List<String> candidates = decision.onlineCandidates();
-        if (candidates == null || candidates.isEmpty()) {
-            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(), Map.of("reason", "No online lobby servers found.", "player", player.getUsername()), player));
+        GuiConfig.BedrockMenu menu = plugin.guiConfig().bedrock();
+        if (!menu.enabled()) {
+            JavaMenuService.showLobbyMenu(player, plugin, decision);
             return;
         }
+        List<String> candidates = decision.onlineCandidates() == null ? new ArrayList<>() : new ArrayList<>(decision.onlineCandidates());
+        if (candidates.isEmpty()) {
+            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(), Map.of("reason", config.language().text("reasons.no_online_lobbies"), "player", player.getUsername()), player));
+            return;
+        }
+        if ("name".equals(menu.sortMode())) candidates.sort(String.CASE_INSENSITIVE_ORDER);
+        if ("players".equals(menu.sortMode())) candidates.sort(Comparator.comparingInt(name -> plugin.server().getServer(name).map(server -> server.getPlayersConnected().size()).orElse(Integer.MAX_VALUE)));
+        if (candidates.size() > menu.maxButtons()) candidates = new ArrayList<>(candidates.subList(0, menu.maxButtons()));
+        List<String> formCandidates = List.copyOf(candidates);
 
         try {
-            Object builder = createSimpleFormBuilder(player, plugin, config, candidates);
+            Object builder = createSimpleFormBuilder(player, plugin, config, formCandidates);
             Class<?> formBuilderClass = Class.forName("org.geysermc.cumulus.form.util.FormBuilder");
             Class<?> responseClass = Class.forName("org.geysermc.cumulus.response.SimpleFormResponse");
             Method clickedButtonIdMethod = responseClass.getMethod("clickedButtonId");
             formBuilderClass.getMethod("validResultHandler", Consumer.class).invoke(builder, (Consumer<Object>) response -> {
                 try {
                     Object clicked = clickedButtonIdMethod.invoke(response);
-                    if (clicked instanceof Number clickedIndex && clickedIndex.intValue() >= 0 && clickedIndex.intValue() < candidates.size()) {
-                        String targetServer = candidates.get(clickedIndex.intValue());
-                        connectValidatedSelection(player, plugin, config, targetServer);
+                    if (clicked instanceof Number clickedIndex) {
+                        int idx = clickedIndex.intValue();
+                        if (idx >= 0 && idx < formCandidates.size()) {
+                            String targetServer = formCandidates.get(idx);
+                            connectValidatedSelection(player, plugin, config, targetServer);
+                        }
                     }
                 } catch (ReflectiveOperationException exception) {
                     plugin.logger().warn("[VelocityNavigator] Could not read Bedrock form response for {}: {}",
@@ -60,7 +81,8 @@ public final class BedrockFormService {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
             plugin.logger().warn("[VelocityNavigator] Bedrock form GUI is unavailable. Falling back to chat menu for {}: {}",
                     player.getUsername(), exception.getMessage());
-            JavaMenuService.showLobbyMenu(player, plugin, decision);
+            if (menu.fallbackToChat()) JavaMenuService.showLobbyMenu(player, plugin, decision);
+            else player.sendMessage(MessageFormatter.render(config.language().text("menus.bedrock.unavailable"), player));
         }
     }
 
@@ -71,10 +93,14 @@ public final class BedrockFormService {
         Class<?> formBuilderClass = Class.forName("org.geysermc.cumulus.form.util.FormBuilder");
 
         Object builder = simpleFormClass.getMethod("builder").invoke(null);
+        GuiConfig.BedrockMenu menu = plugin.guiConfig().bedrock();
+        String title = menu.title().isBlank() ? config.bedrock().guiTitle() : menu.title();
+        String content = menu.content().isBlank() ? config.bedrock().guiContent() : menu.content();
+        String buttonFormat = menu.buttonFormat().isBlank() ? config.bedrock().guiButtonFormat() : menu.buttonFormat();
         formBuilderClass.getMethod("title", String.class).invoke(builder,
-                stripFormattingCodesIfRequested(config.bedrock().guiTitle(), config));
+                stripFormattingCodesIfRequested(title, config));
         simpleFormBuilderClass.getMethod("content", String.class).invoke(builder,
-                stripFormattingCodesIfRequested(config.bedrock().guiContent(), config));
+                stripFormattingCodesIfRequested(content, config));
 
         for (String serverName : candidates) {
             int currentPlayers = 0;
@@ -82,9 +108,16 @@ public final class BedrockFormService {
             if (registered.isPresent()) {
                 currentPlayers = registered.get().getPlayersConnected().size();
             }
-            String buttonText = config.bedrock().guiButtonFormat()
+            Config.LobbyEntry lobby = plugin.lobbyEntry(serverName).orElse(new Config.LobbyEntry(serverName, Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT));
+            String maxPlayers = lobby.maxPlayers() == Config.LobbyEntry.UNCAPPED ? "∞" : String.valueOf(lobby.maxPlayers());
+            String ping = String.valueOf(plugin.healthService().getLatencies().getOrDefault(serverName.toLowerCase(java.util.Locale.ROOT), -1L));
+            String status = plugin.healthService().getBackendStates().getOrDefault(serverName.toLowerCase(java.util.Locale.ROOT), "HEALTHY");
+            String buttonText = buttonFormat
                     .replace("{server}", serverName)
-                    .replace("{players}", String.valueOf(currentPlayers));
+                    .replace("{players}", menu.showPlayers() ? String.valueOf(currentPlayers) : "")
+                    .replace("{max_players}", menu.showMaxPlayers() ? maxPlayers : "")
+                    .replace("{ping}", menu.showPing() ? ping : "")
+                    .replace("{status}", menu.showStatus() ? status : "");
 
             simpleFormBuilderClass.getMethod("button", String.class).invoke(builder,
                     stripFormattingCodesIfRequested(buttonText, config));
@@ -109,7 +142,7 @@ public final class BedrockFormService {
             if (!stillAvailable) {
                 plugin.cooldowns().clear(player.getUniqueId());
                 player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                        Map.of("reason", "The selected lobby is no longer available.", "player", player.getUsername()), player));
+                        Map.of("reason", config.language().text("reasons.selection_unavailable"), "player", player.getUsername()), player));
                 return;
             }
 
@@ -127,7 +160,7 @@ public final class BedrockFormService {
             if (target.isEmpty()) {
                 plugin.cooldowns().clear(player.getUniqueId());
                 player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                        Map.of("reason", "The selected server is no longer registered.", "player", player.getUsername()), player));
+                        Map.of("reason", config.language().text("reasons.selection_unregistered"), "player", player.getUsername()), player));
                 return;
             }
 
@@ -139,7 +172,7 @@ public final class BedrockFormService {
         }).exceptionally(throwable -> {
             plugin.cooldowns().clear(player.getUniqueId());
             player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                    Map.of("reason", "Could not validate the selected lobby.", "player", player.getUsername()), player));
+                    Map.of("reason", config.language().text("reasons.selection_validation_failed"), "player", player.getUsername()), player));
             plugin.logger().error("[VelocityNavigator] Failed to validate Bedrock lobby selection for {}", player.getUsername(), throwable);
             return null;
         });
@@ -150,8 +183,16 @@ public final class BedrockFormService {
             return "";
         }
         if (config.bedrock().stripAdvancedFormatting()) {
-            return text.replaceAll("<[^>]*>", "").replaceAll("&[0-9a-fk-or]", "").replaceAll("§[0-9a-fk-or]", "");
+            String stripped = MINI_MESSAGE_TAG.matcher(text).replaceAll("");
+            stripped = AMP_COLOR_CODE.matcher(stripped).replaceAll("");
+            stripped = SECTION_COLOR_CODE.matcher(stripped).replaceAll("");
+            return stripped;
         }
-        return text;
+        try {
+            String normalized = LegacyColorConverter.hasLegacyCodes(text) ? LegacyColorConverter.convert(text) : text;
+            return LegacyComponentSerializer.legacySection().serialize(MiniMessage.miniMessage().deserialize(normalized));
+        } catch (RuntimeException error) {
+            return text;
+        }
     }
 }

@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,11 +34,16 @@ public final class ConfigManager {
 
     private final Path dataDirectory;
     private final Path configPath;
+    private final Path messagesPath;
+    private final Path guiPath;
     private final Logger logger;
+    private volatile GuiConfig guiConfig = GuiConfig.defaults();
 
     public ConfigManager(Path dataDirectory, Logger logger) {
         this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
         this.configPath = dataDirectory.resolve("navigator.toml");
+        this.messagesPath = dataDirectory.resolve("messages.toml");
+        this.guiPath = dataDirectory.resolve("gui.toml");
         this.logger = Objects.requireNonNull(logger, "logger");
     }
 
@@ -45,14 +51,29 @@ public final class ConfigManager {
         return configPath;
     }
 
+    public Path messagesPath() {
+        return messagesPath;
+    }
+
+    public Path guiPath() {
+        return guiPath;
+    }
+
+    public GuiConfig guiConfig() {
+        return guiConfig;
+    }
+
     public ConfigLoadResult load() throws IOException {
         Files.createDirectories(dataDirectory);
         if (!Files.exists(configPath)) {
             Config defaults = Config.defaults();
             writeConfig(defaults);
+            writeMessages(LanguagePacks.bundle("en"));
+            this.guiConfig = GuiConfig.defaults();
+            writeGui(this.guiConfig);
             return new ConfigLoadResult(
                     defaults,
-                    List.of("Created navigator.toml with the v4 default layout."),
+                    List.of("Created navigator.toml, messages.toml, and gui.toml with the v4.3 default layout; servers.toml is initialized by server management."),
                     true,
                     false,
                     null,
@@ -64,11 +85,21 @@ public final class ConfigManager {
         Toml toml;
         try {
             toml = new Toml().read(configPath.toFile());
+            if (ensureAdvancedSections(toml)) {
+                toml = new Toml().read(configPath.toFile());
+            }
         } catch (RuntimeException exception) {
             Path backupPath = dataDirectory.resolve("navigator.toml.invalid.bak");
             Files.copy(configPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             Config defaults = Config.defaults();
             writeConfig(defaults);
+            if (!Files.exists(messagesPath)) {
+                writeMessages(LanguagePacks.bundle("en"));
+            }
+            if (!Files.exists(guiPath)) {
+                this.guiConfig = GuiConfig.defaults();
+                writeGui(this.guiConfig);
+            }
             return new ConfigLoadResult(
                     defaults,
                     List.of("navigator.toml could not be parsed, so the broken file was backed up and defaults were regenerated."),
@@ -89,7 +120,9 @@ public final class ConfigManager {
             Files.copy(configPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
         }
 
-        Config config = buildConfig(toml, state, sourceVersion);
+        LanguageBundle language = loadLanguage(toml, state);
+        this.guiConfig = loadGui(toml, state);
+        Config config = buildConfig(toml, state, sourceVersion, language);
         if (migrated || state.normalized) {
             writeConfig(config);
         }
@@ -100,7 +133,6 @@ public final class ConfigManager {
             state.warnings.add(0, "Migrated navigator.toml from v" + sourceVersion + " to v" + Config.CURRENT_VERSION + ".");
         }
 
-        // Run validation on loaded config
         state.warnings.addAll(ConfigValidator.validate(config, toml));
 
         return new ConfigLoadResult(
@@ -114,6 +146,18 @@ public final class ConfigManager {
         );
     }
 
+    private boolean ensureAdvancedSections(Toml toml) throws IOException {
+        StringBuilder additions = new StringBuilder();
+        if (toml.getTable("party") == null) additions.append("\n[party]\nenabled = true\ninvite_timeout_seconds = 60\nfollow_leader = true\nmax_size = 20\ncommand = \"party\"\nchat_command = \"p\"\npermission = \"none\"\n");
+        if (toml.getTable("queue") == null) additions.append("\n# VN does not create this backend or its world. Register it in velocity.toml,\n# keep it outside lobby pools, and size it for the expected queue.\n[queue]\nenabled = true\npoll_seconds = 2\nnotify_seconds = 5\nmax_size = 500\nholding_server = \"\"\ncommand = \"queue\"\npermission = \"none\"\n");
+        if (toml.getTable("redis") == null) additions.append("\n[redis]\nenabled = false\nhost = \"127.0.0.1\"\nport = 6379\nusername = \"\"\npassword = \"\"\nssl = false\nnode_id = \"\"\nchannel_prefix = \"vn\"\nsync_seconds = 5\nconnect_timeout_ms = 3000\nread_timeout_ms = 10000\nreconnect_min_ms = 1000\nreconnect_max_ms = 30000\nregistration_secret = \"\"\nregistration_max_age_seconds = 30\nallowed_registration_hosts = []\n");
+        if (toml.getTable("backend_states") == null) additions.append("\n[backend_states]\nenabled = true\nallowed = [\"LOBBY\", \"WAITING\", \"AVAILABLE\"]\nallow_unknown = true\n");
+        if (toml.getTable("server_management") == null) additions.append("\n[server_management]\nenabled = true\nvelocity_config = \"velocity.toml\"\nallow_overwrite = false\n");
+        if (additions.isEmpty()) return false;
+        Files.writeString(configPath, additions.toString(), StandardOpenOption.APPEND);
+        return true;
+    }
+
     public void logWarnings(ConfigLoadResult result) {
         for (String warning : result.warnings()) {
             logger.warn("[VelocityNavigator] {}", warning);
@@ -121,7 +165,7 @@ public final class ConfigManager {
     }
 
     @SuppressWarnings("unchecked")
-    private Config buildConfig(Toml toml, ParseState state, int sourceVersion) {
+    private Config buildConfig(Toml toml, ParseState state, int sourceVersion, LanguageBundle language) {
         Config defaults = Config.defaults();
 
         String rawSelectionMode = readString(
@@ -153,10 +197,8 @@ public final class ConfigManager {
                 readBoolean(toml, state, "commands.reconnect_if_same_server", defaults.commands().reconnectIfSameServer(), "commands.reconnect_if_same_server", "reconnect_on_lobby_command")
         );
 
-        // Read lobby entries for contextual groups
         Map<String, Config.GroupConfig> groupConfigs = readGroupConfigMap(toml, state, "routing.contextual.groups", "routing.contextual.groups", "contextual_lobbies.groups");
 
-        // Read fallback chain
         Map<String, List<String>> fallbackChain = readStringListMap(toml, state, "routing.contextual.fallback_chain", "routing.contextual.fallback_chain");
 
         Config.Contextual contextual = new Config.Contextual(
@@ -167,7 +209,6 @@ public final class ConfigManager {
                 fallbackChain
         );
 
-        // Read default lobbies (support both plain strings and inline tables)
         List<Config.LobbyEntry> defaultLobbies = readLobbyEntryList(
                 toml,
                 state,
@@ -193,10 +234,16 @@ public final class ConfigManager {
                 contextual,
                 maxRetries,
                 affinity,
-                readBoolean(toml, state, "routing.use_chat_menu_for_lobby", defaults.routing().useChatMenuForLobby(), "routing.use_chat_menu_for_lobby"),
-                readString(toml, state, "routing.chat_menu_header", defaults.routing().chatMenuHeader(), "routing.chat_menu_header"),
-                readString(toml, state, "routing.chat_menu_format", defaults.routing().chatMenuFormat(), "routing.chat_menu_format"),
-                readString(toml, state, "routing.chat_menu_tooltip", defaults.routing().chatMenuTooltip(), "routing.chat_menu_tooltip")
+                readBoolean(toml, state, "routing.use_menu_for_lobby", defaults.routing().useChatMenuForLobby(), "routing.use_menu_for_lobby", "routing.use_chat_menu_for_lobby"),
+                language.text("menus.chat.header"),
+                language.text("menus.chat.entry"),
+                language.text("menus.chat.tooltip"),
+                Config.JavaMenuType.fromString(readString(toml, state, "routing.java_menu.type", defaults.routing().javaMenuType().configValue(), "routing.java_menu.type")),
+                new Config.InventoryMenuSettings(
+                        readInt(toml, state, "routing.java_menu.rows", defaults.routing().inventoryMenu().rows(), "routing.java_menu.rows"),
+                        readString(toml, state, "routing.java_menu.material", defaults.routing().inventoryMenu().material(), "routing.java_menu.material"),
+                        readBoolean(toml, state, "routing.java_menu.fallback_to_chat", defaults.routing().inventoryMenu().fallbackToChat(), "routing.java_menu.fallback_to_chat")
+                )
         );
 
         Config.HealthChecks healthChecks = new Config.HealthChecks(
@@ -206,22 +253,21 @@ public final class ConfigManager {
         );
 
         Config.Messages messages = new Config.Messages(
-                readString(toml, state, "messages.connecting", defaults.messages().connecting(), "messages.connecting"),
-                readString(toml, state, "messages.already_connected", defaults.messages().alreadyConnected(), "messages.already_connected"),
-                readString(toml, state, "messages.no_lobby_found", defaults.messages().noLobbyFound(), "messages.no_lobby_found"),
-                readString(toml, state, "messages.player_only", defaults.messages().playerOnly(), "messages.player_only"),
-                readString(toml, state, "messages.cooldown", defaults.messages().cooldown(), "messages.cooldown"),
-                readString(toml, state, "messages.reload_success", defaults.messages().reloadSuccess(), "messages.reload_success"),
-                readString(toml, state, "messages.reload_failed", defaults.messages().reloadFailed(), "messages.reload_failed"),
-                readString(toml, state, "messages.retrying", defaults.messages().retrying(), "messages.retrying"),
-                readString(toml, state, "messages.formatting", defaults.messages().formatting(), "messages.formatting"),
-                readString(toml, state, "messages.dashboard_healthy", defaults.messages().dashboardHealthy(), "messages.dashboard_healthy"),
-                readString(toml, state, "messages.dashboard_draining", defaults.messages().dashboardDraining(), "messages.dashboard_draining"),
-                readString(toml, state, "messages.dashboard_open", defaults.messages().dashboardOpen(), "messages.dashboard_open"),
-                readString(toml, state, "messages.dashboard_offline", defaults.messages().dashboardOffline(), "messages.dashboard_offline")
+                language.text("messages.connecting"),
+                language.text("messages.already_connected"),
+                language.text("messages.no_lobby_found"),
+                language.text("messages.player_only"),
+                language.text("messages.cooldown"),
+                language.text("messages.reload_success"),
+                language.text("messages.reload_failed"),
+                language.text("messages.retrying"),
+                language.text("messages.formatting"),
+                language.text("messages.dashboard_healthy"),
+                language.text("messages.dashboard_draining"),
+                language.text("messages.dashboard_open"),
+                language.text("messages.dashboard_offline")
         );
 
-        // Load UpdateCheckerSettings with v5 features
         Config.UpdateCheckerSettings updateChecker;
         if (sourceVersion < 5) {
             boolean enabled = true;
@@ -232,13 +278,15 @@ public final class ConfigManager {
             Config.UpdateChannel channel = Config.UpdateChannel.fromString(readString(toml, state, "update_checker.channel", defaults.updateChecker().channel().configValue(), "update_checker.channel"));
             int checkInterval = readInt(toml, state, "update_checker.check_interval", defaults.updateChecker().checkIntervalMinutes(), "update_checker.check_interval");
             boolean notifyAdmins = readBoolean(toml, state, "update_checker.notify_admins", defaults.updateChecker().notifyAdmins(), "update_checker.notify_admins");
-            updateChecker = new Config.UpdateCheckerSettings(enabled, channel, checkInterval, notifyAdmins);
+            boolean silent = readBoolean(toml, state, "update_checker.silent", defaults.updateChecker().silent(), "update_checker.silent");
+            updateChecker = new Config.UpdateCheckerSettings(enabled, channel, checkInterval, notifyAdmins, silent);
         } else {
             updateChecker = new Config.UpdateCheckerSettings(
                     readBoolean(toml, state, "update_checker.enabled", defaults.updateChecker().enabled(), "update_checker.enabled"),
                     Config.UpdateChannel.fromString(readString(toml, state, "update_checker.channel", defaults.updateChecker().channel().configValue(), "update_checker.channel")),
                     readInt(toml, state, "update_checker.check_interval", defaults.updateChecker().checkIntervalMinutes(), "update_checker.check_interval"),
-                    readBoolean(toml, state, "update_checker.notify_admins", defaults.updateChecker().notifyAdmins(), "update_checker.notify_admins")
+                    readBoolean(toml, state, "update_checker.notify_admins", defaults.updateChecker().notifyAdmins(), "update_checker.notify_admins"),
+                    readBoolean(toml, state, "update_checker.silent", defaults.updateChecker().silent(), "update_checker.silent")
             );
         }
 
@@ -283,7 +331,7 @@ public final class ConfigManager {
 
         Config.LobbyFallbackSettings lobbyFallback = new Config.LobbyFallbackSettings(
                 readString(toml, state, "lobby.no_server_strategy", defaults.lobbyFallback().noServerStrategy(), "lobby.no_server_strategy"),
-                readString(toml, state, "lobby.no_server_message", defaults.lobbyFallback().noServerMessage(), "lobby.no_server_message"),
+                language.text("lobby.no_server_message"),
                 readString(toml, state, "lobby.fallback_server", defaults.lobbyFallback().fallbackServer(), "lobby.fallback_server")
         );
 
@@ -293,9 +341,17 @@ public final class ConfigManager {
                 readBoolean(toml, state, "bedrock.strip_advanced_formatting", defaults.bedrock().stripAdvancedFormatting(), "bedrock.strip_advanced_formatting"),
                 readBoolean(toml, state, "bedrock.affinity_use_java_uuid", defaults.bedrock().affinityUseJavaUuid(), "bedrock.affinity_use_java_uuid"),
                 readBoolean(toml, state, "bedrock.use_gui_for_lobby", defaults.bedrock().useGuiForLobby(), "bedrock.use_gui_for_lobby"),
-                readString(toml, state, "bedrock.gui_title", defaults.bedrock().guiTitle(), "bedrock.gui_title"),
-                readString(toml, state, "bedrock.gui_content", defaults.bedrock().guiContent(), "bedrock.gui_content"),
-                readString(toml, state, "bedrock.gui_button_format", defaults.bedrock().guiButtonFormat(), "bedrock.gui_button_format")
+                language.text("menus.bedrock.title"),
+                language.text("menus.bedrock.content"),
+                language.text("menus.bedrock.button")
+        );
+
+        Config.DashboardSettings dashboard = new Config.DashboardSettings(
+                readBoolean(toml, state, "dashboard.enabled", defaults.dashboard().enabled(), "dashboard.enabled"),
+                readInt(toml, state, "dashboard.port", defaults.dashboard().port(), "dashboard.port"),
+                readString(toml, state, "dashboard.bind_host", defaults.dashboard().bindHost(), "dashboard.bind_host"),
+                readString(toml, state, "dashboard.bearer_token", defaults.dashboard().bearerToken(), "dashboard.bearer_token"),
+                readInt(toml, state, "dashboard.refresh_seconds", defaults.dashboard().refreshSeconds(), "dashboard.refresh_seconds")
         );
 
         return new Config(
@@ -314,8 +370,332 @@ public final class ConfigManager {
                 notifyAdminsOnJoin,
                 startup,
                 lobbyFallback,
-                bedrock
+                bedrock,
+                dashboard,
+                language
         );
+    }
+
+    private LanguageBundle loadLanguage(Toml legacyToml, ParseState state) throws IOException {
+        LanguageBundle defaults = LanguageBundle.defaults();
+        Map<String, String> strings = new LinkedHashMap<>(defaults.strings());
+        Map<String, List<String>> lists = new LinkedHashMap<>(defaults.lists());
+
+        if (!Files.exists(messagesPath)) {
+            Path languageMigrationBackup = dataDirectory.resolve("navigator.toml.pre-messages.bak");
+            if (Files.exists(configPath) && !Files.exists(languageMigrationBackup)) {
+                Files.copy(configPath, languageMigrationBackup, StandardCopyOption.REPLACE_EXISTING);
+            }
+            Map<String, String> legacyPaths = new LinkedHashMap<>();
+            for (String key : defaults.strings().keySet()) {
+                if (key.startsWith("messages.")) {
+                    legacyPaths.put(key, key);
+                }
+            }
+            legacyPaths.put("menus.chat.header", "routing.chat_menu_header");
+            legacyPaths.put("menus.chat.entry", "routing.chat_menu_format");
+            legacyPaths.put("menus.chat.tooltip", "routing.chat_menu_tooltip");
+            legacyPaths.put("menus.bedrock.title", "bedrock.gui_title");
+            legacyPaths.put("menus.bedrock.content", "bedrock.gui_content");
+            legacyPaths.put("menus.bedrock.button", "bedrock.gui_button_format");
+            legacyPaths.put("lobby.no_server_message", "lobby.no_server_message");
+
+            for (Map.Entry<String, String> entry : legacyPaths.entrySet()) {
+                Object value = rawValue(legacyToml, entry.getValue());
+                if (value instanceof String text && !text.isBlank()) {
+                    strings.put(entry.getKey(), text);
+                }
+            }
+            LanguageBundle migrated = new LanguageBundle("en", "en", strings, lists);
+            writeMessages(migrated);
+            state.warnings.add("Created messages.toml, migrated existing message/menu text, and saved navigator.toml.pre-messages.bak.");
+            state.normalized = true;
+            return migrated;
+        }
+
+        Toml messageToml;
+        try {
+            messageToml = new Toml().read(messagesPath.toFile());
+        } catch (RuntimeException exception) {
+            Path backupPath = dataDirectory.resolve("messages.toml.invalid.bak");
+            Files.copy(messagesPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+            writeMessages(defaults);
+            state.warnings.add("messages.toml could not be parsed; it was backed up and regenerated with defaults.");
+            return defaults;
+        }
+
+        String selectedLanguage = stringValue(rawValue(messageToml, "language"), "en")
+                .trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        String activeLanguage = stringValue(rawValue(messageToml, "active_language"), selectedLanguage)
+                .trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        if (LanguagePacks.isSupported(selectedLanguage) && !selectedLanguage.equals(activeLanguage)) {
+            LanguageBundle switched = LanguagePacks.bundle(selectedLanguage);
+            writeMessages(switched);
+            state.warnings.add("Switched messages.toml to built-in language '" + selectedLanguage + "'.");
+            return switched;
+        }
+
+        for (String key : defaults.strings().keySet()) {
+            Object value = rawValue(messageToml, key);
+            if (value instanceof String text && !text.isBlank()) {
+                strings.put(key, text);
+            } else if (value != null) {
+                state.warnings.add("messages.toml key '" + key + "' must be a non-empty string; the default was used.");
+            }
+        }
+        for (String key : defaults.lists().keySet()) {
+            Object value = rawValue(messageToml, key);
+            if (value instanceof List<?> rawList) {
+                List<String> parsed = new ArrayList<>();
+                boolean valid = true;
+                for (Object item : rawList) {
+                    if (item instanceof String text) {
+                        parsed.add(text);
+                    } else {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid && !parsed.isEmpty()) {
+                    lists.put(key, List.copyOf(parsed));
+                } else {
+                    state.warnings.add("messages.toml key '" + key + "' must be a non-empty string list; the default was used.");
+                }
+            } else if (value != null) {
+                state.warnings.add("messages.toml key '" + key + "' must be a string list; the default was used.");
+            }
+        }
+        String formatting = strings.get("messages.formatting").trim().toLowerCase(Locale.ROOT);
+        if (!List.of("auto", "minimessage", "legacy").contains(formatting)) {
+            strings.put("messages.formatting", defaults.text("messages.formatting"));
+            state.warnings.add("messages.formatting must be auto, minimessage, or legacy; the default was used.");
+        }
+        LanguageBundle loaded = new LanguageBundle(selectedLanguage, selectedLanguage, strings, lists);
+        if (!LanguagePacks.isSupported(selectedLanguage) && !selectedLanguage.equals(activeLanguage)) {
+            writeMessages(loaded);
+            state.warnings.add("Language '" + selectedLanguage + "' is custom; existing values were preserved for editing.");
+        }
+        return loaded;
+    }
+
+    private void writeMessages(LanguageBundle language) throws IOException {
+        StringBuilder b = new StringBuilder();
+        b.append("# VelocityNavigator 4.3.0 language and menu text\n");
+        b.append("# MiniMessage formatting and documented placeholders are supported.\n");
+        b.append("# Built-ins: ").append(String.join(", ", LanguagePacks.supportedCodes())).append(". Any other code is treated as a custom language.\n");
+        b.append("# Change language, restart or /vn reload, and built-in text will be replaced automatically.\n\n");
+        b.append("language = ").append(quoted(language.language())).append("\n");
+        b.append("active_language = ").append(quoted(language.activeLanguage())).append("\n\n");
+
+        List<String> sections = new ArrayList<>();
+        for (String key : language.strings().keySet()) {
+            String section = sectionOf(key);
+            if (!sections.contains(section)) {
+                sections.add(section);
+            }
+        }
+        for (String key : language.lists().keySet()) {
+            String section = sectionOf(key);
+            if (!sections.contains(section)) {
+                sections.add(section);
+            }
+        }
+        for (String section : sections) {
+            b.append('[').append(section).append("]\n");
+            for (Map.Entry<String, String> entry : language.strings().entrySet()) {
+                if (sectionOf(entry.getKey()).equals(section)) {
+                    b.append(nameOf(entry.getKey())).append(" = ").append(quoted(entry.getValue())).append('\n');
+                }
+            }
+            for (Map.Entry<String, List<String>> entry : language.lists().entrySet()) {
+                if (sectionOf(entry.getKey()).equals(section)) {
+                    b.append(nameOf(entry.getKey())).append(" = ").append(formatList(entry.getValue())).append('\n');
+                }
+            }
+            b.append('\n');
+        }
+        Files.writeString(messagesPath, b.toString());
+    }
+
+    private String sectionOf(String key) {
+        int split = key.lastIndexOf('.');
+        return split < 0 ? "language" : key.substring(0, split);
+    }
+
+    private String nameOf(String key) {
+        int split = key.lastIndexOf('.');
+        return split < 0 ? key : key.substring(split + 1);
+    }
+
+    private GuiConfig loadGui(Toml navigatorToml, ParseState state) throws IOException {
+        GuiConfig defaults = GuiConfig.defaults();
+        if (!Files.exists(guiPath)) {
+            Path guiMigrationBackup = dataDirectory.resolve("navigator.toml.pre-gui.bak");
+            if (Files.exists(configPath) && !Files.exists(guiMigrationBackup)) {
+                Files.copy(configPath, guiMigrationBackup, StandardCopyOption.REPLACE_EXISTING);
+            }
+            int legacyRows = numberValue(rawValue(navigatorToml, "routing.java_menu.rows"), defaults.rows());
+            String legacyMaterial = stringValue(rawValue(navigatorToml, "routing.java_menu.material"), defaults.defaultMaterial());
+            GuiConfig migrated = new GuiConfig(
+                    legacyRows,
+                    legacyMaterial,
+                    defaults.unavailableMaterial(),
+                    defaults.fillEmptySlots(),
+                    defaults.fillerMaterial(),
+                    defaults.refreshSeconds(),
+                    defaults.previousSlot(),
+                    defaults.refreshSlot(),
+                    defaults.nextSlot(),
+                    defaults.previousMaterial(),
+                    defaults.refreshMaterial(),
+                    defaults.nextMaterial(),
+                    Map.of()
+            );
+            writeGui(migrated);
+            state.normalized = true;
+            state.warnings.add("Created gui.toml, migrated legacy Java-menu layout settings, and saved navigator.toml.pre-gui.bak.");
+            return migrated;
+        }
+
+        Toml guiToml;
+        try {
+            guiToml = new Toml().read(guiPath.toFile());
+            if (guiToml.getTable("bedrock") == null) {
+                Files.writeString(guiPath, "\n[bedrock]\nenabled = true\nfallback_to_chat = true\nsort_mode = \"routing\"\nmax_buttons = 100\nshow_players = true\nshow_max_players = true\nshow_ping = true\nshow_status = true\ntitle = \"\"\ncontent = \"\"\nbutton_format = \"\"\n", StandardOpenOption.APPEND);
+                guiToml = new Toml().read(guiPath.toFile());
+            }
+        } catch (RuntimeException exception) {
+            Path backup = dataDirectory.resolve("gui.toml.invalid.bak");
+            Files.copy(guiPath, backup, StandardCopyOption.REPLACE_EXISTING);
+            writeGui(defaults);
+            state.warnings.add("gui.toml could not be parsed; it was backed up and regenerated with defaults.");
+            return defaults;
+        }
+
+        Map<String, GuiConfig.ServerItem> servers = new LinkedHashMap<>();
+        Object rawServers = rawValue(guiToml, "servers");
+        if (rawServers instanceof Map<?, ?> serverMap) {
+            for (Map.Entry<?, ?> entry : serverMap.entrySet()) {
+                if (!(entry.getValue() instanceof Map<?, ?> values)) {
+                    state.warnings.add("gui.toml server override '" + entry.getKey() + "' must be an inline table and was ignored.");
+                    continue;
+                }
+                String name = sanitizeMapKey(String.valueOf(entry.getKey()));
+                int slot = numberValue(values.get("slot"), -1);
+                String material = stringValue(values.get("material"), "");
+                String unavailable = stringValue(values.get("unavailable_material"), "");
+                String displayName = stringValue(values.get("name"), "");
+                List<String> lore = stringListValue(values.get("lore"));
+                servers.put(name, new GuiConfig.ServerItem(slot, material, unavailable, displayName, lore));
+            }
+        }
+
+        GuiConfig.BedrockMenu bedrockMenu = new GuiConfig.BedrockMenu(
+                booleanValue(rawValue(guiToml, "bedrock.enabled"), defaults.bedrock().enabled()),
+                booleanValue(rawValue(guiToml, "bedrock.fallback_to_chat"), defaults.bedrock().fallbackToChat()),
+                stringValue(rawValue(guiToml, "bedrock.sort_mode"), defaults.bedrock().sortMode()),
+                numberValue(rawValue(guiToml, "bedrock.max_buttons"), defaults.bedrock().maxButtons()),
+                booleanValue(rawValue(guiToml, "bedrock.show_players"), defaults.bedrock().showPlayers()),
+                booleanValue(rawValue(guiToml, "bedrock.show_max_players"), defaults.bedrock().showMaxPlayers()),
+                booleanValue(rawValue(guiToml, "bedrock.show_ping"), defaults.bedrock().showPing()),
+                booleanValue(rawValue(guiToml, "bedrock.show_status"), defaults.bedrock().showStatus()),
+                stringValue(rawValue(guiToml, "bedrock.title"), defaults.bedrock().title()),
+                stringValue(rawValue(guiToml, "bedrock.content"), defaults.bedrock().content()),
+                stringValue(rawValue(guiToml, "bedrock.button_format"), defaults.bedrock().buttonFormat())
+        );
+
+        return new GuiConfig(
+                numberValue(rawValue(guiToml, "layout.rows"), defaults.rows()),
+                stringValue(rawValue(guiToml, "layout.default_material"), defaults.defaultMaterial()),
+                stringValue(rawValue(guiToml, "layout.unavailable_material"), defaults.unavailableMaterial()),
+                booleanValue(rawValue(guiToml, "layout.fill_empty_slots"), defaults.fillEmptySlots()),
+                stringValue(rawValue(guiToml, "layout.filler_material"), defaults.fillerMaterial()),
+                numberValue(rawValue(guiToml, "layout.refresh_seconds"), defaults.refreshSeconds()),
+                numberValue(rawValue(guiToml, "controls.previous_slot"), defaults.previousSlot()),
+                numberValue(rawValue(guiToml, "controls.refresh_slot"), defaults.refreshSlot()),
+                numberValue(rawValue(guiToml, "controls.next_slot"), defaults.nextSlot()),
+                stringValue(rawValue(guiToml, "controls.previous_material"), defaults.previousMaterial()),
+                stringValue(rawValue(guiToml, "controls.refresh_material"), defaults.refreshMaterial()),
+                stringValue(rawValue(guiToml, "controls.next_material"), defaults.nextMaterial()),
+                servers,
+                bedrockMenu
+        );
+    }
+
+    private void writeGui(GuiConfig gui) throws IOException {
+        StringBuilder b = new StringBuilder();
+        b.append("# VelocityNavigator 4.3.0 Java inventory and Bedrock form layout\n");
+        b.append("# Text defaults live in messages.toml; per-server name/lore overrides may use MiniMessage, & codes, § codes, or hex colors.\n\n");
+        b.append("config_version = 1\n\n");
+        b.append("[layout]\n");
+        b.append("# Java inventories have nine fixed columns. Choose 2-6 rows (18-54 slots);\n");
+        b.append("# the bottom row is reserved for controls by default.\n");
+        b.append("rows = ").append(gui.rows()).append("\n");
+        b.append("default_material = ").append(quoted(gui.defaultMaterial())).append("\n");
+        b.append("unavailable_material = ").append(quoted(gui.unavailableMaterial())).append("\n");
+        b.append("fill_empty_slots = ").append(gui.fillEmptySlots()).append("\n");
+        b.append("filler_material = ").append(quoted(gui.fillerMaterial())).append("\n");
+        b.append("refresh_seconds = ").append(gui.refreshSeconds()).append("\n\n");
+        b.append("[controls]\n");
+        b.append("previous_slot = ").append(gui.previousSlot()).append("\n");
+        b.append("refresh_slot = ").append(gui.refreshSlot()).append("\n");
+        b.append("next_slot = ").append(gui.nextSlot()).append("\n");
+        b.append("previous_material = ").append(quoted(gui.previousMaterial())).append("\n");
+        b.append("refresh_material = ").append(quoted(gui.refreshMaterial())).append("\n");
+        b.append("next_material = ").append(quoted(gui.nextMaterial())).append("\n\n");
+        b.append("[bedrock]\n");
+        b.append("# Bedrock chooses the form layout; max_buttons only limits its choices.\n");
+        b.append("enabled = ").append(gui.bedrock().enabled()).append("\n");
+        b.append("fallback_to_chat = ").append(gui.bedrock().fallbackToChat()).append("\n");
+        b.append("sort_mode = ").append(quoted(gui.bedrock().sortMode())).append("\n");
+        b.append("max_buttons = ").append(gui.bedrock().maxButtons()).append("\n");
+        b.append("show_players = ").append(gui.bedrock().showPlayers()).append("\n");
+        b.append("show_max_players = ").append(gui.bedrock().showMaxPlayers()).append("\n");
+        b.append("show_ping = ").append(gui.bedrock().showPing()).append("\n");
+        b.append("show_status = ").append(gui.bedrock().showStatus()).append("\n");
+        b.append("title = ").append(quoted(gui.bedrock().title())).append("\n");
+        b.append("content = ").append(quoted(gui.bedrock().content())).append("\n");
+        b.append("button_format = ").append(quoted(gui.bedrock().buttonFormat())).append("\n\n");
+        b.append("# Optional per-server overrides. slot = -1 enables automatic placement.\n");
+        b.append("# [servers]\n");
+        b.append("# \"lobby-1\" = { slot = 10, material = \"NETHER_STAR\", unavailable_material = \"BARRIER\", name = \"&#55FFFF&lLobby One\", lore = [\"&7Players: &f{players}/{max_players}\", \"&eClick to connect\"] }\n");
+        if (!gui.servers().isEmpty()) {
+            b.append("[servers]\n");
+            for (Map.Entry<String, GuiConfig.ServerItem> entry : gui.servers().entrySet()) {
+                GuiConfig.ServerItem item = entry.getValue();
+                b.append(quoted(entry.getKey())).append(" = { slot = ").append(item.slot())
+                        .append(", material = ").append(quoted(item.material()))
+                        .append(", unavailable_material = ").append(quoted(item.unavailableMaterial()))
+                        .append(", name = ").append(quoted(item.name()))
+                        .append(", lore = ").append(formatList(item.lore())).append(" }\n");
+            }
+        }
+        Files.writeString(guiPath, b.toString());
+    }
+
+    private int numberValue(Object value, int fallback) {
+        return value instanceof Number number ? number.intValue() : fallback;
+    }
+
+    private boolean booleanValue(Object value, boolean fallback) {
+        return value instanceof Boolean bool ? bool : fallback;
+    }
+
+    private String stringValue(Object value, String fallback) {
+        return value instanceof String text ? text : fallback;
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof List<?> raw)) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : raw) {
+            if (item instanceof String text) {
+                result.add(text);
+            }
+        }
+        return List.copyOf(result);
     }
 
     private List<Config.LobbyEntry> readLobbyEntryList(Toml toml, ParseState state, String label, List<Config.LobbyEntry> fallback, String... paths) {
@@ -387,7 +767,6 @@ public final class ConfigManager {
 
                 Object groupValue = entry.getValue();
 
-                // Old format: list of strings
                 if (groupValue instanceof List<?> rawList) {
                     List<Config.LobbyEntry> entries = new ArrayList<>();
                     for (Object item : rawList) {
@@ -403,7 +782,6 @@ public final class ConfigManager {
                     continue;
                 }
 
-                // New format: table with servers and mode
                 if (groupValue instanceof Map<?, ?> groupMap) {
                     List<Config.LobbyEntry> entries = new ArrayList<>();
                     Object serversObj = groupMap.get("servers");
@@ -556,10 +934,6 @@ public final class ConfigManager {
         return Map.of();
     }
 
-    /**
-     * Reads a string map from TOML, lowercasing keys so that they match
-     * the lowercase lookups in RoutePlanner (e.g. contextual sources).
-     */
     private Map<String, String> readStringMap(Toml toml, ParseState state, String label, String... paths) {
         for (String path : paths) {
             Object value = rawValue(toml, path);
@@ -605,22 +979,29 @@ public final class ConfigManager {
     }
 
     private void writeConfig(Config config) throws IOException {
-        String wiki = config.startup() != null ? config.startup().wikiUrl() : "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki";
+        String wiki = config.startup() != null ? config.startup().wikiUrl() : "https://github.com/DemonZ-Development/VelocityNavigator/wiki";
+        AdvancedConfig advanced = AdvancedConfig.defaults();
+        if (Files.exists(configPath)) {
+            try {
+                advanced = AdvancedConfig.load(configPath);
+            } catch (RuntimeException ignored) {
+            }
+        }
         if (wiki.endsWith("/")) {
             wiki = wiki.substring(0, wiki.length() - 1);
         }
 
         StringBuilder b = new StringBuilder();
 
-        // ── Header ──────────────────────────────────────────────────────────
         b.append("# ╔══════════════════════════════════════════════════════════════════╗\n");
         b.append("# ║           VelocityNavigator — Configuration File               ║\n");
-        b.append("# ║     Premium lobby navigation for Velocity proxy networks        ║\n");
+        b.append("# ║     Lobby routing and load balancing for Velocity proxies       ║\n");
         b.append("# ╠══════════════════════════════════════════════════════════════════╣\n");
         b.append("# ║  Docs & Wiki : ").append(padRight(wiki, 49)).append("║\n");
         b.append("# ║  Support     : https://discord.com/invite/GYsTt96ypf            ║\n");
-        b.append("# ║  bStats      : https://bstats.org/plugin/velocity/Velocity%20Navigator/28341 ║\n");
+        b.append("# ║  Telemetry   : https://bstats.org/plugin/velocity/28341         ║\n");
         b.append("# ╚══════════════════════════════════════════════════════════════════╝\n");
+        b.append("#   Full bStats page: https://bstats.org/plugin/velocity/Velocity%20Navigator/28341\n");
         b.append("#\n");
         b.append("# This file is auto-generated and self-documenting. Every key has\n");
         b.append("# a description and a link to the relevant wiki section. Feel free\n");
@@ -629,34 +1010,30 @@ public final class ConfigManager {
         b.append("# Tip: Run /vn reload after saving changes. No proxy restart needed!\n");
         b.append("\n");
 
-        // ── Config version ──────────────────────────────────────────────────
         b.append("# Internal config schema version. Do NOT change this manually.\n");
         b.append("# VelocityNavigator uses it to auto-migrate your settings on upgrade.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#config_version\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#debug-and-top-level-settings\n");
         b.append("config_version = ").append(Config.CURRENT_VERSION).append("\n\n");
 
-        // ── Global notifications ────────────────────────────────────────────
         b.append("# Check for plugin updates when the proxy starts.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#notify_on_startup\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#debug-and-top-level-settings\n");
         b.append("notify_on_startup = ").append(config.notifyOnStartup()).append("\n\n");
         b.append("# Show an in-game update notification to admins when they join.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#notify_admins_on_join\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#debug-and-top-level-settings\n");
         b.append("notify_admins_on_join = ").append(config.notifyAdminsOnJoin()).append("\n\n");
 
-        // ── [startup] ───────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  STARTUP — First-run welcome & upgrade digest                  │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[startup]\n\n");
         b.append("# Display a welcome banner on fresh installs and a changelog digest\n");
         b.append("# when upgrading from a previous version.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup_welcome_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup-first-run-experience\n");
         b.append("welcome_enabled = ").append(config.startup().welcomeEnabled()).append("\n\n");
         b.append("# The wiki homepage URL used in console messages and config comments.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup_wiki_url\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup-first-run-experience\n");
         b.append("wiki_url = ").append(quoted(config.startup().wikiUrl())).append("\n\n");
 
-        // ── [commands] ──────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  COMMANDS — Player-facing & admin commands                      │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
@@ -685,7 +1062,6 @@ public final class ConfigManager {
         b.append("# Wiki: ").append(wiki).append("/Commands#reconnect_if_same_server\n");
         b.append("reconnect_if_same_server = ").append(config.commands().reconnectIfSameServer()).append("\n\n");
 
-        // ── [routing] ───────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  ROUTING — The brain of VelocityNavigator                      │\n");
         b.append("# │                                                                 │\n");
@@ -720,35 +1096,31 @@ public final class ConfigManager {
         b.append("#   { server = \"lobby-1\", max_players = 100 }          — with cap\n");
         b.append("#   { server = \"lobby-1\", max_players = 100, weight = 2 } — with cap + weight\n");
         b.append("#\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#default_lobbies\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#routing-core\n");
         b.append("default_lobbies = ").append(formatLobbyEntryList(config.routing().defaultLobbies())).append("\n\n");
         b.append("# How many times to retry a different lobby if the first connection fails.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#max_retries\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#routing-core\n");
         b.append("max_retries = ").append(config.routing().maxRetries()).append("\n\n");
-        b.append("# Show an interactive click-to-connect chat menu instead of auto-routing.\n");
+        b.append("# Show the configured interactive menu instead of auto-routing.\n");
         b.append("# Players can also type /lobby menu to trigger it manually.\n");
-        b.append("use_chat_menu_for_lobby = ").append(config.routing().useChatMenuForLobby()).append("\n\n");
-        b.append("# Header line printed above the chat menu (MiniMessage supported).\n");
-        b.append("chat_menu_header = ").append(quoted(config.routing().chatMenuHeader())).append("\n\n");
-        b.append("# Line format for each lobby entry in the chat menu.\n");
-        b.append("# Placeholders: {server}, {players}, {max_players}, {status}, {status_color}, {ping}\n");
-        b.append("chat_menu_format = ").append(quoted(config.routing().chatMenuFormat())).append("\n\n");
-        b.append("# Hover tooltip shown over each lobby entry in the chat menu.\n");
-        b.append("# Placeholders: {server}, {players}, {max_players}, {status}, {status_color}, {ping}\n");
-        b.append("chat_menu_tooltip = ").append(quoted(config.routing().chatMenuTooltip())).append("\n\n");
+        b.append("use_menu_for_lobby = ").append(config.routing().useMenuForLobby()).append("\n\n");
 
-        // ── [routing.affinity] ──────────────────────────────────────────────
+        b.append("# Java selector: \"inventory\" uses the backend bridge; \"chat\" uses hover/click text.\n");
+        b.append("# Install this same JAR on backend Paper/Spigot servers for inventory mode.\n");
+        b.append("[routing.java_menu]\n");
+        b.append("type = ").append(quoted(config.routing().javaMenuType().configValue())).append("\n");
+        b.append("fallback_to_chat = ").append(config.routing().inventoryMenu().fallbackToChat()).append("\n\n");
+
         b.append("# ── Player Affinity (Sticky Sessions) ──────────────────────────────\n");
         b.append("[routing.affinity]\n\n");
         b.append("# Remember which lobby a player was on and try to send them back.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#affinity_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#routingaffinity\n");
         b.append("enabled = ").append(config.routing().affinity().enabled()).append("\n\n");
         b.append("# Probability (0.0–1.0) of returning the player to their last lobby.\n");
         b.append("# 0.0 = never sticky, 1.0 = always sticky.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#affinity_stickiness\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#routingaffinity\n");
         b.append("stickiness = ").append(config.routing().affinity().stickiness()).append("\n\n");
 
-        // ── [routing.contextual] ────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  CONTEXTUAL ROUTING — Game-mode-aware lobby selection           │\n");
         b.append("# │                                                                 │\n");
@@ -760,10 +1132,9 @@ public final class ConfigManager {
         b.append("# Wiki: ").append(wiki).append("/Contextual-Routing-Guide\n");
         b.append("enabled = ").append(config.routing().contextual().enabled()).append("\n\n");
         b.append("# If no servers in the matched group are online, fall back to default lobbies.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#contextual_fallback_to_default\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#routingcontextual\n");
         b.append("fallback_to_default = ").append(config.routing().contextual().fallbackToDefault()).append("\n\n");
 
-        // [routing.contextual.groups]
         b.append("# ── Contextual Groups ───────────────────────────────────────────────\n");
         b.append("# Define named groups of lobby servers. Each group can optionally\n");
         b.append("# override the global selection_mode with its own \"mode\" field.\n");
@@ -784,7 +1155,6 @@ public final class ConfigManager {
         }
         b.append("\n");
 
-        // [routing.contextual.sources]
         b.append("# ── Source Mappings ────────────────────────────────────────────────\n");
         b.append("# Map a source server name → contextual group name.\n");
         b.append("# When a player leaves \"bedwars-1\", they'll be routed to the \"bedwars\" group.\n");
@@ -796,11 +1166,10 @@ public final class ConfigManager {
         }
         b.append("\n");
 
-        // [routing.contextual.fallback_chain]
         if (!config.routing().contextual().fallbackChain().isEmpty()) {
             b.append("# ── Fallback Chain ────────────────────────────────────────────────\n");
             b.append("# Ordered list of fallback groups to try before using default lobbies.\n");
-            b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#contextual_fallback_chain\n");
+            b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#fallback-chain\n");
             b.append("[routing.contextual.fallback_chain]\n");
             for (Map.Entry<String, List<String>> entry : config.routing().contextual().fallbackChain().entrySet()) {
                 b.append(quoted(entry.getKey())).append(" = ").append(formatList(entry.getValue())).append("\n");
@@ -808,7 +1177,6 @@ public final class ConfigManager {
             b.append("\n");
         }
 
-        // ── [lobby] ─────────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  LOBBY FALLBACK — What happens when no lobbies are available    │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
@@ -816,33 +1184,29 @@ public final class ConfigManager {
         b.append("# What to do when every lobby is offline or circuit-broken.\n");
         b.append("#   \"disconnect\"      — Disconnect the player with a message\n");
         b.append("#   \"fallback_server\" — Route to a backup fallback server instead\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#lobby_no_server_strategy\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#lobby-empty-lobby-strategy\n");
         b.append("no_server_strategy = ").append(quoted(config.lobbyFallback().noServerStrategy())).append("\n\n");
-        b.append("# Disconnect message shown when strategy = \"disconnect\".\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#lobby_no_server_message\n");
-        b.append("no_server_message = ").append(quoted(config.lobbyFallback().noServerMessage())).append("\n\n");
+        b.append("# The disconnect text is lobby.no_server_message in messages.toml.\n");
         b.append("# Backup server name used when strategy = \"fallback_server\".\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#lobby_fallback_server\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#lobby-empty-lobby-strategy\n");
         b.append("fallback_server = ").append(quoted(config.lobbyFallback().fallbackServer())).append("\n\n");
 
-        // ── [health_checks] ─────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  HEALTH CHECKS — Verify servers are alive before routing        │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[health_checks]\n\n");
         b.append("# Ping candidate lobbies before sending a player. Prevents routing\n");
         b.append("# to offline servers. Strongly recommended.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks\n");
         b.append("enabled = ").append(config.healthChecks().enabled()).append("\n\n");
         b.append("# Timeout in milliseconds before a health-check ping is considered failed.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks_timeout_ms\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks\n");
         b.append("timeout_ms = ").append(config.healthChecks().timeoutMs()).append("\n\n");
         b.append("# Cache health results for this many seconds. Reduces network load.\n");
         b.append("# Set to 0 to ping on every request (not recommended for large networks).\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks_cache_seconds\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#health_checks\n");
         b.append("cache_seconds = ").append(config.healthChecks().cacheSeconds()).append("\n\n");
 
-        // ── [circuit_breaker] ───────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  CIRCUIT BREAKER — Automatic failure detection & recovery       │\n");
         b.append("# │                                                                 │\n");
@@ -852,102 +1216,72 @@ public final class ConfigManager {
         b.append("[circuit_breaker]\n\n");
         b.append("# Enable the circuit breaker. When enabled, servers that fail\n");
         b.append("# health checks repeatedly are temporarily removed from routing.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker\n");
         b.append("enabled = ").append(config.circuitBreaker().enabled()).append("\n\n");
         b.append("# Number of consecutive failures before the circuit trips OPEN.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker_failure_threshold\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker\n");
         b.append("failure_threshold = ").append(config.circuitBreaker().failureThreshold()).append("\n\n");
         b.append("# Seconds to wait in OPEN state before allowing a test in HALF_OPEN.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker_cooldown_seconds\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker\n");
         b.append("cooldown_seconds = ").append(config.circuitBreaker().cooldownSeconds()).append("\n\n");
         b.append("# Successful test connections needed in HALF_OPEN to close the circuit.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker_half_open_max_tests\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#circuit_breaker\n");
         b.append("half_open_max_tests = ").append(config.circuitBreaker().halfOpenMaxTests()).append("\n\n");
 
-        // ── [messages] ──────────────────────────────────────────────────────
-        b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
-        b.append("# │  MESSAGES — All player-facing text (MiniMessage format)         │\n");
-        b.append("# │                                                                 │\n");
-        b.append("# │  Available placeholders:                                        │\n");
-        b.append("# │    <server>  <player>  <time>  <reason>  <mode>                 │\n");
-        b.append("# │    <attempt>  <max>                                             │\n");
-        b.append("# └─────────────────────────────────────────────────────────────────┘\n");
-        b.append("[messages]\n\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#messages\n");
-        b.append("connecting = ").append(quoted(config.messages().connecting())).append("\n");
-        b.append("already_connected = ").append(quoted(config.messages().alreadyConnected())).append("\n");
-        b.append("no_lobby_found = ").append(quoted(config.messages().noLobbyFound())).append("\n");
-        b.append("player_only = ").append(quoted(config.messages().playerOnly())).append("\n");
-        b.append("cooldown = ").append(quoted(config.messages().cooldown())).append("\n");
-        b.append("reload_success = ").append(quoted(config.messages().reloadSuccess())).append("\n");
-        b.append("reload_failed = ").append(quoted(config.messages().reloadFailed())).append("\n");
-        b.append("retrying = ").append(quoted(config.messages().retrying())).append("\n\n");
-        b.append("# Color code handling: \"auto\" (detect & convert), \"minimessage\", or \"legacy\".\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#messages_formatting\n");
-        b.append("formatting = ").append(quoted(config.messages().formatting())).append("\n\n");
-        b.append("# Status tag colors for the /vn servers dashboard (MiniMessage/hex).\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#messages_dashboard_colors\n");
-        b.append("dashboard_healthy = ").append(quoted(config.messages().dashboardHealthy())).append("\n");
-        b.append("dashboard_draining = ").append(quoted(config.messages().dashboardDraining())).append("\n");
-        b.append("dashboard_open = ").append(quoted(config.messages().dashboardOpen())).append("\n");
-        b.append("dashboard_offline = ").append(quoted(config.messages().dashboardOffline())).append("\n\n");
+        b.append("# Player-facing text and menu labels are stored in messages.toml.\n\n");
 
-        // ── [update_checker] ────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  UPDATE CHECKER — Automatic Modrinth version checking           │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[update_checker]\n\n");
         b.append("# Enable periodic update checking via the Modrinth API.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
         b.append("enabled = ").append(config.updateChecker().enabled()).append("\n\n");
         b.append("# Which release channel to follow: \"release\", \"beta\", or \"alpha\".\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker_channel\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
         b.append("channel = ").append(quoted(config.updateChecker().channel().configValue())).append("\n\n");
         b.append("# Minutes between update checks (minimum: 30). Backoff is applied\n");
         b.append("# automatically if the API returns 429 Too Many Requests.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker_interval\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
         b.append("check_interval = ").append(config.updateChecker().checkIntervalMinutes()).append("\n\n");
         b.append("# Notify online admins (velocitynavigator.admin) when they join.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker_notify_admins\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
         b.append("notify_admins = ").append(config.updateChecker().notifyAdmins()).append("\n\n");
+        b.append("# Suppress console log output for update checks. The /vn updatecheck\n");
+        b.append("# command still works regardless of this setting.\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
+        b.append("silent = ").append(config.updateChecker().silent()).append("\n\n");
 
-        // ── [bedrock] ───────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  BEDROCK — Geyser/Floodgate integration for Bedrock players    │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[bedrock]\n\n");
         b.append("# Manually enable Bedrock support. When false, auto_detect takes over.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock-bedrockgeyser-support\n");
         b.append("enabled = ").append(config.bedrock().enabled()).append("\n\n");
         b.append("# Automatically enable Bedrock features if Geyser/Floodgate is detected.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock_auto_detect\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock-bedrockgeyser-support\n");
         b.append("auto_detect = ").append(config.bedrock().autoDetect()).append("\n\n");
         b.append("# Strip gradients, hover events, and click actions for Bedrock clients.\n");
         b.append("# Bedrock doesn't support advanced MiniMessage formatting natively.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock_strip_advanced_formatting\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock-bedrockgeyser-support\n");
         b.append("strip_advanced_formatting = ").append(config.bedrock().stripAdvancedFormatting()).append("\n\n");
         b.append("# Use the Java UUID (mapped by Floodgate) for player affinity tracking.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock_affinity_use_java_uuid\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#bedrock-bedrockgeyser-support\n");
         b.append("affinity_use_java_uuid = ").append(config.bedrock().affinityUseJavaUuid()).append("\n\n");
         b.append("# Show a native Bedrock SimpleForm GUI instead of chat-based menu.\n");
         b.append("# Requires Floodgate to be installed alongside Geyser.\n");
         b.append("use_gui_for_lobby = ").append(config.bedrock().useGuiForLobby()).append("\n\n");
-        b.append("# Bedrock GUI form customization.\n");
-        b.append("gui_title = ").append(quoted(config.bedrock().guiTitle())).append("\n");
-        b.append("gui_content = ").append(quoted(config.bedrock().guiContent())).append("\n\n");
-        b.append("# Button text for each lobby in the Bedrock form. Placeholders: {server}, {players}\n");
-        b.append("gui_button_format = ").append(quoted(config.bedrock().guiButtonFormat())).append("\n\n");
+        b.append("# Bedrock form title/content/button text is stored in messages.toml.\n\n");
 
-        // ── [metrics] ───────────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  METRICS — Telemetry & monitoring                               │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[metrics]\n\n");
         b.append("# Enable anonymous bStats telemetry. Helps us understand plugin usage.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#metrics_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#metrics\n");
         b.append("enabled = ").append(config.metrics().enabled()).append("\n\n");
 
-        // [metrics.prometheus]
         b.append("# ── Prometheus Exporter ─────────────────────────────────────────────\n");
         b.append("# Exposes real-time metrics at http://<bind_host>:<port>/metrics\n");
         b.append("# Compatible with Prometheus, Grafana, and any OpenMetrics scraper.\n");
@@ -960,49 +1294,119 @@ public final class ConfigManager {
         b.append("# bind_host is not 127.0.0.1/localhost. Leave empty to disable.\n");
         b.append("bearer_token = ").append(quoted(config.metrics().prometheus().bearerToken())).append("\n\n");
 
-        // ── [degradation] ───────────────────────────────────────────────────
+        b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
+        b.append("# │  DASHBOARD — HTML operations panel                              │\n");
+        b.append("# └─────────────────────────────────────────────────────────────────┘\n");
+        b.append("# Serves a live HTML dashboard on a separate port. Shows lobby table,\n");
+        b.append("# routing distribution, affinity count, config summary, and live counters.\n");
+        b.append("# Optional operations dashboard. Disabled by default.\n");
+        b.append("[dashboard]\n\n");
+        b.append("# Enable the HTML dashboard. Default: false.\n");
+        b.append("enabled = ").append(config.dashboard().enabled()).append("\n\n");
+        b.append("# Port for the dashboard HTTP server. Default: 9226.\n");
+        b.append("port = ").append(config.dashboard().port()).append("\n\n");
+        b.append("# Bind address. Use 127.0.0.1 for local-only access, or 0.0.0.0 for\n");
+        b.append("# network exposure (only if firewalled or behind a token).\n");
+        b.append("bind_host = ").append(quoted(config.dashboard().bindHost())).append("\n\n");
+        b.append("# Bearer token for authentication. If set, requests must include\n");
+        b.append("# \"Authorization: Bearer <token>\". The browser login uses this header.\n");
+        b.append("# Never place bearer tokens in URLs. Leave empty\n");
+        b.append("# to allow unauthenticated access (only safe on loopback).\n");
+        b.append("bearer_token = ").append(quoted(config.dashboard().bearerToken())).append("\n\n");
+        b.append("# Auto-refresh interval in seconds. Default: 5.\n");
+        b.append("refresh_seconds = ").append(config.dashboard().refreshSeconds()).append("\n\n");
+
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  DEGRADATION — Graceful fallback when everything is down        │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[degradation]\n\n");
         b.append("# When all health checks fail, use this fallback routing mode instead\n");
         b.append("# of showing \"no lobby found\". Useful for keeping players connected.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#degradation_enabled\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#degradation\n");
         b.append("enabled = ").append(config.degradation().enabled()).append("\n\n");
         b.append("# Fallback algorithm: \"random\", \"round_robin\", or \"least_players\".\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#degradation_mode\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#degradation\n");
         b.append("mode = ").append(quoted(config.degradation().mode())).append("\n\n");
 
-        // ── [geo_routing] ───────────────────────────────────────────────────
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
-        b.append("# │  GEO ROUTING — Location-based server selection (experimental)   │\n");
+        b.append("# │  GEO ROUTING — Reserved compatibility settings                  │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[geo_routing]\n\n");
-        b.append("# Enable geographic IP-based routing using MaxMind GeoLite2.\n");
-        b.append("# This feature is experimental and may not affect routing in this build.\n");
-        b.append("# Wiki: ").append(wiki).append("/GeoIP-Database-Setup\n");
+        b.append("# Retained so older configuration files continue to load.\n");
+        b.append("# Geographic routing is not active in 4.3.0; keep this disabled.\n");
         b.append("enabled = ").append(config.geoRouting().enabled()).append("\n\n");
         b.append("# Absolute path to the GeoLite2-Country.mmdb or GeoLite2-City.mmdb file.\n");
-        b.append("# Wiki: ").append(wiki).append("/GeoIP-Database-Setup#database_path\n");
         b.append("database_path = ").append(quoted(config.geoRouting().databasePath())).append("\n\n");
 
-        // ── [debug] ─────────────────────────────────────────────────────────
+        b.append("# Native proxy party system and leader-follow behavior.\n");
+        b.append("[party]\n");
+        b.append("enabled = ").append(advanced.party().enabled()).append("\n");
+        b.append("invite_timeout_seconds = ").append(advanced.party().inviteTimeoutSeconds()).append("\n");
+        b.append("follow_leader = ").append(advanced.party().followLeader()).append("\n\n");
+        b.append("max_size = ").append(advanced.party().maxSize()).append("\n");
+        b.append("command = ").append(quoted(advanced.party().command())).append("\n");
+        b.append("chat_command = ").append(quoted(advanced.party().chatCommand())).append("\n");
+        b.append("permission = ").append(quoted(advanced.party().permission())).append("\n\n");
+
+        b.append("# Capacity queue. holding_server names an existing backend in velocity.toml.\n");
+        b.append("# VN does not create that server or its world. Keep it outside lobby pools,\n");
+        b.append("# design its waiting world freely, and size it for the expected queue.\n");
+        b.append("[queue]\n");
+        b.append("enabled = ").append(advanced.queue().enabled()).append("\n");
+        b.append("poll_seconds = ").append(advanced.queue().pollSeconds()).append("\n");
+        b.append("notify_seconds = ").append(advanced.queue().notifySeconds()).append("\n");
+        b.append("max_size = ").append(advanced.queue().maxSize()).append("\n");
+        b.append("holding_server = ").append(quoted(advanced.queue().holdingServer())).append("\n\n");
+        b.append("command = ").append(quoted(advanced.queue().command())).append("\n");
+        b.append("permission = ").append(quoted(advanced.queue().permission())).append("\n\n");
+
+        b.append("# Redis enables multi-proxy dynamic registration and state synchronization.\n");
+        b.append("# Backends publish JSON registration events to vn:servers:register.\n");
+        b.append("[redis]\n");
+        b.append("enabled = ").append(advanced.redis().enabled()).append("\n");
+        b.append("host = ").append(quoted(advanced.redis().host())).append("\n");
+        b.append("port = ").append(advanced.redis().port()).append("\n");
+        b.append("username = ").append(quoted(advanced.redis().username())).append("\n");
+        b.append("password = ").append(quoted(advanced.redis().password())).append("\n");
+        b.append("ssl = ").append(advanced.redis().ssl()).append("\n");
+        b.append("node_id = ").append(quoted(advanced.redis().nodeId())).append("\n");
+        b.append("channel_prefix = ").append(quoted(advanced.redis().channelPrefix())).append("\n");
+        b.append("sync_seconds = ").append(advanced.redis().syncSeconds()).append("\n\n");
+        b.append("connect_timeout_ms = ").append(advanced.redis().connectTimeoutMs()).append("\n");
+        b.append("read_timeout_ms = ").append(advanced.redis().readTimeoutMs()).append("\n");
+        b.append("reconnect_min_ms = ").append(advanced.redis().reconnectMinMs()).append("\n");
+        b.append("reconnect_max_ms = ").append(advanced.redis().reconnectMaxMs()).append("\n");
+        b.append("registration_secret = ").append(quoted(advanced.redis().registrationSecret())).append("\n");
+        b.append("registration_max_age_seconds = ").append(advanced.redis().registrationMaxAgeSeconds()).append("\n");
+        b.append("allowed_registration_hosts = ").append(formatList(advanced.redis().allowedRegistrationHosts())).append("\n\n");
+
+        b.append("# MOTD markers such as [STATE:IN_GAME] can remove backends from routing.\n");
+        b.append("[backend_states]\n");
+        b.append("enabled = ").append(advanced.backendStates().enabled()).append("\n");
+        b.append("allowed = ").append(formatList(advanced.backendStates().allowed())).append("\n");
+        b.append("allow_unknown = ").append(advanced.backendStates().allowUnknown()).append("\n\n");
+
+        b.append("# Optional /vn server persistence into Velocity and the lobby registry.\n");
+        b.append("[server_management]\n");
+        b.append("enabled = ").append(advanced.serverManagement().enabled()).append("\n");
+        b.append("velocity_config = ").append(quoted(advanced.serverManagement().velocityConfig())).append("\n");
+        b.append("allow_overwrite = ").append(advanced.serverManagement().allowOverwrite()).append("\n\n");
+
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  DEBUG — Diagnostic logging                                     │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[debug]\n\n");
         b.append("# Print detailed routing decisions, health check results, and cache\n");
         b.append("# events to the proxy console. Useful for troubleshooting.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#debug_verbose_logging\n");
+        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#debug-and-top-level-settings\n");
         b.append("verbose_logging = ").append(config.debug().verboseLogging()).append("\n\n");
 
-        // ── Footer ──────────────────────────────────────────────────────────
         b.append("# ╔══════════════════════════════════════════════════════════════════╗\n");
         b.append("# ║  Thank you for using VelocityNavigator!                        ║\n");
         b.append("# ║  Built with ❤ by DemonZ Development                            ║\n");
         b.append("# ║                                                                 ║\n");
         b.append("# ║  Questions? → https://discord.com/invite/GYsTt96ypf             ║\n");
-        b.append("# ║  Found a bug? → https://github.com/sdemonzdevelopment-spec/     ║\n");
+        b.append("# ║  Found a bug? → https://github.com/DemonZ-Development/           ║\n");
         b.append("# ║                 VelocityNavigator/issues                        ║\n");
         b.append("# ╚══════════════════════════════════════════════════════════════════╝\n");
 

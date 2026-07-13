@@ -24,8 +24,4 @@ public record ServerCandidate(String name, int playerCount, int effectiveWeight,
     public ServerCandidate(String name, int playerCount, int effectiveWeight) {
         this(name, playerCount, effectiveWeight, playerCount, -1L);
     }
-
-    public ServerCandidate(String name, int playerCount, int effectiveWeight, double emaLoad) {
-        this(name, playerCount, effectiveWeight, emaLoad, -1L);
-    }
 }

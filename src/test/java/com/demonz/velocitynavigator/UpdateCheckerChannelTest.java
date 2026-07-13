@@ -23,10 +23,6 @@ import org.slf4j.LoggerFactory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-/**
- * Tests the isAllowed logic in UpdateChecker for all channel/remote type combinations.
- * The isAllowed method is package-private for testability.
- */
 class UpdateCheckerChannelTest {
 
     private UpdateChecker checker;
@@ -39,10 +35,6 @@ class UpdateCheckerChannelTest {
         );
     }
 
-    /**
-     * RELEASE channel must NEVER return true for BETA or ALPHA remote types,
-     * regardless of installedIsPrerelease.
-     */
     @ParameterizedTest(name = "RELEASE channel, installedIsPrerelease={1}, remoteType={2} → {3}")
     @CsvSource({
             "RELEASE, false, RELEASE, true",
@@ -60,7 +52,6 @@ class UpdateCheckerChannelTest {
                 Config.RemoteVersionType.valueOf(remoteType)
         );
         assertEquals(expected, result);
-        // Extra assertion: RELEASE channel never allows BETA or ALPHA
         if (remoteType.equals("BETA") || remoteType.equals("ALPHA")) {
             assertFalse(result, "RELEASE channel must NEVER allow " + remoteType + " remote");
         }

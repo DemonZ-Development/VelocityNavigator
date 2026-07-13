@@ -68,19 +68,16 @@ class FirstRunHandlerTest {
 
         FirstRunHandler.checkAndShowWelcome(logger, tempDir, "4.1.0", true, "https://wiki.example.com");
 
-        // Verify version file was created
         Path versionFile = tempDir.resolve("last_known_version.dat");
         assertTrue(Files.exists(versionFile));
         assertEquals("4.1.0", Files.readString(versionFile, StandardCharsets.UTF_8).trim());
 
-        // Verify welcome message was logged
         assertTrue(infoLogs.stream().anyMatch(log -> log.contains("Getting Started")));
         assertTrue(infoLogs.stream().anyMatch(log -> log.contains("https://wiki.example.com")));
     }
 
     @Test
     void isSilentOnSameVersion() throws Exception {
-        // Create version file beforehand
         Path versionFile = tempDir.resolve("last_known_version.dat");
         Files.writeString(versionFile, "4.1.0", StandardCharsets.UTF_8);
 
@@ -90,14 +87,12 @@ class FirstRunHandlerTest {
 
         FirstRunHandler.checkAndShowWelcome(logger, tempDir, "4.1.0", true, "https://wiki.example.com");
 
-        // Verify no logs were printed
         assertTrue(infoLogs.isEmpty());
         assertTrue(warnLogs.isEmpty());
     }
 
     @Test
     void showsUpgradeDigestOnUpgrade() throws Exception {
-        // Create older version file beforehand
         Path versionFile = tempDir.resolve("last_known_version.dat");
         Files.writeString(versionFile, "4.0.0", StandardCharsets.UTF_8);
 
@@ -107,17 +102,14 @@ class FirstRunHandlerTest {
 
         FirstRunHandler.checkAndShowWelcome(logger, tempDir, "4.1.0", true, "https://wiki.example.com");
 
-        // Verify version file was updated
         assertEquals("4.1.0", Files.readString(versionFile, StandardCharsets.UTF_8).trim());
 
-        // Verify upgrade digest was logged
         assertTrue(infoLogs.stream().anyMatch(log -> log.contains("Upgraded Successfully")));
-        assertTrue(infoLogs.stream().anyMatch(log -> log.contains("Interactive Selector Menus")));
+        assertTrue(infoLogs.stream().anyMatch(log -> log.contains("Universal Velocity/backend inventory selector")));
     }
 
     @Test
     void recoversFromCorruptFile() throws Exception {
-        // Create corrupted version file beforehand
         Path versionFile = tempDir.resolve("last_known_version.dat");
         Files.writeString(versionFile, "", StandardCharsets.UTF_8);
 
@@ -127,10 +119,8 @@ class FirstRunHandlerTest {
 
         FirstRunHandler.checkAndShowWelcome(logger, tempDir, "4.1.0", true, "https://wiki.example.com");
 
-        // Verify version file was re-written
         assertEquals("4.1.0", Files.readString(versionFile, StandardCharsets.UTF_8).trim());
 
-        // Since reading empty throws or differs, it shows welcome/upgrade
         assertTrue(infoLogs.stream().anyMatch(log -> log.contains("Getting Started") || log.contains("Upgraded Successfully")));
     }
 }

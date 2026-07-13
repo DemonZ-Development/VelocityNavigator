@@ -18,16 +18,20 @@ package com.demonz.velocitynavigator;
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
+import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
@@ -44,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -54,8 +59,8 @@ import java.util.concurrent.TimeUnit;
 @Plugin(
         id = "velocitynavigator",
         name = "VelocityNavigator",
-        version = "4.2.0",
-        description = "Premium lobby navigation and diagnostics for Velocity proxies.",
+        version = "4.3.0",
+        description = "Lobby routing and load balancing for Velocity proxies.",
         authors = {"DemonZDevelopment"}
 )
 public final class VelocityNavigator implements NavigatorAPI {
@@ -69,11 +74,15 @@ public final class VelocityNavigator implements NavigatorAPI {
     private final RouteSelectionStrategy selectionStrategy = new RouteSelectionStrategy();
     private final RoutingStats routingStats = new RoutingStats();
     private final DrainService drainService = new DrainService();
+    private final PartyService partyService = new PartyService();
     private final java.util.concurrent.atomic.AtomicLong playerJoins = new java.util.concurrent.atomic.AtomicLong(0);
     private final java.util.concurrent.atomic.AtomicLong playerLeaves = new java.util.concurrent.atomic.AtomicLong(0);
 
     private final Set<String> registeredCommands = new LinkedHashSet<>();
     private final ConcurrentMap<UUID, MenuSession> menuSessions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, BridgeStatus> backendBridges = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, RouteDecision> pendingInitialQueues = new ConcurrentHashMap<>();
+    private final java.util.concurrent.locks.ReentrantLock reloadLock = new java.util.concurrent.locks.ReentrantLock();
 
     private ConfigManager configManager;
     private ServerHealthService healthService;
@@ -89,12 +98,18 @@ public final class VelocityNavigator implements NavigatorAPI {
     private GeoRoutingService geoRoutingService;
     private BedrockHandler bedrockHandler;
     private PrometheusExporter prometheusExporter;
+    private DashboardServer dashboardServer;
+    private QueueService queueService;
+    private RedisSyncService redisSyncService;
+    private ManagedServerService managedServerService;
 
     private volatile Config config;
+    private volatile AdvancedConfig advancedConfig = AdvancedConfig.defaults();
     private volatile Config previousConfig;
     private ScheduledTask cacheWarmTask;
     private ScheduledTask purgeTask;
     private ScheduledTask startupUpdateTask;
+    private ScheduledTask affinitySaveTask;
 
     @Inject
     public VelocityNavigator(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactory) {
@@ -116,9 +131,22 @@ public final class VelocityNavigator implements NavigatorAPI {
             this.lobbyRouter = new LobbyRouter(healthService, routePlanner);
             this.updateChecker = new UpdateChecker(logger, pluginVersion);
             this.prometheusExporter = new PrometheusExporter(this);
+            this.dashboardServer = new DashboardServer(this);
+            this.queueService = new QueueService(this);
+            this.redisSyncService = new RedisSyncService(this);
+            this.managedServerService = new ManagedServerService(this);
 
             ConfigLoadResult loadResult = configManager.load();
             applyLoadedConfiguration(loadResult);
+            server.getChannelRegistrar().register(JavaInventoryMenuService.CHANNEL);
+            logger.info("VelocityNavigator universal JAR is running in VELOCITY PROXY mode.");
+
+            if (affinityService != null) {
+                int restored = affinityService.loadFrom(affinityStorePath(), logger);
+                if (restored > 0) {
+                    logger.info("[VelocityNavigator] Restored {} player affinity mapping(s) from disk.", restored);
+                }
+            }
 
             this.bedrockHandler = new BedrockHandler(server);
             if (this.bedrockHandler.isBedrockSupported(config)) {
@@ -139,6 +167,7 @@ public final class VelocityNavigator implements NavigatorAPI {
             scheduleCacheWarming();
 
             scheduleCachePurge();
+            scheduleAffinitySave();
 
             NavigatorAPIProvider.set(this);
 
@@ -155,6 +184,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
         NavigatorAPIProvider.clear();
+        server.getChannelRegistrar().unregister(JavaInventoryMenuService.CHANNEL);
         if (cacheWarmTask != null) {
             cacheWarmTask.cancel();
         }
@@ -164,11 +194,22 @@ public final class VelocityNavigator implements NavigatorAPI {
         if (startupUpdateTask != null) {
             startupUpdateTask.cancel();
         }
+        if (affinitySaveTask != null) {
+            affinitySaveTask.cancel();
+        }
+        if (affinityService != null) {
+            affinityService.saveTo(affinityStorePath(), logger);
+        }
+        if (queueService != null) queueService.stop();
+        if (redisSyncService != null) redisSyncService.close();
         if (healthService != null) {
             healthService.clearCache();
         }
         if (prometheusExporter != null) {
             prometheusExporter.stop();
+        }
+        if (dashboardServer != null) {
+            dashboardServer.stop();
         }
     }
 
@@ -176,6 +217,97 @@ public final class VelocityNavigator implements NavigatorAPI {
     public void onPlayerDisconnect(DisconnectEvent event) {
         playerLeaves.incrementAndGet();
         menuSessions.remove(event.getPlayer().getUniqueId());
+        pendingInitialQueues.remove(event.getPlayer().getUniqueId());
+        if (queueService != null) queueService.remove(event.getPlayer().getUniqueId());
+        partyService.disconnect(event.getPlayer().getUniqueId());
+    }
+
+    @Subscribe
+    public void onServerConnected(ServerConnectedEvent event) {
+        RouteDecision pendingQueue = pendingInitialQueues.remove(event.getPlayer().getUniqueId());
+        if (pendingQueue != null && queueService != null && !queueService.enqueue(event.getPlayer(), pendingQueue)) {
+            event.getPlayer().sendMessage(MessageFormatter.render(config.language().text("queue.full"), event.getPlayer()));
+        }
+        if (!advancedConfig.party().enabled() || !advancedConfig.party().followLeader() || event.getPreviousServer().isEmpty()) return;
+        Player leader = event.getPlayer();
+        if (!partyService.isLeader(leader.getUniqueId())) return;
+        RegisteredServer target = event.getServer();
+        for (UUID memberId : partyService.followers(leader.getUniqueId())) {
+            server.getPlayer(memberId).filter(Player::isActive).filter(member -> member.getCurrentServer().map(current -> !current.getServerInfo().getName().equalsIgnoreCase(target.getServerInfo().getName())).orElse(true)).ifPresent(member -> server.getScheduler().buildTask(this, () -> member.createConnectionRequest(target).fireAndForget()).delay(250, TimeUnit.MILLISECONDS).schedule());
+        }
+    }
+
+    @Subscribe
+    public void onPluginMessage(PluginMessageEvent event) {
+        if (!JavaInventoryMenuService.CHANNEL.equals(event.getIdentifier())) {
+            return;
+        }
+        event.setResult(PluginMessageEvent.ForwardResult.handled());
+        if (!(event.getSource() instanceof ServerConnection source)
+                || !(event.getTarget() instanceof Player player)
+                || config == null
+                || !source.getPlayer().getUniqueId().equals(player.getUniqueId())) {
+            return;
+        }
+        boolean currentBackend = player.getCurrentServer()
+                .map(connection -> connection.getServerInfo().getName()
+                        .equalsIgnoreCase(source.getServerInfo().getName()))
+                .orElse(false);
+        if (!currentBackend) {
+            return;
+        }
+        try {
+            MenuBridgeProtocol.PacketType type = MenuBridgeProtocol.packetType(event.getData());
+            String backendName = source.getServerInfo().getName().toLowerCase(Locale.ROOT);
+            if (type == MenuBridgeProtocol.PacketType.HELLO) {
+                MenuBridgeProtocol.Hello hello = MenuBridgeProtocol.decodeHello(event.getData());
+                backendBridges.put(backendName, new BridgeStatus(hello.version(), Instant.now()));
+                return;
+            }
+            if (type != MenuBridgeProtocol.PacketType.SELECT) {
+                return;
+            }
+            backendBridges.compute(backendName, (name, existing) -> new BridgeStatus(
+                    existing == null ? "unknown" : existing.version(), Instant.now()));
+            MenuBridgeProtocol.Selection selection = MenuBridgeProtocol.decodeSelection(event.getData());
+            if (selection.target().startsWith("@")) {
+                handleInventoryAction(player, selection);
+                return;
+            }
+            server.getCommandManager().executeAsync(player,
+                    config.commands().primary() + " connect " + selection.target() + " " + selection.token());
+        } catch (IOException exception) {
+            if (config.debug().verboseLogging()) {
+                logger.debug("[VelocityNavigator] Rejected malformed inventory selector response from {}.",
+                        player.getUsername());
+            }
+        }
+    }
+
+    private void handleInventoryAction(Player player, MenuBridgeProtocol.Selection selection) {
+        if (!validateMenuToken(player, selection.token()) || "@disabled".equals(selection.target())) {
+            return;
+        }
+        int separator = selection.target().indexOf(':');
+        if (separator < 0) {
+            return;
+        }
+        String action = selection.target().substring(1, separator);
+        if (!"page".equals(action) && !"refresh".equals(action)) {
+            return;
+        }
+        int page;
+        try {
+            page = Integer.parseInt(selection.target().substring(separator + 1));
+        } catch (NumberFormatException exception) {
+            return;
+        }
+        previewRoute(player).thenAccept(decision -> JavaInventoryMenuService.showLobbyMenu(player, this, decision, page))
+                .exceptionally(throwable -> {
+                    logger.debug("[VelocityNavigator] Inventory selector refresh failed for {}: {}",
+                            player.getUsername(), throwable.getMessage());
+                    return null;
+                });
     }
 
     @Subscribe
@@ -197,6 +329,15 @@ public final class VelocityNavigator implements NavigatorAPI {
         }
         RouteDecision decision = routePlanner.plan("", config, routeableServers, affinityUuid);
         if (!decision.hasSelection()) {
+            String holding = advancedConfig.queue().holdingServer();
+            if (queueService.canQueue(decision, config) && !holding.isBlank()) {
+                Optional<RegisteredServer> holdingServer = server.getServer(holding);
+                if (holdingServer.isPresent()) {
+                    pendingInitialQueues.put(event.getPlayer().getUniqueId(), decision);
+                    event.setInitialServer(holdingServer.get());
+                    return;
+                }
+            }
             disconnectInitialJoin(event, decision);
             return;
         }
@@ -217,7 +358,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     @Subscribe
     public void onPostLogin(PostLoginEvent event) {
         playerJoins.incrementAndGet();
-        if (config == null || updateChecker == null || !config.notifyAdminsOnJoin() || !config.updateChecker().notifyAdmins()) {
+        if (config == null || updateChecker == null || !config.notifyAdminsOnJoin() || !config.updateChecker().notifyAdmins() || config.updateChecker().silent()) {
             return;
         }
         if (!event.getPlayer().hasPermission("velocitynavigator.admin")) {
@@ -236,7 +377,6 @@ public final class VelocityNavigator implements NavigatorAPI {
                 }).delay(2, TimeUnit.SECONDS).schedule();
             }
         } else {
-            // Check hasn't run yet — trigger it and notify when done
             updateChecker.checkAsync(config.updateChecker())
                     .thenRun(() -> {
                         if (updateChecker.status().updateAvailable()) {
@@ -257,22 +397,27 @@ public final class VelocityNavigator implements NavigatorAPI {
         }
     }
 
-    public synchronized ConfigLoadResult reloadConfiguration() throws IOException {
-        ConfigLoadResult loadResult = configManager.load();
-        applyLoadedConfiguration(loadResult);
-        if (metricsService != null) {
-            metricsService.configure(this, config);
+    public ConfigLoadResult reloadConfiguration() throws IOException {
+        reloadLock.lock();
+        try {
+            ConfigLoadResult loadResult = configManager.load();
+            applyLoadedConfiguration(loadResult);
+            if (metricsService != null) {
+                metricsService.configure(this, config);
+            }
+            if (circuitBreaker != null) {
+                healthService.setCircuitBreaker(circuitBreaker);
+            }
+            if (loadTracker != null) {
+                healthService.setLoadTracker(loadTracker);
+            }
+            scheduleCacheWarming();
+            scheduleCachePurge();
+            scheduleAffinitySave();
+            return loadResult;
+        } finally {
+            reloadLock.unlock();
         }
-        // Re-wire services after config change
-        if (circuitBreaker != null) {
-            healthService.setCircuitBreaker(circuitBreaker);
-        }
-        if (loadTracker != null) {
-            healthService.setLoadTracker(loadTracker);
-        }
-        scheduleCacheWarming();
-        scheduleCachePurge();
-        return loadResult;
     }
 
     public java.nio.file.Path getDataDirectory() {
@@ -287,8 +432,72 @@ public final class VelocityNavigator implements NavigatorAPI {
         return logger;
     }
 
+    public String pluginVersion() {
+        return pluginVersion;
+    }
+
     public Config config() {
         return config;
+    }
+
+    public AdvancedConfig advancedConfig() {
+        return advancedConfig;
+    }
+
+    public PartyService partyService() {
+        return partyService;
+    }
+
+    public QueueService queueService() {
+        return queueService;
+    }
+
+    public ManagedServerService managedServerService() {
+        return managedServerService;
+    }
+
+    public RedisSyncService.Status redisStatus() {
+        return redisSyncService == null ? new RedisSyncService.Status(false, false, 0, 0, 0, 0, 0, "") : redisSyncService.status();
+    }
+
+    public RedisSyncService redisSyncService() {
+        return redisSyncService;
+    }
+
+    public RuntimeConfigValidator.Validation validateRuntimeConfiguration() {
+        Set<String> registered = server.getAllServers().stream().map(value -> value.getServerInfo().getName()).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        return RuntimeConfigValidator.validate(config, advancedConfig, registered);
+    }
+
+    public void registerDynamicLobby(String name, String group, int maxPlayers, int weight) {
+        if (routePlanner != null) routePlanner.registerDynamicServer(name, group, maxPlayers, weight);
+    }
+
+    public void unregisterDynamicLobby(String name) {
+        if (routePlanner != null) routePlanner.unregisterDynamicServer(name);
+    }
+
+    public Optional<Config.LobbyEntry> dynamicLobby(String name) {
+        return routePlanner == null ? Optional.empty() : routePlanner.dynamicServer(name);
+    }
+
+    public Set<String> dynamicLobbyNames() {
+        return routePlanner == null ? Set.of() : routePlanner.dynamicServerNames();
+    }
+
+    public Optional<Config.LobbyEntry> lobbyEntry(String name) {
+        Optional<Config.LobbyEntry> dynamic = dynamicLobby(name);
+        if (dynamic.isPresent()) return dynamic;
+        if (config == null || name == null) return Optional.empty();
+        for (Config.LobbyEntry entry : config.routing().defaultLobbies()) if (entry.server().equalsIgnoreCase(name)) return Optional.of(entry);
+        for (Config.GroupConfig group : config.routing().contextual().groups().values()) {
+            for (Config.LobbyEntry entry : group.servers()) if (entry.server().equalsIgnoreCase(name)) return Optional.of(entry);
+        }
+        return Optional.empty();
+    }
+
+    public GuiConfig guiConfig() {
+        return configManager == null ? GuiConfig.defaults() : configManager.guiConfig();
     }
 
     public CooldownService cooldowns() {
@@ -373,6 +582,44 @@ public final class VelocityNavigator implements NavigatorAPI {
         return consumed.get();
     }
 
+    public boolean validateMenuToken(Player player, String token) {
+        if (player == null || token == null || token.isBlank()) {
+            return false;
+        }
+        MenuSession session = menuSessions.get(player.getUniqueId());
+        if (session == null) {
+            return false;
+        }
+        if (Instant.now().isAfter(session.expiresAt())) {
+            menuSessions.remove(player.getUniqueId(), session);
+            return false;
+        }
+        return session.token().equals(token);
+    }
+
+    public Component buildBridgeStatusComponent() {
+        StringBuilder output = new StringBuilder("<gradient:#8EF7FF:#D9F7FF><bold>Backend GUI Bridge Status</bold></gradient>\n");
+        if (server.getAllServers().isEmpty()) {
+            output.append("<gray>No backend servers are registered.</gray>");
+            return MessageFormatter.render(output.toString());
+        }
+        server.getAllServers().stream()
+                .sorted(java.util.Comparator.comparing(value -> value.getServerInfo().getName().toLowerCase(Locale.ROOT)))
+                .forEach(registered -> {
+                    String name = registered.getServerInfo().getName();
+                    BridgeStatus status = backendBridges.get(name.toLowerCase(Locale.ROOT));
+                    if (status == null) {
+                        output.append("<red>✗</red> <white>").append(name)
+                                .append("</white> <gray>not detected; a player must join after bridge startup</gray>\n");
+                    } else {
+                        output.append("<green>✓</green> <white>").append(name)
+                                .append("</white> <gray>v").append(status.version())
+                                .append(" last seen ").append(status.lastSeen()).append("</gray>\n");
+                    }
+                });
+        return MessageFormatter.render(output.toString());
+    }
+
     public CompletableFuture<RouteDecision> previewRoute(Player player) {
         return lobbyRouter.preview(player, config);
     }
@@ -428,8 +675,17 @@ public final class VelocityNavigator implements NavigatorAPI {
     public Component buildHelpComponent() {
         return MessageFormatter.render("""
                 <gradient:#8EF7FF:#D9F7FF><bold>VelocityNavigator Admin</bold></gradient>
-                <gray>/velocitynavigator reload</gray> <white>Reload navigator.toml</white>
+                <gray>/velocitynavigator reload</gray> <white>Reload navigator.toml, messages.toml, gui.toml, and managed lobbies</white>
                 <gray>/velocitynavigator status</gray> <white>Show runtime status</white>
+                <gray>/velocitynavigator health</gray> <white>One-line health summary</white>
+                <gray>/velocitynavigator bridge status</gray> <white>Show backend GUI bridge detection</white>
+                <gray>/velocitynavigator redis status|test</gray> <white>Inspect or test Redis connectivity</white>
+                <gray>/velocitynavigator server add game &lt;name&gt; &lt;host:port&gt;</gray> <white>Persist a game backend in Velocity only</white>
+                <gray>/velocitynavigator server add lobby &lt;name&gt; &lt;host:port&gt; [group] [max] [weight]</gray> <white>Persist and route a lobby backend</white>
+                <gray>/velocitynavigator server dry-run game|lobby ...</gray> <white>Validate a managed write</white>
+                <gray>/velocitynavigator server remove &lt;name&gt;</gray> <white>Remove a managed backend</white>
+                <gray>/velocitynavigator server list</gray> <white>List command-managed lobbies</white>
+                <gray>/velocitynavigator config validate</gray> <white>Validate runtime and managed configuration</white>
                 <gray>/velocitynavigator version</gray> <white>Show installed and remote version info</white>
                 <gray>/velocitynavigator updatecheck</gray> <white>Check Modrinth for updates</white>
                 <gray>/velocitynavigator debug player &lt;name&gt;</gray> <white>Preview routing for a player</white>
@@ -446,7 +702,6 @@ public final class VelocityNavigator implements NavigatorAPI {
         UpdateStatus status = updateChecker.status();
         String lastChecked = status.lastCheckedAt() == null ? "never" : status.lastCheckedAt().toString();
 
-        // Routing distribution
         Map<String, Long> distribution = routingStats.getDistribution();
         StringBuilder distBuilder = new StringBuilder();
         if (distribution.isEmpty()) {
@@ -458,7 +713,6 @@ public final class VelocityNavigator implements NavigatorAPI {
             }
         }
 
-        // Circuit breaker summary
         String cbStatus = "N/A";
         if (circuitBreaker != null) {
             long open = 0, halfOpen = 0, closed = 0;
@@ -472,7 +726,6 @@ public final class VelocityNavigator implements NavigatorAPI {
             cbStatus = "closed=" + closed + " half_open=" + halfOpen + " open=" + open;
         }
 
-        // Drained servers
         Map<String, Boolean> drainState = drainService.drainState();
         String drainStatus = drainState.isEmpty() ? "None" : String.join(", ", drainState.keySet());
 
@@ -551,7 +804,6 @@ public final class VelocityNavigator implements NavigatorAPI {
         long ageSeconds = status.checkedAt() == null ? -1 : Duration.between(status.checkedAt(), Instant.now()).toSeconds();
         String ageText = ageSeconds < 0 ? "n/a" : ageSeconds + "s ago";
 
-        // Circuit breaker state
         String cbState = "N/A";
         if (circuitBreaker != null) {
             cbState = circuitBreaker.getState(status.serverName()).name();
@@ -583,103 +835,193 @@ public final class VelocityNavigator implements NavigatorAPI {
         ));
     }
 
-    private synchronized void applyLoadedConfiguration(ConfigLoadResult loadResult) {
-        this.previousConfig = this.config;
-        this.config = loadResult.config();
-        configManager.logWarnings(loadResult);
+    public Component buildHealthComponent() {
+        int lobbyCount = config.routing().defaultLobbies().size();
+        int contextualGroups = config.routing().contextual().enabled()
+                ? config.routing().contextual().groups().size()
+                : 0;
 
-        if (previousConfig != null && lobbyTopologyUnchanged(previousConfig, config)) {
-            // Lobby topology didn't change, keep round-robin state
+        String cbSummary;
+        if (circuitBreaker == null) {
+            cbSummary = "disabled";
         } else {
-            selectionStrategy.reset();
-        }
-
-        healthService.clearCache();
-
-        // Initialize/update circuit breaker
-        Config.CircuitBreakerSettings cbSettings = config.circuitBreaker();
-        if (cbSettings.enabled()) {
-            if (previousConfig == null || !previousConfig.circuitBreaker().equals(cbSettings) || this.circuitBreaker == null) {
-                this.circuitBreaker = new CircuitBreaker(
-                        cbSettings.failureThreshold(),
-                        cbSettings.cooldownSeconds(),
-                        cbSettings.halfOpenMaxTests()
-                );
+            long open = 0, halfOpen = 0, closed = 0;
+            for (String sn : server.getAllServers().stream().map(rs -> rs.getServerInfo().getName()).toList()) {
+                switch (circuitBreaker.getState(sn)) {
+                    case OPEN -> open++;
+                    case HALF_OPEN -> halfOpen++;
+                    case CLOSED -> closed++;
+                }
             }
-        } else {
-            this.circuitBreaker = null;
+            cbSummary = "closed=" + closed + " half_open=" + halfOpen + " open=" + open;
         }
 
-        // Initialize load tracker
-        if (this.loadTracker == null) {
-            this.loadTracker = new ServerLoadTracker(0.3);
-        }
+        int drained = drainService.drainState().size();
+        int cacheSize = healthService == null ? 0 : healthService.cacheSize();
+        int activePings = healthService == null ? 0 : healthService.activePingCount();
+        int trackedLatencies = healthService == null ? 0 : healthService.latencyCount();
+        int affinityEntries = affinityService == null ? 0 : affinityService.getAll().size();
+        int routingDistributionEntries = routingStats.getDistribution().size();
+        int queuedPlayers = queueService == null ? 0 : queueService.size();
+        int parties = partyService.partyCount();
+        int backendStateEntries = healthService == null ? 0 : healthService.getBackendStates().size();
+        int managedLobbies = managedServerService == null ? 0 : managedServerService.lobbies().size();
+        RedisSyncService.Status redisRuntime = redisStatus();
 
-        // Initialize hash ring
-        if (this.hashRing == null) {
-            this.hashRing = new ConsistentHashRing();
-        }
+        return MessageFormatter.render("""
+                <gradient:#8EF7FF:#D9F7FF><bold>VelocityNavigator Health</bold></gradient>
+                <gray>Routing mode:</gray> <white>%s</white>
+                <gray>Default lobbies:</gray> <white>%d</white>
+                <gray>Contextual groups:</gray> <white>%d</white>
+                <gray>Circuit breaker:</gray> <white>%s</white>
+                <gray>Drained servers:</gray> <white>%d</white>
+                <gray>Health cache size:</gray> <white>%d</white>
+                <gray>Active pings:</gray> <white>%d</white>
+                <gray>Tracked latencies:</gray> <white>%d</white>
+                <gray>Player affinity entries:</gray> <white>%d</white>
+                <gray>Routing distribution entries:</gray> <white>%d</white>
+                <gray>Active parties:</gray> <white>%d</white>
+                <gray>Queued players:</gray> <white>%d</white>
+                <gray>Redis multi-proxy sync:</gray> <white>%s</white>
+                <gray>Backend state markers:</gray> <white>%d</white>
+                <gray>Managed lobbies:</gray> <white>%d</white>
+                <gray>Party / queue:</gray> <white>%s / %s</white>
+                <gray>Bedrock form / server management:</gray> <white>%s / %s</white>
+                """.formatted(
+                config.routing().selectionMode().configValue(),
+                lobbyCount,
+                contextualGroups,
+                cbSummary,
+                drained,
+                cacheSize,
+                activePings,
+                trackedLatencies,
+                affinityEntries,
+                routingDistributionEntries,
+                parties,
+                queuedPlayers,
+                advancedConfig.redis().enabled() ? (redisRuntime.connected() ? "connected" : "disconnected, reconnects=" + redisRuntime.reconnects()) : "disabled",
+                backendStateEntries,
+                managedLobbies,
+                advancedConfig.party().enabled() ? "enabled" : "disabled",
+                advancedConfig.queue().enabled() ? "enabled" : "disabled",
+                guiConfig().bedrock().enabled() ? "enabled" : "disabled",
+                advancedConfig.serverManagement().enabled() ? "enabled" : "disabled"
+        ));
+    }
 
-        // Initialize affinity service
-        if (config.routing().affinity().enabled()) {
-            double stickiness = config.routing().affinity().stickiness();
-            if (this.affinityService == null) {
-                this.affinityService = new PlayerAffinityService(stickiness);
+    private void applyLoadedConfiguration(ConfigLoadResult loadResult) {
+        reloadLock.lock();
+        try {
+            this.previousConfig = this.config;
+            this.config = loadResult.config();
+            try {
+                this.advancedConfig = AdvancedConfig.load(dataDirectory.resolve("navigator.toml"));
+            } catch (IOException | RuntimeException error) {
+                this.advancedConfig = AdvancedConfig.defaults();
+                logger.warn("[VelocityNavigator] Advanced settings could not be read; defaults are active: {}", error.getMessage());
+            }
+            configManager.logWarnings(loadResult);
+
+            if (previousConfig == null || !lobbyTopologyUnchanged(previousConfig, config)) {
+                selectionStrategy.reset();
+            }
+
+            healthService.clearCache();
+
+            Config.CircuitBreakerSettings cbSettings = config.circuitBreaker();
+            if (cbSettings.enabled()) {
+                if (previousConfig == null || !previousConfig.circuitBreaker().equals(cbSettings) || this.circuitBreaker == null) {
+                    this.circuitBreaker = new CircuitBreaker(
+                            cbSettings.failureThreshold(),
+                            cbSettings.cooldownSeconds(),
+                            cbSettings.halfOpenMaxTests()
+                    );
+                }
             } else {
-                PlayerAffinityService oldService = this.affinityService;
-                this.affinityService = new PlayerAffinityService(stickiness);
-                oldService.getAll().forEach(this.affinityService::setAffinity);
+                this.circuitBreaker = null;
             }
-        } else {
-            this.affinityService = null;
-        }
 
-        // Initialize rate tracker
-        if (this.rateTracker == null) {
-            this.rateTracker = new ConnectionRateTracker(60);
-        }
-        this.rateTracker.retainServers(configuredLobbyServerNames(config));
+            if (this.loadTracker == null) {
+                this.loadTracker = new ServerLoadTracker(0.3);
+            }
 
-        // Initialize geo routing service (stub)
-        this.geoRoutingService = new GeoRoutingService(
-                config.geoRouting().enabled(),
-                config.geoRouting().databasePath()
-        );
-        if (config.geoRouting().enabled()) {
-            logger.warn("[VelocityNavigator] geo_routing.enabled is true, but geo routing is not implemented in this build. Location data will not affect routing.");
-        }
+            if (this.hashRing == null) {
+                this.hashRing = new ConsistentHashRing();
+            }
 
-        // Wire services into route planner and health service
-        if (routePlanner != null) {
-            routePlanner.setDrainService(drainService);
-            routePlanner.setCircuitBreaker(circuitBreaker);
-            routePlanner.setLoadTracker(loadTracker);
-            routePlanner.setHashRing(hashRing);
-            routePlanner.setAffinityService(affinityService);
-            routePlanner.setRateTracker(rateTracker);
-            routePlanner.setHealthService(healthService);
-        }
-        if (healthService != null) {
-            healthService.setCircuitBreaker(circuitBreaker);
-            healthService.setLoadTracker(loadTracker);
-        }
+            if (config.routing().affinity().enabled()) {
+                double stickiness = config.routing().affinity().stickiness();
+                if (this.affinityService == null) {
+                    this.affinityService = new PlayerAffinityService(stickiness);
+                } else {
+                    PlayerAffinityService oldService = this.affinityService;
+                    this.affinityService = new PlayerAffinityService(stickiness);
+                    oldService.getAll().forEach(this.affinityService::setAffinity);
+                }
+            } else {
+                this.affinityService = null;
+            }
 
-        registerCommands();
-        if (prometheusExporter != null) {
-            prometheusExporter.start(config.metrics().prometheus());
+            if (this.rateTracker == null) {
+                this.rateTracker = new ConnectionRateTracker(60);
+            }
+            this.rateTracker.retainServers(configuredLobbyServerNames(config));
+
+            this.geoRoutingService = new GeoRoutingService(
+                    config.geoRouting().enabled(),
+                    config.geoRouting().databasePath()
+            );
+            if (config.geoRouting().enabled()) {
+                logger.warn("[VelocityNavigator] geo_routing.enabled is true, but geo routing is not implemented in this build. Location data will not affect routing.");
+            }
+
+            if (routePlanner != null) {
+                routePlanner.setDrainService(drainService);
+                routePlanner.setCircuitBreaker(circuitBreaker);
+                routePlanner.setLoadTracker(loadTracker);
+                routePlanner.setHashRing(hashRing);
+                routePlanner.setAffinityService(affinityService);
+                routePlanner.setRateTracker(rateTracker);
+                routePlanner.setHealthService(healthService);
+            }
+            if (healthService != null) {
+                healthService.setCircuitBreaker(circuitBreaker);
+                healthService.setLoadTracker(loadTracker);
+                healthService.setBackendStateSettings(advancedConfig.backendStates());
+            }
+
+            partyService.configure(advancedConfig.party());
+            if (queueService != null) queueService.configure(advancedConfig.queue());
+            if (redisSyncService != null) redisSyncService.configure(advancedConfig.redis());
+            if (managedServerService != null) {
+                try {
+                    managedServerService.configure(advancedConfig.serverManagement());
+                } catch (IOException | RuntimeException error) {
+                    logger.warn("[VelocityNavigator] Managed server registry could not be loaded: {}", error.getMessage());
+                }
+            }
+
+            registerCommands();
+            if (prometheusExporter != null) {
+                prometheusExporter.start(config.metrics().prometheus());
+            }
+            if (dashboardServer != null) {
+                dashboardServer.start(config.dashboard());
+            }
+            schedulePeriodicUpdateCheck();
+        } finally {
+            reloadLock.unlock();
         }
-        schedulePeriodicUpdateCheck();
     }
 
     private boolean lobbyTopologyUnchanged(Config previous, Config current) {
-        // Compare default lobbies
         List<String> prevDefaults = lobbyEntryNames(previous.routing().defaultLobbies());
         List<String> currDefaults = lobbyEntryNames(current.routing().defaultLobbies());
         if (!prevDefaults.equals(currDefaults)) {
             return false;
         }
 
-        // Compare contextual groups
         Set<String> prevGroups = previous.routing().contextual().groups().keySet();
         Set<String> currGroups = current.routing().contextual().groups().keySet();
         if (!prevGroups.equals(currGroups)) {
@@ -768,34 +1110,48 @@ public final class VelocityNavigator implements NavigatorAPI {
         }
     }
 
-    private synchronized void registerCommands() {
-        CommandManager commandManager = server.getCommandManager();
-        unregisterCommands(commandManager);
+    private void registerCommands() {
+        reloadLock.lock();
+        try {
+            CommandManager commandManager = server.getCommandManager();
+            unregisterCommands(commandManager);
 
-        LobbyCommand lobbyCommand = new LobbyCommand(this);
-        CommandMeta.Builder lobbyMetaBuilder = commandManager.metaBuilder(config.commands().primary());
-        if (!config.commands().aliases().isEmpty()) {
-            lobbyMetaBuilder.aliases(config.commands().aliases().toArray(String[]::new));
-        }
-        commandManager.register(lobbyMetaBuilder.build(), lobbyCommand);
-        registeredCommands.add(config.commands().primary());
-        registeredCommands.addAll(config.commands().aliases());
+            List<String> adminNames = new ArrayList<>(config.commands().adminAliases());
+            if (adminNames.isEmpty()) {
+                adminNames.add("velocitynavigator");
+                adminNames.add("vn");
+            }
+            registerCommandSet(commandManager, adminNames, new NavigatorAdminCommand(this), "admin");
 
-        List<String> adminNames = new ArrayList<>(config.commands().adminAliases());
-        if (adminNames.isEmpty()) {
-            adminNames.add("velocitynavigator");
-            adminNames.add("vn");
+            List<String> lobbyNames = new ArrayList<>();
+            lobbyNames.add(config.commands().primary());
+            lobbyNames.addAll(config.commands().aliases());
+            registerCommandSet(commandManager, lobbyNames, new LobbyCommand(this), "lobby");
+
+            if (advancedConfig.party().enabled()) {
+                String partyCommand = advancedConfig.party().command();
+                String partyChatCommand = advancedConfig.party().chatCommand();
+                registerCommandSet(commandManager, List.of(partyCommand), new PartyCommand(this), "party");
+                registerCommandSet(commandManager, List.of(partyChatCommand), new PartyChatCommand(this), "party chat");
+            }
+            if (advancedConfig.queue().enabled()) {
+                String queueCommand = advancedConfig.queue().command();
+                registerCommandSet(commandManager, List.of(queueCommand), new QueueCommand(this), "queue");
+            }
+        } finally {
+            reloadLock.unlock();
         }
-        String adminPrimary = adminNames.get(0);
-        String[] adminAliases = adminNames.subList(1, adminNames.size()).toArray(String[]::new);
-        NavigatorAdminCommand adminCommand = new NavigatorAdminCommand(this);
-        CommandMeta.Builder adminMetaBuilder = commandManager.metaBuilder(adminPrimary);
-        if (adminAliases.length > 0) {
-            adminMetaBuilder.aliases(adminAliases);
-        }
-        commandManager.register(adminMetaBuilder.build(), adminCommand);
-        registeredCommands.add(adminPrimary);
-        registeredCommands.addAll(adminNames.subList(1, adminNames.size()));
+    }
+
+    private void registerCommandSet(CommandManager commandManager, List<String> names, Command command, String label) {
+        List<String> available = names.stream().map(value -> value.toLowerCase(Locale.ROOT)).distinct().filter(value -> !registeredCommands.contains(value)).toList();
+        List<String> skipped = names.stream().map(value -> value.toLowerCase(Locale.ROOT)).distinct().filter(registeredCommands::contains).toList();
+        skipped.forEach(value -> logger.error("[VelocityNavigator] Command /{} for {} was not registered because another VelocityNavigator command already uses it.", value, label));
+        if (available.isEmpty()) return;
+        CommandMeta.Builder builder = commandManager.metaBuilder(available.get(0));
+        if (available.size() > 1) builder.aliases(available.subList(1, available.size()).toArray(String[]::new));
+        commandManager.register(builder.build(), command);
+        registeredCommands.addAll(available);
     }
 
     private void unregisterCommands(CommandManager commandManager) {
@@ -811,7 +1167,7 @@ public final class VelocityNavigator implements NavigatorAPI {
             cacheWarmTask = null;
         }
         if (config.healthChecks().cacheSeconds() <= 0) {
-            return; // Caching is disabled, no warming needed
+            return;
         }
         int intervalSeconds = Math.max(5, config.healthChecks().cacheSeconds());
         warmHealthCache();
@@ -858,9 +1214,25 @@ public final class VelocityNavigator implements NavigatorAPI {
                 .schedule();
     }
 
-    /**
-     * Periodic update checker task that respects configured interval and enabled status.
-     */
+    private java.nio.file.Path affinityStorePath() {
+        return dataDirectory.resolve("affinity-store.json");
+    }
+
+    private void scheduleAffinitySave() {
+        if (affinitySaveTask != null) {
+            affinitySaveTask.cancel();
+        }
+        affinitySaveTask = server.getScheduler()
+                .buildTask(this, () -> {
+                    if (affinityService != null) {
+                        affinityService.saveTo(affinityStorePath(), logger);
+                    }
+                })
+                .delay(5, TimeUnit.MINUTES)
+                .repeat(5, TimeUnit.MINUTES)
+                .schedule();
+    }
+
     private void schedulePeriodicUpdateCheck() {
         if (config == null || config.updateChecker() == null) {
             return;
@@ -883,5 +1255,8 @@ public final class VelocityNavigator implements NavigatorAPI {
     }
 
     private record MenuSession(String token, Set<String> allowedServers, Instant expiresAt) {
+    }
+
+    private record BridgeStatus(String version, Instant lastSeen) {
     }
 }

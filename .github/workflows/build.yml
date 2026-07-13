@@ -7,15 +7,16 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version (e.g. 3.0.0)'
-        required: true
-        default: '4.2.0'
       create_release:
         description: 'Create a GitHub Release?'
         required: true
         type: boolean
         default: true
+      prerelease:
+        description: 'Mark the GitHub Release as a prerelease?'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -40,12 +41,7 @@ jobs:
       - name: Resolve Version
         id: version
         shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> "$GITHUB_OUTPUT"
 
       - name: Upload JAR Artifact
         uses: actions/upload-artifact@v4
@@ -66,4 +62,4 @@ jobs:
           body_path: release_notes.md
           files: target/VelocityNavigator-*.jar
           draft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}

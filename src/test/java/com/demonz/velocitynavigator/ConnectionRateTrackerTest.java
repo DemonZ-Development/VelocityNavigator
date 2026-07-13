@@ -26,13 +26,11 @@ class ConnectionRateTrackerTest {
     void tracksConnectionRate() {
         ConnectionRateTracker tracker = new ConnectionRateTracker(60);
 
-        // Record several connections in rapid succession
         for (int i = 0; i < 5; i++) {
             tracker.recordConnection("server-1");
         }
 
         double rate = tracker.getRatePerSecond("server-1");
-        // Rate should be > 0 since we recorded connections
         assertTrue(rate >= 0, "Rate should be non-negative");
 
         int count = tracker.getConnectionCount("server-1");
@@ -42,9 +40,8 @@ class ConnectionRateTrackerTest {
 
     @Test
     void rateDecaysOverTime() throws InterruptedException {
-        ConnectionRateTracker tracker = new ConnectionRateTracker(1); // 1-second window
+        ConnectionRateTracker tracker = new ConnectionRateTracker(1);
 
-        // Record connections
         for (int i = 0; i < 5; i++) {
             tracker.recordConnection("server-1");
         }
@@ -52,11 +49,9 @@ class ConnectionRateTrackerTest {
         int countBefore = tracker.getConnectionCount("server-1");
         assertTrue(countBefore > 0, "Should have connections before decay");
 
-        // Wait for the window to expire
         Thread.sleep(1100);
 
         int countAfter = tracker.getConnectionCount("server-1");
-        // After the window expires, connections should be purged
         assertTrue(countAfter < countBefore,
                 "Connection count should decrease after window expires; before=" + countBefore + ", after=" + countAfter);
     }

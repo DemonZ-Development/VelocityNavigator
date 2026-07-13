@@ -29,7 +29,12 @@ import java.util.Set;
 public final class MessageFormatter {
 
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
-    private static final Set<String> ALLOWED_PLACEHOLDERS = Set.of("server", "time", "reason", "mode", "player", "attempt", "max");
+    private static final Set<String> ALLOWED_PLACEHOLDERS = Set.of(
+            "server", "time", "reason", "mode", "player", "attempt", "max",
+            "max_players", "status", "status_color", "ping", "command", "attempts",
+            "page", "pages", "language", "version", "target", "members", "count",
+            "message", "position", "size", "state", "host", "port"
+    );
     private static final java.util.concurrent.atomic.AtomicBoolean warned = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private MessageFormatter() {
@@ -40,7 +45,7 @@ public final class MessageFormatter {
             return "";
         }
         String formatting = "auto";
-        String wikiUrl = "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki";
+        String wikiUrl = "https://github.com/DemonZ-Development/VelocityNavigator/wiki";
         org.slf4j.Logger logger = null;
 
         NavigatorAPI api = NavigatorAPIProvider.get();

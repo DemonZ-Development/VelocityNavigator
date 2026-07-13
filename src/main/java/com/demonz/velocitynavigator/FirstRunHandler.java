@@ -55,7 +55,6 @@ public final class FirstRunHandler {
                     Files.writeString(versionFilePath, currentVersion, StandardCharsets.UTF_8);
                 } else if (!lastKnownVersion.equals(currentVersion)) {
                     showUpgrade = true;
-                    // Update version marker file
                     Files.writeString(versionFilePath, currentVersion, StandardCharsets.UTF_8);
                 }
             } catch (IOException e) {
@@ -64,7 +63,6 @@ public final class FirstRunHandler {
                 try {
                     Files.writeString(versionFilePath, currentVersion, StandardCharsets.UTF_8);
                 } catch (IOException ex) {
-                    // Ignore
                 }
             }
         }
@@ -74,18 +72,19 @@ public final class FirstRunHandler {
             logger.info("=================================================================================");
             logger.info("              VelocityNavigator v{} — Getting Started", currentVersion);
             logger.info("=================================================================================");
-            logger.info("  Thank you for installing VelocityNavigator! The ultimate lobby-routing");
-            logger.info("  and load-balancing solution for premium Velocity proxy networks.");
+            logger.info("  VelocityNavigator v{} is installed. Lobby routing and load", currentVersion);
+            logger.info("  balancing for Velocity proxies.");
             logger.info("  ");
             logger.info("  To get started: ");
-            logger.info("  1. Configure your lobbies in navigator.toml");
-            logger.info("  2. Reload configuration using: /vn reload");
+            logger.info("  1. Configure routing in navigator.toml");
+            logger.info("  2. Select language in messages.toml, customize gui.toml, and manage lobbies in servers.toml");
+            logger.info("  3. Reload configuration using: /vn reload");
             logger.info("  ");
             logger.info("  For detailed documentation, configuration options, and commands,");
             logger.info("  please visit our official wiki:");
             logger.info("  {}", wikiUrl);
             logger.info("  ");
-            logger.info("  We would love to hear your feedback! Join our Discord:");
+            logger.info("  Feedback and support — Discord:");
             logger.info("  https://discord.com/invite/GYsTt96ypf");
             logger.info("=================================================================================");
             logger.info(" ");
@@ -94,18 +93,18 @@ public final class FirstRunHandler {
             logger.info("=================================================================================");
             logger.info("              VelocityNavigator v{} — Upgraded Successfully", currentVersion);
             logger.info("=================================================================================");
-            logger.info("  VelocityNavigator has been updated! Here is what's new in this release:");
+            logger.info("  VelocityNavigator has been updated. Notable changes in this release:");
             logger.info("  ");
-            logger.info("  • Embedded Prometheus Exporter & Admin Panel: Real-time metrics and Grafana setup.");
-            logger.info("  • Interactive Selector Menus: Bedrock Form GUI and Java click-to-connect chat menu.");
-            logger.info("  • Ping-Based Routing (latency): Route players dynamically to the lowest latency lobby.");
-            logger.info("  • Hardened Security: Safe menu selections blocking drain/circuit-breaker bypasses.");
-            logger.info("  • Redesigned TOML (v6): Beautiful, grouped, and self-documenting configuration.");
+            logger.info("  • Universal Velocity/backend inventory selector with startup mode identification.");
+            logger.info("  • Configurable language packs and custom-language workflow in messages.toml.");
+            logger.info("  • Separate gui.toml for Java/Bedrock menus and servers.toml for command-managed lobbies.");
+            logger.info("  • /vn bridge status reports detected backend bridge versions.");
+            logger.info("  • Persistent player affinity and the optional HTML operations dashboard.");
             logger.info("  ");
-            logger.info("  Read the full v{} release notes and upgrade guide at:", currentVersion);
+            logger.info("  Read the v{} release notes and upgrade guide at:", currentVersion);
             logger.info("  {}", wikiUrl);
             logger.info("  ");
-            logger.info("  We would love to hear your feedback! Join our Discord:");
+            logger.info("  Feedback and support — Discord:");
             logger.info("  https://discord.com/invite/GYsTt96ypf");
             logger.info("=================================================================================");
             logger.info(" ");

@@ -24,18 +24,14 @@ class ServerLoadTrackerTest {
 
     @Test
     void emaCalculationIsCorrect() {
-        // With alpha = 0.3: EMA = alpha * current + (1 - alpha) * previous
         ServerLoadTracker tracker = new ServerLoadTracker(0.3);
 
-        // First update: EMA = 10.0 (no previous value, uses current directly)
         tracker.update("server-1", 10);
         assertEquals(10.0, tracker.getEma("server-1"), 0.001);
 
-        // Second update: EMA = 0.3 * 20 + 0.7 * 10 = 6 + 7 = 13
         tracker.update("server-1", 20);
         assertEquals(13.0, tracker.getEma("server-1"), 0.001);
 
-        // Third update: EMA = 0.3 * 30 + 0.7 * 13 = 9 + 9.1 = 18.1
         tracker.update("server-1", 30);
         assertEquals(18.1, tracker.getEma("server-1"), 0.001);
     }
@@ -44,13 +40,11 @@ class ServerLoadTrackerTest {
     void emaRespondsToTrends() {
         ServerLoadTracker tracker = new ServerLoadTracker(0.3);
 
-        // Rising load: 10, 20, 40, 60 (ending well above steady)
         tracker.update("rising", 10);
         tracker.update("rising", 20);
         tracker.update("rising", 40);
         tracker.update("rising", 60);
 
-        // Steady load: 25, 25, 25, 25
         tracker.update("steady", 25);
         tracker.update("steady", 25);
         tracker.update("steady", 25);
@@ -59,14 +53,12 @@ class ServerLoadTrackerTest {
         double risingEma = tracker.getEma("rising");
         double steadyEma = tracker.getEma("steady");
 
-        // Rising load should have higher EMA than steady due to the trend
         assertTrue(risingEma > steadyEma,
                 "Rising load EMA (" + risingEma + ") should be higher than steady EMA (" + steadyEma + ")");
     }
 
     @Test
     void emaWithAlphaOneIsLatestValue() {
-        // With alpha = 1.0: EMA = 1.0 * current + 0 * previous = current
         ServerLoadTracker tracker = new ServerLoadTracker(1.0);
 
         tracker.update("server-1", 10);

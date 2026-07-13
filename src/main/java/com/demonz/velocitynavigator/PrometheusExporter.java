@@ -65,6 +65,13 @@ public final class PrometheusExporter {
             }
             logger.info("[VelocityNavigator] Started Prometheus metrics exporter on {}:{}", settings.bindHost(), settings.port());
         } catch (IOException | RuntimeException e) {
+            if (server != null) {
+                try {
+                    server.stop(0);
+                } catch (RuntimeException ignored) {
+                }
+                server = null;
+            }
             logger.error("[VelocityNavigator] Failed to start Prometheus exporter on port {}: {}", settings.port(), e.getMessage());
         }
     }
@@ -94,7 +101,6 @@ public final class PrometheusExporter {
             Config config = plugin.config();
             ProxyServer proxy = plugin.server();
 
-            // Expose joins/leaves
             sb.append("# HELP velocitynavigator_player_joins_total Total player joins to the proxy\n");
             sb.append("# TYPE velocitynavigator_player_joins_total counter\n");
             sb.append("velocitynavigator_player_joins_total ").append(plugin.getPlayerJoins()).append(".0\n");
@@ -103,7 +109,23 @@ public final class PrometheusExporter {
             sb.append("# TYPE velocitynavigator_player_leaves_total counter\n");
             sb.append("velocitynavigator_player_leaves_total ").append(plugin.getPlayerLeaves()).append(".0\n");
 
-            // Expose health status for tracked lobbies and player counts for all registered servers.
+            RedisSyncService.Status redis = plugin.redisStatus();
+            sb.append("# HELP velocitynavigator_party_count Active local parties\n");
+            sb.append("# TYPE velocitynavigator_party_count gauge\n");
+            sb.append("velocitynavigator_party_count ").append(plugin.partyService().partyCount()).append(".0\n");
+            sb.append("# HELP velocitynavigator_queue_size Players in the local capacity queue\n");
+            sb.append("# TYPE velocitynavigator_queue_size gauge\n");
+            sb.append("velocitynavigator_queue_size ").append(plugin.queueService() == null ? 0 : plugin.queueService().size()).append(".0\n");
+            sb.append("# HELP velocitynavigator_redis_connected Redis subscription connection state\n");
+            sb.append("# TYPE velocitynavigator_redis_connected gauge\n");
+            sb.append("velocitynavigator_redis_connected ").append(redis.connected() ? "1.0" : "0.0").append("\n");
+            sb.append("# HELP velocitynavigator_redis_reconnects_total Redis subscription reconnect attempts\n");
+            sb.append("# TYPE velocitynavigator_redis_reconnects_total counter\n");
+            sb.append("velocitynavigator_redis_reconnects_total ").append(redis.reconnects()).append(".0\n");
+            sb.append("# HELP velocitynavigator_redis_rejected_registrations_total Rejected dynamic registration events\n");
+            sb.append("# TYPE velocitynavigator_redis_rejected_registrations_total counter\n");
+            sb.append("velocitynavigator_redis_rejected_registrations_total ").append(redis.rejectedRegistrations()).append(".0\n");
+
             sb.append("# HELP velocitynavigator_server_online Health status of tracked lobby servers (1 = online, 0 = offline)\n");
             sb.append("# TYPE velocitynavigator_server_online gauge\n");
 
@@ -135,7 +157,6 @@ public final class PrometheusExporter {
                 sb.append("velocitynavigator_server_players").append(label).append(" ").append(players).append(".0\n");
             }
 
-            // Expose health monitoring metrics for tracked lobbies only
             sb.append("# HELP velocitynavigator_server_latency_ms Health check ping latency in milliseconds\n");
             sb.append("# TYPE velocitynavigator_server_latency_ms gauge\n");
 
@@ -175,7 +196,6 @@ public final class PrometheusExporter {
                 sb.append("velocitynavigator_routed_connections_total").append(label).append(" ").append(routed).append(".0\n");
             }
 
-            // Expose redirects/moves classified by reason and target
             sb.append("# HELP velocitynavigator_redirects_total Total connections redirected/routed by reason and target server\n");
             sb.append("# TYPE velocitynavigator_redirects_total counter\n");
             Map<String, Map<String, Long>> redirects = plugin.routingStats().getCumulativeRedirectCounts();
@@ -188,7 +208,6 @@ public final class PrometheusExporter {
                 }
             }
 
-            // Expose circuit breaker trips
             sb.append("# HELP velocitynavigator_circuit_breaker_trips_total Total times circuit breaker tripped per server\n");
             sb.append("# TYPE velocitynavigator_circuit_breaker_trips_total counter\n");
             if (plugin.circuitBreaker() != null) {
@@ -198,7 +217,6 @@ public final class PrometheusExporter {
                 }
             }
 
-            // Expose fallback events
             sb.append("# HELP velocitynavigator_fallback_events_total Total fallback events by type\n");
             sb.append("# TYPE velocitynavigator_fallback_events_total counter\n");
             long degradationFallbacks = 0;

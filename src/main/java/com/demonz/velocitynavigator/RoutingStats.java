@@ -98,10 +98,6 @@ public final class RoutingStats {
         return snapshot;
     }
 
-    /**
-     * Returns the total number of connections recorded since the last reset.
-     * Used by the degraded round-robin fallback to rotate through servers.
-     */
     public long totalConnections() {
         long total = 0;
         for (AtomicLong count : connectionCounts.values()) {

@@ -1,0 +1,27 @@
+enabled: true
+inventory_menu_enabled: true
+handshake_enabled: true
+refresh_enabled: true
+handshake_delay_ticks: 20
+max_title_length: 32
+fallback_material: COMPASS
+bstats_enabled: true
+bstats_plugin_id: 0
+redis:
+  enabled: false
+  host: 127.0.0.1
+  port: 6379
+  username: ''
+  password: ''
+  ssl: false
+  channel_prefix: vn
+  connect_timeout_ms: 3000
+  read_timeout_ms: 10000
+  registration_secret: ''
+  server_name: ''
+  advertised_host: ''
+  advertised_port: 0
+  group: default
+  max_players: -1
+  weight: 1
+  unregister_on_shutdown: true

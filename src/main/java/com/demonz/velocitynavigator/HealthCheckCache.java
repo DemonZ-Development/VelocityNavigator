@@ -43,16 +43,10 @@ public final class HealthCheckCache {
         entries.put(key, new Entry(online, checkedAt));
     }
 
-    /**
-     * Get a cached entry regardless of freshness (used for getCachedOnlineServers).
-     */
     public Entry getCached(String key) {
         return entries.get(key);
     }
 
-    /**
-     * Purge entries whose checkedAt is before the cutoff time.
-     */
     public void purgeExpired(Duration ttl) {
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
             return;

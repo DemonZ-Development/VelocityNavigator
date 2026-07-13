@@ -33,9 +33,16 @@ public final class ConsistentHashRing {
 
     private static final int DEFAULT_VIRTUAL_NODES = 150;
 
+    private static final ThreadLocal<MessageDigest> DIGESTS = ThreadLocal.withInitial(() -> {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    });
+
     private final int virtualNodes;
     private final ConcurrentMap<String, NavigableMap<Long, String>> rings = new ConcurrentHashMap<>();
-    // Cache the previous server list per group to avoid unnecessary ring rebuilds.
     private final ConcurrentMap<String, List<String>> previousServerLists = new ConcurrentHashMap<>();
 
     public ConsistentHashRing() {
@@ -47,12 +54,11 @@ public final class ConsistentHashRing {
     }
 
     public void updateRing(String groupKey, List<String> servers) {
-        // Skip rebuild if the server list has not changed.
         List<String> sortedServers = new ArrayList<>(servers);
         Collections.sort(sortedServers);
         List<String> previous = previousServerLists.get(groupKey);
         if (previous != null && previous.equals(sortedServers)) {
-            return; // Ring is already up-to-date for this group
+            return;
         }
 
         NavigableMap<Long, String> ring = new TreeMap<>();
@@ -62,7 +68,6 @@ public final class ConsistentHashRing {
                 ring.put(hash, server);
             }
         }
-        // Store an immutable snapshot so concurrent reads never see a partially-built TreeMap.
         rings.put(groupKey, Collections.unmodifiableNavigableMap(ring));
         previousServerLists.put(groupKey, sortedServers);
     }
@@ -105,20 +110,16 @@ public final class ConsistentHashRing {
     }
 
     private long hash(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return ((long) (digest[0] & 0xFF) << 56)
-                    | ((long) (digest[1] & 0xFF) << 48)
-                    | ((long) (digest[2] & 0xFF) << 40)
-                    | ((long) (digest[3] & 0xFF) << 32)
-                    | ((long) (digest[4] & 0xFF) << 24)
-                    | ((long) (digest[5] & 0xFF) << 16)
-                    | ((long) (digest[6] & 0xFF) << 8)
-                    | ((long) (digest[7] & 0xFF));
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 is guaranteed to exist
-            throw new RuntimeException(e);
-        }
+        MessageDigest md = DIGESTS.get();
+        md.reset();
+        byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+        return ((long) (digest[0] & 0xFF) << 56)
+                | ((long) (digest[1] & 0xFF) << 48)
+                | ((long) (digest[2] & 0xFF) << 40)
+                | ((long) (digest[3] & 0xFF) << 32)
+                | ((long) (digest[4] & 0xFF) << 24)
+                | ((long) (digest[5] & 0xFF) << 16)
+                | ((long) (digest[6] & 0xFF) << 8)
+                | ((long) (digest[7] & 0xFF));
     }
 }

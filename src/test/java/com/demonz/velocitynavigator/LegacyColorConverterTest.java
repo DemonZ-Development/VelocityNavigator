@@ -74,6 +74,14 @@ class LegacyColorConverterTest {
     }
 
     @Test
+    void convertsInlineAndBungeeHexColors() {
+        assertTrue(LegacyColorConverter.hasLegacyCodes("&#55FFFFHello"));
+        assertEquals("<#55FFFF>Hello", LegacyColorConverter.convert("&#55FFFFHello"));
+        assertEquals("<#55FFFF>Hello", LegacyColorConverter.convert("&x&5&5&F&F&F&FHello"));
+        assertEquals("<#55FFFF>Hello", LegacyColorConverter.convert("§x§5§5§F§F§F§FHello"));
+    }
+
+    @Test
     void convertsMixedAndComplexStrings() {
         assertEquals("<red><bold>Hello<reset> World<red>", LegacyColorConverter.convert("&c&lHello&r World&c"));
         assertEquals("<green>Welcome <yellow>player<green>", LegacyColorConverter.convert("&aWelcome &eplayer&a"));
@@ -83,6 +91,13 @@ class LegacyColorConverterTest {
     void ignoresInvalidCodes() {
         assertEquals("&zHello", LegacyColorConverter.convert("&zHello"));
         assertEquals("<dark_blue>23", LegacyColorConverter.convert("&123"));
+    }
+
+    @Test
+    void preservesEscapedMiniMessageEntities() {
+        String usage = "Use /party invite &lt;player&gt; or /p &lt;message&gt;.";
+        assertFalse(LegacyColorConverter.hasLegacyCodes(usage));
+        assertEquals(usage, LegacyColorConverter.convert(usage));
     }
 
     @Test

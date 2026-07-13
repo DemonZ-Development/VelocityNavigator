@@ -16,6 +16,7 @@
 package com.demonz.velocitynavigator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.Map;
 
 public final class Config {
 
-    public static final int CURRENT_VERSION = 6;
+    public static final int CURRENT_VERSION = 8;
 
     private final int configVersion;
     private final Commands commands;
@@ -42,6 +43,8 @@ public final class Config {
     private final StartupSettings startup;
     private final LobbyFallbackSettings lobbyFallback;
     private final BedrockSettings bedrock;
+    private final DashboardSettings dashboard;
+    private final LanguageBundle language;
 
     public Config(
             int configVersion,
@@ -72,7 +75,7 @@ public final class Config {
                 geoRouting,
                 notifyOnStartup,
                 notifyAdminsOnJoin,
-                new StartupSettings(true, "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki"),
+                new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki"),
                 new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", ""),
                 new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>")
         );
@@ -96,6 +99,71 @@ public final class Config {
             LobbyFallbackSettings lobbyFallback,
             BedrockSettings bedrock
     ) {
+        this(
+                configVersion,
+                commands,
+                routing,
+                healthChecks,
+                messages,
+                updateChecker,
+                metrics,
+                debug,
+                circuitBreaker,
+                degradation,
+                geoRouting,
+                notifyOnStartup,
+                notifyAdminsOnJoin,
+                startup,
+                lobbyFallback,
+                bedrock,
+                DashboardSettings.disabled()
+        );
+    }
+
+    public Config(
+            int configVersion,
+            Commands commands,
+            Routing routing,
+            HealthChecks healthChecks,
+            Messages messages,
+            UpdateCheckerSettings updateChecker,
+            MetricsSettings metrics,
+            DebugSettings debug,
+            CircuitBreakerSettings circuitBreaker,
+            DegradationSettings degradation,
+            GeoRoutingSettings geoRouting,
+            boolean notifyOnStartup,
+            boolean notifyAdminsOnJoin,
+            StartupSettings startup,
+            LobbyFallbackSettings lobbyFallback,
+            BedrockSettings bedrock,
+            DashboardSettings dashboard
+    ) {
+        this(configVersion, commands, routing, healthChecks, messages, updateChecker, metrics, debug,
+                circuitBreaker, degradation, geoRouting, notifyOnStartup, notifyAdminsOnJoin,
+                startup, lobbyFallback, bedrock, dashboard, LanguageBundle.defaults());
+    }
+
+    public Config(
+            int configVersion,
+            Commands commands,
+            Routing routing,
+            HealthChecks healthChecks,
+            Messages messages,
+            UpdateCheckerSettings updateChecker,
+            MetricsSettings metrics,
+            DebugSettings debug,
+            CircuitBreakerSettings circuitBreaker,
+            DegradationSettings degradation,
+            GeoRoutingSettings geoRouting,
+            boolean notifyOnStartup,
+            boolean notifyAdminsOnJoin,
+            StartupSettings startup,
+            LobbyFallbackSettings lobbyFallback,
+            BedrockSettings bedrock,
+            DashboardSettings dashboard,
+            LanguageBundle language
+    ) {
         this.configVersion = configVersion;
         this.commands = commands;
         this.routing = routing;
@@ -109,9 +177,11 @@ public final class Config {
         this.geoRouting = geoRouting;
         this.notifyOnStartup = notifyOnStartup;
         this.notifyAdminsOnJoin = notifyAdminsOnJoin;
-        this.startup = startup == null ? new StartupSettings(true, "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki") : startup;
+        this.startup = startup == null ? new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki") : startup;
         this.lobbyFallback = lobbyFallback == null ? new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", "") : lobbyFallback;
         this.bedrock = bedrock == null ? new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>") : bedrock;
+        this.dashboard = dashboard == null ? DashboardSettings.disabled() : dashboard;
+        this.language = language == null ? LanguageBundle.defaults() : language;
     }
 
     public static Config defaults() {
@@ -147,7 +217,9 @@ public final class Config {
                         false,
                         "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient> <gray>(Hover to view status, click to connect)</gray>",
                         "  <gray>•</gray> <white><bold>{server}</bold></white> <gray>| Click to connect</gray>",
-                        "<white><bold>{server}</bold></white>\n<gray>Status:</gray> {status_color}{status}\n<gray>Players:</gray> <white>{players}/{max_players}</white>\n<gray>Ping:</gray> <white>{ping}ms</white>"
+                        "<white><bold>{server}</bold></white>\n<gray>Status:</gray> {status_color}{status}\n<gray>Players:</gray> <white>{players}/{max_players}</white>\n<gray>Ping:</gray> <white>{ping}ms</white>",
+                        JavaMenuType.INVENTORY,
+                        new InventoryMenuSettings(3, "COMPASS", true)
                 ),
                 new HealthChecks(true, 2500, 60),
                 new Messages(
@@ -173,7 +245,7 @@ public final class Config {
                 new GeoRoutingSettings(false, ""),
                 true,
                 true,
-                new StartupSettings(true, "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki"),
+                new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki"),
                 new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", ""),
                 new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>")
         );
@@ -243,6 +315,14 @@ public final class Config {
         return bedrock;
     }
 
+    public DashboardSettings dashboard() {
+        return dashboard;
+    }
+
+    public LanguageBundle language() {
+        return language;
+    }
+
     public enum SelectionMode {
         LEAST_PLAYERS,
         RANDOM,
@@ -273,6 +353,10 @@ public final class Config {
         public String configValue() {
             return name().toLowerCase(Locale.ROOT);
         }
+
+        public static List<String> allConfigValues() {
+            return Arrays.stream(values()).map(SelectionMode::configValue).toList();
+        }
     }
 
     public enum UpdateChannel {
@@ -293,6 +377,10 @@ public final class Config {
 
         public String configValue() {
             return name().toLowerCase(Locale.ROOT);
+        }
+
+        public static List<String> allConfigValues() {
+            return Arrays.stream(values()).map(UpdateChannel::configValue).toList();
         }
     }
 
@@ -345,7 +433,6 @@ public final class Config {
     public record GroupConfig(List<LobbyEntry> servers, SelectionMode mode) {
         public GroupConfig {
             servers = servers == null ? List.of() : List.copyOf(servers);
-            // mode can be null — meaning "use global default"
         }
     }
 
@@ -380,8 +467,28 @@ public final class Config {
             boolean useChatMenuForLobby,
             String chatMenuHeader,
             String chatMenuFormat,
-            String chatMenuTooltip
+            String chatMenuTooltip,
+            JavaMenuType javaMenuType,
+            InventoryMenuSettings inventoryMenu
     ) {
+        public Routing(
+                SelectionMode selectionMode,
+                boolean cycleWhenPossible,
+                boolean balanceInitialJoin,
+                List<LobbyEntry> defaultLobbies,
+                Contextual contextual,
+                int maxRetries,
+                AffinitySettings affinity,
+                boolean useChatMenuForLobby,
+                String chatMenuHeader,
+                String chatMenuFormat,
+                String chatMenuTooltip
+        ) {
+            this(selectionMode, cycleWhenPossible, balanceInitialJoin, defaultLobbies, contextual,
+                    maxRetries, affinity, useChatMenuForLobby, chatMenuHeader, chatMenuFormat,
+                    chatMenuTooltip, JavaMenuType.CHAT, new InventoryMenuSettings(3, "COMPASS", true));
+        }
+
         public Routing(
                 SelectionMode selectionMode,
                 boolean cycleWhenPossible,
@@ -412,9 +519,35 @@ public final class Config {
             contextual = contextual == null ? new Contextual(false, true, Map.of(), Map.of(), Map.of()) : contextual;
             maxRetries = Math.max(0, maxRetries);
             affinity = affinity == null ? new AffinitySettings(true, 0.7) : affinity;
+            javaMenuType = javaMenuType == null ? JavaMenuType.CHAT : javaMenuType;
+            inventoryMenu = inventoryMenu == null ? new InventoryMenuSettings(3, "COMPASS", true) : inventoryMenu;
             chatMenuHeader = chatMenuHeader == null || chatMenuHeader.isBlank() ? "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient> <gray>(Hover to view status, click to connect)</gray>" : chatMenuHeader;
             chatMenuFormat = chatMenuFormat == null || chatMenuFormat.isBlank() ? "  <gray>•</gray> <white><bold>{server}</bold></white> <gray>| Click to connect</gray>" : chatMenuFormat;
             chatMenuTooltip = chatMenuTooltip == null || chatMenuTooltip.isBlank() ? "<white><bold>{server}</bold></white>\n<gray>Status:</gray> {status_color}{status}\n<gray>Players:</gray> <white>{players}/{max_players}</white>\n<gray>Ping:</gray> <white>{ping}ms</white>" : chatMenuTooltip;
+        }
+
+        public boolean useMenuForLobby() {
+            return useChatMenuForLobby;
+        }
+    }
+
+    public enum JavaMenuType {
+        CHAT,
+        INVENTORY;
+
+        public static JavaMenuType fromString(String value) {
+            return "inventory".equalsIgnoreCase(value) ? INVENTORY : CHAT;
+        }
+
+        public String configValue() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    public record InventoryMenuSettings(int rows, String material, boolean fallbackToChat) {
+        public InventoryMenuSettings {
+            rows = Math.max(1, Math.min(6, rows));
+            material = sanitizeText(material, "COMPASS").toUpperCase(Locale.ROOT);
         }
     }
 
@@ -502,15 +635,16 @@ public final class Config {
             boolean enabled,
             UpdateChannel channel,
             int checkIntervalMinutes,
-            boolean notifyAdmins
+            boolean notifyAdmins,
+            boolean silent
     ) {
         public UpdateCheckerSettings {
             channel = channel == null ? UpdateChannel.RELEASE : channel;
             checkIntervalMinutes = Math.max(30, checkIntervalMinutes);
         }
 
-        public UpdateCheckerSettings(UpdateChannel channel) {
-            this(true, channel, 60, true);
+        public UpdateCheckerSettings(boolean enabled, UpdateChannel channel, int checkIntervalMinutes, boolean notifyAdmins) {
+            this(enabled, channel, checkIntervalMinutes, notifyAdmins, true);
         }
     }
 
@@ -563,7 +697,7 @@ public final class Config {
 
     public record StartupSettings(boolean welcomeEnabled, String wikiUrl) {
         public StartupSettings {
-            wikiUrl = sanitizeText(wikiUrl, "https://github.com/sdemonzdevelopment-spec/VelocityNavigator/wiki");
+            wikiUrl = sanitizeText(wikiUrl, "https://github.com/DemonZ-Development/VelocityNavigator/wiki");
         }
     }
 
@@ -607,6 +741,29 @@ public final class Config {
             guiTitle = guiTitle == null || guiTitle.isBlank() ? "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>" : guiTitle;
             guiContent = guiContent == null || guiContent.isBlank() ? "<gray>Select a lobby server to connect:</gray>" : guiContent;
             guiButtonFormat = guiButtonFormat == null || guiButtonFormat.isBlank() ? "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>" : guiButtonFormat;
+        }
+    }
+
+    public record DashboardSettings(
+            boolean enabled,
+            int port,
+            String bindHost,
+            String bearerToken,
+            int refreshSeconds
+    ) {
+        public DashboardSettings(boolean enabled, int port, String bindHost, String bearerToken) {
+            this(enabled, port, bindHost, bearerToken, 5);
+        }
+
+        public DashboardSettings {
+            port = port <= 0 || port > 65535 ? 9226 : port;
+            bindHost = bindHost == null || bindHost.isBlank() ? "127.0.0.1" : bindHost.trim();
+            bearerToken = bearerToken == null ? "" : bearerToken;
+            refreshSeconds = Math.max(2, refreshSeconds);
+        }
+
+        public static DashboardSettings disabled() {
+            return new DashboardSettings(false, 9226, "127.0.0.1", "", 5);
         }
     }
 
@@ -696,11 +853,6 @@ public final class Config {
         return Collections.unmodifiableMap(cleaned);
     }
 
-    /**
-     * Normalizes the sources map so that keys and values are lowercased.
-     * This ensures lookups in RoutePlanner (which lowercases the source server name)
-     * always match, regardless of how the user typed keys in navigator.toml.
-     */
     private static Map<String, String> immutableStringMap(Map<String, String> values) {
         if (values == null || values.isEmpty()) {
             return Map.of();

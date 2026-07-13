@@ -178,7 +178,6 @@ class RoutePlannerTest {
         assertEquals("lobby-1", decision.selectedServer());
     }
 
-    // --- New v4 tests ---
 
     @Test
     void drainedServersExcludedFromCandidates() {
@@ -224,7 +223,6 @@ class RoutePlannerTest {
 
         RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
         CircuitBreaker breaker = new CircuitBreaker(3, 30, 1);
-        // Force lobby-1 into OPEN state
         breaker.recordFailure("lobby-1");
         breaker.recordFailure("lobby-1");
         breaker.recordFailure("lobby-1");
@@ -252,7 +250,7 @@ class RoutePlannerTest {
                                         new Config.LobbyEntry("bw-1", Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT),
                                         new Config.LobbyEntry("bw-2", Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT)
                                 ),
-                                Config.SelectionMode.ROUND_ROBIN  // Override: use round-robin for this group
+                                Config.SelectionMode.ROUND_ROBIN
                         )),
                         Map.of("bedwars-1", "bedwars"),
                         Map.of()
@@ -290,14 +288,13 @@ class RoutePlannerTest {
                                 )
                         ),
                         Map.of("bedwars-1", "bedwars"),
-                        Map.of("bedwars", List.of("skywars"))  // bedwars falls back to skywars
+                        Map.of("bedwars", List.of("skywars"))
                 ),
                 2,
                 null
         ));
 
         RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
-        // bedwars-1 maps to "bedwars", but bw-1 is offline. Fallback chain should try "skywars".
         RouteDecision decision = planner.plan("bedwars-1", config, Map.of("sw-1", 5));
 
         assertTrue(decision.hasSelection());
@@ -321,7 +318,7 @@ class RoutePlannerTest {
         ));
 
         RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
-        PlayerAffinityService affinityService = new PlayerAffinityService(1.0); // 100% stickiness
+        PlayerAffinityService affinityService = new PlayerAffinityService(1.0);
         UUID playerId = UUID.randomUUID();
         affinityService.setAffinity(playerId, "lobby-2");
         planner.setAffinityService(affinityService);
@@ -339,7 +336,7 @@ class RoutePlannerTest {
                 false,
                 true,
                 List.of(
-                        new Config.LobbyEntry("lobby-1", 10, Config.LobbyEntry.DEFAULT_WEIGHT),  // max 10 players
+                        new Config.LobbyEntry("lobby-1", 10, Config.LobbyEntry.DEFAULT_WEIGHT),
                         new Config.LobbyEntry("lobby-2", Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT)
                 ),
                 defaultRouting().contextual(),
@@ -348,7 +345,6 @@ class RoutePlannerTest {
         ));
 
         RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
-        // lobby-1 is at capacity (10/10), should be excluded
         RouteDecision decision = planner.plan("", config, Map.of("lobby-1", 10, "lobby-2", 5));
 
         assertTrue(decision.hasSelection());
@@ -375,11 +371,10 @@ class RoutePlannerTest {
         ConsistentHashRing hashRing = new ConsistentHashRing();
         planner.setHashRing(hashRing);
 
-        // Player ID is null
         RouteDecision decision = planner.plan("", config, Map.of("lobby-1", 10, "lobby-2", 5), null);
 
         assertTrue(decision.hasSelection());
-        assertEquals("lobby-2", decision.selectedServer()); // Least players fallback
+        assertEquals("lobby-2", decision.selectedServer());
         assertTrue(decision.reason().contains("Consistent hash selection was unavailable or failed; fell back to LEAST_PLAYERS"));
     }
 
@@ -435,5 +430,17 @@ class RoutePlannerTest {
         RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
 
         assertTrue(planner.inspectionTargets("", config).contains("backup-lobby"));
+    }
+
+    @Test
+    void redisRegisteredServerJoinsLiveDefaultPool() {
+        Config config = Config.defaults();
+        RoutePlanner planner = new RoutePlanner(new RouteSelectionStrategy());
+        planner.registerDynamicServer("lobby-dynamic", "default", 100, 1);
+        RouteDecision decision = planner.plan("", config, Map.of("lobby-dynamic", 4));
+        assertEquals("lobby-dynamic", decision.selectedServer());
+        assertTrue(planner.inspectionTargets("", config).contains("lobby-dynamic"));
+        planner.unregisterDynamicServer("lobby-dynamic");
+        assertFalse(planner.inspectionTargets("", config).contains("lobby-dynamic"));
     }
 }

@@ -30,9 +30,9 @@ public final class MetricsService {
     private final Supplier<Config> configSupplier;
     private final Logger logger;
 
-    private Metrics metrics;
-    private boolean active;
-    private String statusLine = "Disabled";
+    private volatile Metrics metrics;
+    private volatile boolean active;
+    private volatile String statusLine = "Disabled";
 
     public MetricsService(Metrics.Factory metricsFactory, Supplier<Config> configSupplier, Logger logger) {
         this.metricsFactory = Objects.requireNonNull(metricsFactory, "metricsFactory");
@@ -60,6 +60,11 @@ public final class MetricsService {
         metrics.addCustomChart(new SimplePie("health_checks_enabled", () -> safeGet(() -> Boolean.toString(currentConfig().healthChecks().enabled()), "false")));
         metrics.addCustomChart(new SimplePie("default_lobby_bucket", this::lobbyBucket));
         metrics.addCustomChart(new SimplePie("circuit_breaker_enabled", () -> safeGet(() -> Boolean.toString(currentConfig().circuitBreaker().enabled()), "false")));
+        metrics.addCustomChart(new SimplePie("party_enabled", () -> Boolean.toString(plugin.advancedConfig().party().enabled())));
+        metrics.addCustomChart(new SimplePie("queue_enabled", () -> Boolean.toString(plugin.advancedConfig().queue().enabled())));
+        metrics.addCustomChart(new SimplePie("redis_enabled", () -> Boolean.toString(plugin.advancedConfig().redis().enabled())));
+        metrics.addCustomChart(new SimplePie("server_management_enabled", () -> Boolean.toString(plugin.advancedConfig().serverManagement().enabled())));
+        metrics.addCustomChart(new SimplePie("bedrock_form_enabled", () -> Boolean.toString(plugin.guiConfig().bedrock().enabled())));
         active = true;
         statusLine = "Active";
     }

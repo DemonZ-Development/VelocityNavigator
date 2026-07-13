@@ -16,14 +16,16 @@
 package com.demonz.velocitynavigator;
 
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Set;
 
 public final class RouteSelectionStrategy {
 
@@ -46,15 +48,11 @@ public final class RouteSelectionStrategy {
             case POWER_OF_TWO -> selectPowerOfTwo(candidates);
             case WEIGHTED_ROUND_ROBIN -> Optional.of(selectWeightedRoundRobin(candidates, groupKey));
             case LEAST_CONNECTIONS -> selectLeastConnections(candidates);
-            case CONSISTENT_HASH -> Optional.empty(); // Handled separately by RoutePlanner with player context
+            case CONSISTENT_HASH -> Optional.empty();
             case LATENCY -> selectLatency(candidates);
         };
     }
 
-    /**
-     * Select using consistent hashing with player context.
-     * Returns the selected server name (not the candidate itself, since the ring is name-based).
-     */
     public Optional<String> selectConsistentHash(ConsistentHashRing ring, String groupKey, String playerId) {
         String server = ring.getServer(groupKey, playerId);
         return Optional.ofNullable(server);
@@ -93,7 +91,6 @@ public final class RouteSelectionStrategy {
 
         synchronized (state) {
             state.pruneStaleEntries(candidates);
-            // Interleaved WRR algorithm
             int totalWeight = 0;
             for (ServerCandidate c : candidates) {
                 totalWeight += c.effectiveWeight();
@@ -140,16 +137,12 @@ public final class RouteSelectionStrategy {
     }
 
     private Optional<ServerCandidate> selectLeastConnections(List<ServerCandidate> candidates) {
-        // Use EMA values if available via ServerLoadTracker; otherwise fall back to player counts
         return candidates.stream()
                 .min(Comparator.comparingDouble(ServerCandidate::emaLoad).thenComparing(ServerCandidate::name));
     }
 
-    /**
-     * State tracker for interleaved weighted round-robin.
-     */
     static final class WeightedRoundRobinState {
-        private final Map<String, Integer> currentWeights = new ConcurrentHashMap<>();
+        private final Map<String, Integer> currentWeights = new HashMap<>();
 
         int addWeight(String serverName, int weight) {
             return currentWeights.compute(serverName, (k, v) -> (v == null ? 0 : v) + weight);
@@ -160,7 +153,7 @@ public final class RouteSelectionStrategy {
         }
 
         void pruneStaleEntries(List<ServerCandidate> activeCandidates) {
-            Set<String> activeNames = new java.util.HashSet<>();
+            Set<String> activeNames = new HashSet<>();
             for (ServerCandidate c : activeCandidates) {
                 activeNames.add(c.name());
             }

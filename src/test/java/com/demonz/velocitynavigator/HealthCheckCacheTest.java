@@ -53,17 +53,13 @@ class HealthCheckCacheTest {
     void purgeExpiredRemovesStaleEntries() {
         HealthCheckCache cache = new HealthCheckCache();
         Instant now = Instant.now();
-        // Old entry — checked 2 hours ago
         cache.put("old-server", true, now.minusSeconds(7200));
-        // Fresh entry — checked just now
         cache.put("fresh-server", true, now.minusSeconds(10));
 
-        cache.purgeExpired(Duration.ofMinutes(60)); // TTL = 1 hour
+        cache.purgeExpired(Duration.ofMinutes(60));
 
-        // Old entry should be purged
         assertNull(cache.getCached("old-server"),
                 "Entry older than TTL should be purged");
-        // Fresh entry should remain
         assertNotNull(cache.getCached("fresh-server"),
                 "Entry newer than TTL should remain");
     }
@@ -73,7 +69,6 @@ class HealthCheckCacheTest {
         HealthCheckCache cache = new HealthCheckCache();
         cache.put("server-1", true, Instant.now());
 
-        // Zero TTL — should not remove anything (early return)
         cache.purgeExpired(Duration.ZERO);
 
         assertNotNull(cache.getCached("server-1"),

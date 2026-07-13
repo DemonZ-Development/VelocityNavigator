@@ -6,11 +6,11 @@
 
     <groupId>com.demonz</groupId>
     <artifactId>VelocityNavigator</artifactId>
-    <version>4.2.0</version>
+    <version>4.3.0</version>
     <packaging>jar</packaging>
 
     <name>VelocityNavigator</name>
-    <description>Premium lobby navigation and diagnostics for Velocity proxies.</description>
+    <description>Lobby routing and load balancing for Velocity proxies.</description>
 
     <licenses>
         <license>
@@ -29,6 +29,7 @@
         <gson.version>2.12.1</gson.version>
         <toml4j.version>0.7.2</toml4j.version>
         <adventure.version>4.26.1</adventure.version>
+        <spigot.version>1.16.5-R0.1-SNAPSHOT</spigot.version>
         <slf4j.version>2.0.17</slf4j.version>
         <guice.version>6.0.0</guice.version>
         <cumulus.version>1.1.2</cumulus.version>
@@ -116,6 +117,10 @@
             <id>opencollab-snapshots</id>
             <url>https://repo.opencollab.dev/maven-snapshots/</url>
         </repository>
+        <repository>
+            <id>spigot-snapshots</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -168,6 +173,18 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>net.kyori</groupId>
+            <artifactId>adventure-text-serializer-legacy</artifactId>
+            <version>${adventure.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>${spigot.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
@@ -197,6 +214,11 @@
         <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-base</artifactId>
+            <version>${bstats.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-bukkit</artifactId>
             <version>${bstats.version}</version>
         </dependency>
         <dependency>

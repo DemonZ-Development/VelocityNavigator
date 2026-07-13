@@ -91,18 +91,18 @@ class ServersSubCommandTest {
                 null
         );
 
-        // Load config and initialize plugin
         plugin.onProxyInitialization(null);
+        plugin.registerDynamicLobby("managed-lobby", "default", 80, 2);
 
         List<String> messages = new ArrayList<>();
         CommandSource source = createMockSource(messages);
 
-        // Run command and join synchronously
         ServersSubCommand.execute(source, new String[]{"servers"}, plugin).join();
 
-        // Verify output
         assertTrue(messages.stream().anyMatch(msg -> msg.contains("Lobby Status")));
         assertTrue(messages.stream().anyMatch(msg -> msg.contains("lobby-1")));
         assertTrue(messages.stream().anyMatch(msg -> msg.contains("lobby-2")));
+        assertTrue(messages.stream().anyMatch(msg -> msg.contains("managed-lobby")));
+        assertTrue(messages.stream().anyMatch(msg -> msg.contains("0/80")));
     }
 }

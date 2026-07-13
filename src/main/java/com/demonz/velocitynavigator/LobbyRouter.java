@@ -16,7 +16,6 @@
 package com.demonz.velocitynavigator;
 
 import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

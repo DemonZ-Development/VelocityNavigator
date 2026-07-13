@@ -25,6 +25,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class RoutePlanner {
 
@@ -36,6 +38,7 @@ public final class RoutePlanner {
     private volatile PlayerAffinityService affinityService;
     private volatile ConnectionRateTracker rateTracker;
     private volatile ServerHealthService healthService;
+    private final ConcurrentMap<String, DynamicLobby> dynamicLobbies = new ConcurrentHashMap<>();
 
     public RoutePlanner(RouteSelectionStrategy selectionStrategy) {
         this.selectionStrategy = Objects.requireNonNull(selectionStrategy, "selectionStrategy");
@@ -69,43 +72,31 @@ public final class RoutePlanner {
         this.rateTracker = rateTracker;
     }
 
-    /**
-     * Plan a route without a player identity.
-     * <p>
-     * When {@code playerId} is null, player-dependent features are skipped:
-     * <ul>
-     *   <li>Player affinity (sticky sessions) is not evaluated</li>
-     *   <li>Consistent hash selection falls back to the next selection strategy</li>
-     * </ul>
-     * This overload passes {@code null} as the playerId. Use
-     * {@link #plan(String, Config, Map, UUID)} when a player context is available.
-     *
-     * @param sourceServer  the server the player is currently on (empty string if none)
-     * @param config        the active routing configuration
-     * @param onlineServers map of server name → current player count for online servers
-     * @return the routing decision
-     */
+    public void registerDynamicServer(String name, String group, int maxPlayers, int weight) {
+        if (name == null || name.isBlank()) return;
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
+        String normalizedGroup = group == null || group.isBlank() ? "default" : group.trim().toLowerCase(Locale.ROOT);
+        dynamicLobbies.put(normalized, new DynamicLobby(new Config.LobbyEntry(normalized, maxPlayers, weight), normalizedGroup));
+    }
+
+    public void unregisterDynamicServer(String name) {
+        if (name != null) dynamicLobbies.remove(name.toLowerCase(Locale.ROOT));
+    }
+
+    public Optional<Config.LobbyEntry> dynamicServer(String name) {
+        if (name == null) return Optional.empty();
+        DynamicLobby lobby = dynamicLobbies.get(name.toLowerCase(Locale.ROOT));
+        return lobby == null ? Optional.empty() : Optional.of(lobby.entry());
+    }
+
+    public Set<String> dynamicServerNames() {
+        return Set.copyOf(dynamicLobbies.keySet());
+    }
+
     public RouteDecision plan(String sourceServer, Config config, Map<String, Integer> onlineServers) {
         return plan(sourceServer, config, onlineServers, null);
     }
 
-    /**
-     * Plan a route with full player context.
-     * <p>
-     * When {@code playerId} is null, player-dependent features are skipped:
-     * <ul>
-     *   <li>Player affinity (sticky sessions) is not evaluated</li>
-     *   <li>Consistent hash selection falls back to the next selection strategy</li>
-     * </ul>
-     * Pass a non-null playerId when a player context is available to enable
-     * affinity and consistent hash routing.
-     *
-     * @param sourceServer  the server the player is currently on (empty string if none)
-     * @param config        the active routing configuration
-     * @param onlineServers map of server name → current player count for online servers
-     * @param playerId      the player's unique ID, or null if no player context is available
-     * @return the routing decision
-     */
     public RouteDecision plan(String sourceServer, Config config, Map<String, Integer> onlineServers, UUID playerId) {
         String normalizedSource = sourceServer == null ? "" : sourceServer.toLowerCase(Locale.ROOT);
         Map<String, Integer> online = onlineServers == null ? Map.of() : toLowerCaseKeys(onlineServers);
@@ -137,6 +128,7 @@ public final class RoutePlanner {
             }
         }
 
+        requestedEntries = withDynamic(requestedEntries, requestedGroup);
         String usedGroup = requestedGroup;
         List<Config.LobbyEntry> configuredEntries = List.copyOf(requestedEntries);
         Config.SelectionMode effectiveMode = groupMode != null ? groupMode : config.routing().selectionMode();
@@ -144,14 +136,14 @@ public final class RoutePlanner {
         boolean fallbackToDefault = false;
 
         if (contextualMatch && onlineCandidates.isEmpty() && contextual.fallbackToDefault()) {
-            // Try fallback chain first
             List<String> chain = contextual.fallbackChain().getOrDefault(requestedGroup, List.of());
             for (String fallbackGroup : chain) {
                 Config.GroupConfig fallbackConfig = contextual.groups().get(fallbackGroup);
                 if (fallbackConfig != null) {
-                    List<String> fallbackOnline = filterOnlineCandidates(fallbackConfig.servers(), online);
+                    List<Config.LobbyEntry> fallbackEntries = withDynamic(fallbackConfig.servers(), fallbackGroup);
+                    List<String> fallbackOnline = filterOnlineCandidates(fallbackEntries, online);
                     if (!fallbackOnline.isEmpty()) {
-                        configuredEntries = List.copyOf(fallbackConfig.servers());
+                        configuredEntries = List.copyOf(fallbackEntries);
                         onlineCandidates = fallbackOnline;
                         usedGroup = fallbackGroup;
                         effectiveMode = fallbackConfig.mode() != null ? fallbackConfig.mode() : config.routing().selectionMode();
@@ -162,9 +154,8 @@ public final class RoutePlanner {
                 }
             }
 
-            // If fallback chain didn't help, use default lobbies
             if (onlineCandidates.isEmpty()) {
-                configuredEntries = List.copyOf(config.routing().defaultLobbies());
+                configuredEntries = withDynamic(config.routing().defaultLobbies(), "default");
                 onlineCandidates = filterOnlineCandidates(configuredEntries, online);
                 usedGroup = "default";
                 effectiveMode = config.routing().selectionMode();
@@ -242,7 +233,6 @@ public final class RoutePlanner {
             );
         }
 
-        // Player affinity check
         if (playerId != null && affinityService != null && effectiveMode != Config.SelectionMode.CONSISTENT_HASH) {
             Optional<String> stickServer = affinityService.shouldStick(playerId, selectableCandidates);
             if (stickServer.isPresent()) {
@@ -261,7 +251,6 @@ public final class RoutePlanner {
             }
         }
 
-        // Consistent hash path
         if (effectiveMode == Config.SelectionMode.CONSISTENT_HASH && playerId != null && hashRing != null) {
             hashRing.updateRing(usedGroup, selectableCandidates);
             Optional<String> selected = selectionStrategy.selectConsistentHash(hashRing, usedGroup, playerId.toString());
@@ -281,9 +270,12 @@ public final class RoutePlanner {
             }
         }
 
-        List<Config.LobbyEntry> finalEntries = configuredEntries;
+        Map<String, Config.LobbyEntry> entryByName = new LinkedHashMap<>();
+        for (Config.LobbyEntry entry : configuredEntries) {
+            entryByName.putIfAbsent(entry.server().toLowerCase(Locale.ROOT), entry);
+        }
         List<ServerCandidate> candidates = selectableCandidates.stream()
-                .map(name -> buildCandidate(name, online.getOrDefault(name, 0), finalEntries))
+                .map(name -> buildCandidate(name, online.getOrDefault(name, 0), entryByName))
                 .toList();
         Config.SelectionMode selectMode = effectiveMode == Config.SelectionMode.CONSISTENT_HASH
                 ? Config.SelectionMode.LEAST_PLAYERS
@@ -330,7 +322,16 @@ public final class RoutePlanner {
                 }
             }
         }
+        dynamicLobbies.values().forEach(value -> targets.add(value.entry().server()));
         return targets;
+    }
+
+    private List<Config.LobbyEntry> withDynamic(List<Config.LobbyEntry> configured, String group) {
+        Map<String, Config.LobbyEntry> merged = new LinkedHashMap<>();
+        if (configured != null) configured.forEach(entry -> merged.put(entry.server().toLowerCase(Locale.ROOT), entry));
+        String normalizedGroup = group == null || group.isBlank() ? "default" : group.toLowerCase(Locale.ROOT);
+        dynamicLobbies.values().stream().filter(value -> value.group().equals(normalizedGroup)).forEach(value -> merged.put(value.entry().server(), value.entry()));
+        return List.copyOf(merged.values());
     }
 
     private List<String> filterOnlineCandidates(List<Config.LobbyEntry> configuredEntries, Map<String, Integer> onlineServers) {
@@ -341,15 +342,15 @@ public final class RoutePlanner {
             if (count == null) {
                 continue;
             }
-            // Check if server is drained
             if (drainService != null && drainService.isDrained(name)) {
                 continue;
             }
-            // Check circuit breaker
             if (circuitBreaker != null && !circuitBreaker.isAvailable(name)) {
                 continue;
             }
-            // Check max-player cap
+            if (healthService != null && !healthService.isRoutingStateAllowed(name)) {
+                continue;
+            }
             if (entry.isFull(count)) {
                 continue;
             }
@@ -358,13 +359,11 @@ public final class RoutePlanner {
         return List.copyOf(online);
     }
 
-    private ServerCandidate buildCandidate(String name, int playerCount, List<Config.LobbyEntry> entries) {
+    private ServerCandidate buildCandidate(String name, int playerCount, Map<String, Config.LobbyEntry> entryByName) {
         int weight = Config.LobbyEntry.DEFAULT_WEIGHT;
-        for (Config.LobbyEntry entry : entries) {
-            if (entry.server().equalsIgnoreCase(name)) {
-                weight = entry.effectiveWeight();
-                break;
-            }
+        Config.LobbyEntry entry = entryByName.get(name.toLowerCase(Locale.ROOT));
+        if (entry != null) {
+            weight = entry.effectiveWeight();
         }
         double emaLoad = playerCount;
         if (loadTracker != null) {
@@ -374,7 +373,6 @@ public final class RoutePlanner {
         if (rateTracker != null) {
             rateCost = rateTracker.getRatePerSecond(name);
         }
-        // Incorporate rate into emaLoad for LEAST_CONNECTIONS
         double combinedLoad = emaLoad + rateCost;
         long latency = -1L;
         if (healthService != null) {
@@ -407,11 +405,7 @@ public final class RoutePlanner {
     }
 
     private List<String> lobbyEntryNames(List<Config.LobbyEntry> entries) {
-        List<String> names = new ArrayList<>();
-        for (Config.LobbyEntry entry : entries) {
-            names.add(entry.server());
-        }
-        return List.copyOf(names);
+        return entries.stream().map(Config.LobbyEntry::server).toList();
     }
 
     private Map<String, Integer> toLowerCaseKeys(Map<String, Integer> original) {
@@ -420,5 +414,8 @@ public final class RoutePlanner {
             normalized.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
         }
         return normalized;
+    }
+
+    private record DynamicLobby(Config.LobbyEntry entry, String group) {
     }
 }

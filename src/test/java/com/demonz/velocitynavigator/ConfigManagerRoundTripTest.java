@@ -35,15 +35,12 @@ class ConfigManagerRoundTripTest {
     void configRoundTripPreservesAllFields() throws Exception {
         ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("roundtrip-test"));
 
-        // Load to create default config
         ConfigLoadResult firstLoad = manager.load();
         assertTrue(firstLoad.createdDefault());
 
-        // Load again to read back
         ConfigLoadResult secondLoad = manager.load();
         Config config = secondLoad.config();
 
-        // Verify all default fields match
         Config defaults = Config.defaults();
         assertEquals(defaults.configVersion(), config.configVersion());
         assertEquals(defaults.commands().primary(), config.commands().primary());
@@ -54,6 +51,8 @@ class ConfigManagerRoundTripTest {
         assertEquals(defaults.routing().maxRetries(), config.routing().maxRetries());
         assertEquals(defaults.routing().affinity().enabled(), config.routing().affinity().enabled());
         assertEquals(defaults.routing().affinity().stickiness(), config.routing().affinity().stickiness());
+        assertEquals(defaults.routing().javaMenuType(), config.routing().javaMenuType());
+        assertEquals(defaults.routing().inventoryMenu(), config.routing().inventoryMenu());
         assertEquals(defaults.healthChecks().enabled(), config.healthChecks().enabled());
         assertEquals(defaults.healthChecks().timeoutMs(), config.healthChecks().timeoutMs());
         assertEquals(defaults.healthChecks().cacheSeconds(), config.healthChecks().cacheSeconds());
@@ -80,9 +79,16 @@ class ConfigManagerRoundTripTest {
         assertEquals(defaults.bedrock().affinityUseJavaUuid(), config.bedrock().affinityUseJavaUuid());
 
         String written = Files.readString(tempDir.resolve("navigator.toml"));
+        String messages = Files.readString(tempDir.resolve("messages.toml"));
+        String gui = Files.readString(tempDir.resolve("gui.toml"));
         assertTrue(written.contains("notify_on_startup = true"));
         assertTrue(written.contains("notify_admins_on_join = true"));
-        assertTrue(written.contains("chat_menu_tooltip = \"<white><bold>{server}</bold></white>\\n"));
+        assertTrue(written.contains("[routing.java_menu]"));
+        assertFalse(written.contains("[messages]"));
+        assertTrue(messages.contains("[menus.chat]"));
+        assertTrue(messages.contains("tooltip = \"<white><bold>{server}</bold></white>\\n"));
+        assertTrue(gui.contains("[layout]"));
+        assertTrue(gui.contains("refresh_seconds = 5"));
     }
 
     @Test
@@ -116,7 +122,6 @@ class ConfigManagerRoundTripTest {
                 "Group key with space should survive round-trip");
         assertEquals("bed wars", config.routing().contextual().sources().get("bw-1"));
 
-        // Re-read the written config to verify the key persists
         ConfigLoadResult reRead = manager.load();
         assertTrue(reRead.config().routing().contextual().groups().containsKey("bed wars"),
                 "Group key with space should survive write + read round-trip");
@@ -210,7 +215,6 @@ class ConfigManagerRoundTripTest {
         assertTrue(result.migrated(), "v3 config should be detected as migrated");
         Config config = result.config();
 
-        // Verify migrated values
         assertEquals("my.custom.perm", config.commands().permission());
         assertEquals(5, config.commands().cooldownSeconds());
         assertEquals(Config.SelectionMode.ROUND_ROBIN, config.routing().selectionMode());

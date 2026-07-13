@@ -1,23 +1,23 @@
 # Contextual Routing Guide
 
-> Route players to different lobby pools based on where they're coming from — with per-group selection modes and fallback chains.
+![Contextual lobby routing](headers/contextual-routing-guide.png)
 
----
+Contextual routing keeps each game mode connected to its own lobby pool. A player leaving BedWars can return to a BedWars lobby, while a SkyWars player goes back to SkyWars, without needing separate lobby commands.
 
 ## What Is Contextual Routing?
 
-By default, all players who type `/lobby` are routed from the same global pool (`default_lobbies`). But on a network with multiple game modes, you often want players to return to a **game-specific lobby**, not a generic hub.
+By default, all players who type `/lobby` are routed from the same global pool (`default_lobbies`). On a network with multiple game modes, you often want players to return to a **game-specific lobby** rather than a generic hub.
 
-Contextual routing lets you define groups of lobbies and map **source servers** to those groups. When a player leaves `bedwars-1` and types `/lobby`, they're routed to the BedWars lobby pool instead of the generic one.
+Contextual routing lets you define groups of lobbies and map **source servers** to those groups. When a player leaves `bedwars-1` and types `/lobby`, they are routed to the BedWars lobby pool instead of the generic one.
 
 ---
 
 ## When to Use It
 
-- You have game-mode-specific lobbies (BedWars hub, SkyWars hub, etc.)
-- You want players to stay in a game-mode "ecosystem" when they finish a match
-- Different game modes need different routing algorithms
-- You want fallback chains so players always have somewhere to go
+- You have game-mode-specific lobbies (BedWars hub, SkyWars hub, etc.).
+- You want players to stay in a game-mode ecosystem when they finish a match.
+- Different game modes need different routing algorithms.
+- You want fallback chains so players always have somewhere to go.
 
 ---
 
@@ -40,7 +40,7 @@ servers = ["hub-1", "hub-2", "hub-3"]
 
 ### Step 2: Map Source Servers to Groups
 
-When a player leaves a source server and uses `/lobby`, they're routed to the mapped group:
+When a player leaves a source server and uses `/lobby`, they are routed to the mapped group:
 
 ```toml
 [routing.contextual.sources]
@@ -58,7 +58,7 @@ enabled = true
 fallback_to_default = true
 ```
 
-That's the basics! Players leaving BedWars servers will now be routed to BedWars lobbies.
+That is the basics. Players leaving BedWars servers are now routed to BedWars lobbies.
 
 ---
 
@@ -77,16 +77,17 @@ mode = "power_of_two"
 # If mode is omitted, the global selection_mode is used
 ```
 
-This is powerful because:
-- **`consistent_hash`** for groups where you want players to return to the same lobby (inventory cache, party reconnection)
-- **`power_of_two`** for high-traffic groups that need fast, even distribution
-- **`weighted_round_robin`** for groups with servers of different capacities
+Useful pairings:
+
+- **`consistent_hash`** for groups where you want players to return to the same lobby (inventory cache, party reconnection).
+- **`power_of_two`** for high-traffic groups that need fast, even distribution.
+- **`weighted_round_robin`** for groups with servers of different capacities.
 
 ---
 
 ## Fallback Chain Configuration
 
-What happens when all servers in a group are down? The fallback chain determines the ordered list of groups to try next:
+When all servers in a group are down, the fallback chain determines the ordered list of groups to try next:
 
 ```toml
 [routing.contextual.fallback_chain]
@@ -96,9 +97,9 @@ skywars_lobbies = ["main_hubs"]
 
 **How it works**:
 
-1. Player leaves `bedwars-1` → maps to `bedwars_lobbies`
-2. All BedWars lobbies are down → check fallback chain
-3. Try `main_hubs` → hub-2 is healthy → route there
+1. Player leaves `bedwars-1` → maps to `bedwars_lobbies`.
+2. All BedWars lobbies are down → check the fallback chain.
+3. Try `main_hubs` → `hub-2` is healthy → route there.
 
 If no fallback group has available servers and `fallback_to_default = true`, the default lobby pool is used as a last resort.
 
@@ -118,9 +119,10 @@ mode = "weighted_round_robin"
 ```
 
 This lets you:
-- Set **max_players** per server in a group (smaller servers get fewer players)
-- Set **weight** for weighted round-robin distribution
-- Mix plain strings and inline tables
+
+- Set **max_players** per server in a group (smaller servers receive fewer players).
+- Set **weight** for weighted round-robin distribution.
+- Mix plain strings and inline tables.
 
 ---
 
@@ -184,17 +186,17 @@ event_lobbies = ["main_hubs"]
 
 ### Example 3: Mixed Network with Weighted Servers
 
-A network where some lobby servers are more powerful than others:
+A network where some lobby servers are larger than others:
 
 ```toml
 [routing.contextual]
 enabled = true
 fallback_to_default = true
 
-[routing.contextual.groups.premium_lobbies]
+[routing.contextual.groups.priority_lobbies]
 servers = [
-  { server = "premium-hub-1", max_players = 500, weight = 5 },
-  { server = "premium-hub-2", max_players = 300, weight = 3 },
+  { server = "priority-hub-1", max_players = 500, weight = 5 },
+  { server = "priority-hub-2", max_players = 300, weight = 3 },
 ]
 mode = "weighted_round_robin"
 
@@ -207,7 +209,7 @@ servers = [
 mode = "power_of_two"
 
 [routing.contextual.sources]
-"premium-game-1" = "premium_lobbies"
+"priority-game-1" = "priority_lobbies"
 "standard-game-1" = "standard_lobbies"
 "standard-game-2" = "standard_lobbies"
 ```
@@ -223,4 +225,4 @@ mode = "power_of_two"
 | "No lobby found" error | All group lobbies offline, `fallback_to_default = false` | Set `fallback_to_default = true` or add a fallback chain |
 | Fallback chain not working | Chain references group name that doesn't exist | Verify group names match exactly |
 
-→ See also: [Configuration Guide](Configuration-Guide) | [Routing Algorithms](Routing-Algorithms) | [Troubleshooting Guide](Troubleshooting-Guide)
+See also: [Configuration Guide](Configuration-Guide) | [Routing Algorithms](Routing-Algorithms) | [Troubleshooting Guide](Troubleshooting-Guide)

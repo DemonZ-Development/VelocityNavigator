@@ -1,8 +1,8 @@
 # Algorithm Visualizations
 
-> See how each selection algorithm distributes players across servers at different load levels.
+![Routing algorithm examples](headers/algorithm-visualizations.png)
 
----
+The examples below show the personality of each routing mode. They are not benchmarks; they are a quick way to see whether an algorithm behaves the way you expect.
 
 ## Legend
 
@@ -44,7 +44,7 @@ lobby-1: ███  (3)
 lobby-2: █    (1)
 lobby-3: █    (1)
 ```
-*Higher variance at low counts — expected behavior.*
+* Higher variance at low counts — expected behavior.
 
 ### `weighted_round_robin` (weights: 3, 2, 1)
 ```
@@ -66,7 +66,7 @@ lobby-1: ██   (2)
 lobby-2: ██   (2)
 lobby-3: █    (1)
 ```
-*Depends on UUID hash; shown here as a typical distribution.*
+* Depends on UUID hash; shown here as a typical distribution.
 
 ---
 
@@ -80,7 +80,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-*Near-perfect even distribution.*
+* Near-perfect even distribution.
 
 ### `power_of_two`
 ```
@@ -90,7 +90,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-*Very close to least_players — at this scale, practically identical.*
+* Very close to `least_players` — at this scale, practically identical.
 
 ### `round_robin`
 ```
@@ -100,7 +100,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-*Strictly even by design.*
+* Strictly even by design.
 
 ### `random`
 ```
@@ -110,7 +110,7 @@ lobby-3: ██████   (6)
 lobby-4: ████▌    (4)
 lobby-5: █████▌   (7)
 ```
-*Some variance — evens out further as player count grows.*
+* Some variance — evens out further as the player count grows.
 
 ### `weighted_round_robin` (weights: 5, 4, 3, 2, 1)
 ```
@@ -120,7 +120,7 @@ lobby-3: ██████       (6)
 lobby-4: ████         (4)
 lobby-5: ██           (2)
 ```
-*Proportional to weight.*
+* Proportional to weight.
 
 ### `least_connections`
 ```
@@ -130,7 +130,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-*EMA smoothing produces even distribution under steady load.*
+* EMA smoothing produces an even distribution under steady load.
 
 ### `consistent_hash`
 ```
@@ -140,7 +140,7 @@ lobby-3: █████    (5)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-*Minor variance from hash ring distribution.*
+* Minor variance from hash ring distribution.
 
 ---
 
@@ -173,7 +173,7 @@ srv-08: █████████  (9)
 srv-09: ██████████ (10)
 srv-10: ██████████ (10)
 ```
-*±1 deviation — excellent at scale.*
+* ±1 deviation — performs well at scale.
 
 ### `round_robin`
 ```
@@ -202,7 +202,7 @@ srv-08: ██████████  (10)
 srv-09: ███████████ (11)
 srv-10: ████████▌   (10)
 ```
-*Variance shrinks with scale — law of large numbers.*
+* Variance shrinks with scale — law of large numbers.
 
 ### `weighted_round_robin` (weights: 5, 5, 3, 3, 3, 2, 2, 2, 1, 1)
 ```
@@ -245,7 +245,21 @@ srv-08: ██████████ (10)
 srv-09: █████████▌ (10)
 srv-10: █████████  (10)
 ```
-*Hash ring produces ±1 deviation across 10 servers.*
+* Hash ring produces ±1 deviation across 10 servers.
+
+---
+
+## Latency Mode — Proxy-to-Backend Measurement
+
+`latency` does not produce an even distribution chart. It ranks the healthy candidates by the ping measured from the Velocity proxy:
+
+```
+lobby-east:  25 ms  ← selected
+lobby-west:  70 ms
+lobby-eu:   110 ms
+```
+
+Every player routed by that proxy sees the same current ranking. This is useful when backend network delay differs, but it is not player-specific geographic routing. If the 25 ms server becomes full, drained, unhealthy, circuit-open, or lifecycle-disallowed, the next eligible candidate can be selected.
 
 ---
 
@@ -258,7 +272,8 @@ srv-10: █████████  (10)
 | Servers have different capacities | `weighted_round_robin` |
 | Need sticky sessions | `consistent_hash` |
 | Bursty traffic patterns | `least_connections` |
+| Prefer the lowest proxy-to-backend ping | `latency` |
 | Just testing / strict fairness | `round_robin` |
 | Very large server pool (50+) | `random` |
 
-→ See [Routing Algorithms](Routing-Algorithms) for detailed explanations of each mode.
+See [Routing Algorithms](Routing-Algorithms) for detailed explanations of each mode.
