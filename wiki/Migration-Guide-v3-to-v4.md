@@ -163,7 +163,7 @@ If upgrading from v4.0.0 to v4.1.0, the config auto-migrates from version 4 to v
 ### New v4.1 Config Sections
 
 ```
-[startup]         → Welcome messages & wiki URL
+[startup]         → Welcome messages
 [lobby]           → Empty lobby strategy (disconnect / fallback_server)
 [bedrock]         → Bedrock/Geyser player support
 ```
@@ -172,7 +172,7 @@ If upgrading from v4.0.0 to v4.1.0, the config auto-migrates from version 4 to v
 
 - `messages.formatting` — legacy color conversion mode (`auto`, `minimessage`, `legacy`)
 - `messages.dashboard_healthy` / `dashboard_draining` / `dashboard_open` / `dashboard_offline` — customizable `/vn servers` status colors
-- `startup.welcome_enabled` / `startup.wiki_url` — first-run experience
+- `startup.welcome_enabled` — first-run experience. The old `startup.wiki_url` key is removed automatically because documentation links now always use the official wiki.
 - `lobby.no_server_strategy` / `lobby.no_server_message` / `lobby.fallback_server` — empty lobby fallbacks
 - `bedrock.*` — full Bedrock/Geyser configuration block
 

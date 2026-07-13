@@ -185,6 +185,8 @@ language = "ru"
 
 Built-ins are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn`. Selecting a built-in replaces the active message file. Any other code is treated as a custom language and preserves values for editing. Player locale is never detected automatically.
 
+Native speakers are warmly invited to improve existing translations or contribute new languages. See the [Language Packs guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Language-Packs) for custom-pack instructions and contribution details.
+
 Configurable text supports MiniMessage, classic `&`/`§` codes, `&#RRGGBB`, and Bungee-style hex colors.
 
 ---
@@ -247,7 +249,7 @@ When enabled, the dashboard serves:
 
 When `bearer_token` is set, the page prompts for it and authenticates API requests through the `Authorization: Bearer <token>` header. A blank token disables authentication and is suitable only for a loopback listener.
 
-See the [Configuration Guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Configuration-Guide) for the `[dashboard]` block. Keep it on loopback or place it behind a secured reverse proxy when exposing it outside the host.
+See the [HTML Dashboard guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/HTML-Dashboard) for the `[dashboard]` block. `127.0.0.1` in the example is universal loopback, not a public IP. Hosting-panel users should use their own allocated dashboard port and the bind address required by their provider or container.
 
 ---
 

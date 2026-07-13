@@ -235,7 +235,7 @@ No. Parties and queues run locally on Velocity and do not require Redis. Redis d
 
 ### How is the HTML dashboard authenticated?
 
-The dashboard is disabled by default. Its API accepts a bearer token through the `Authorization` header; the browser login keeps the token in memory rather than putting it in the URL or persistent browser storage. Keep the listener on loopback unless authentication and network filtering are configured.
+The dashboard is disabled by default. Its API accepts a bearer token through the `Authorization` header; the browser login keeps the token in memory rather than putting it in the URL or persistent browser storage. `127.0.0.1` is the universal loopback address, not a public IP. Hosting-panel users should allocate their own dashboard port and use the bind address required by their container, commonly `0.0.0.0`. Keep the listener on loopback unless authentication and network filtering are configured.
 
 ---
 
@@ -247,7 +247,7 @@ No. Proxy telemetry uses the Velocity bStats project. Backend telemetry uses Buk
 
 ### How do I change language without automatic locale detection?
 
-Change `language` at the top of `messages.toml`. Built-ins are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn`. Restart or run `/vn reload`; the selected pack replaces the active values. Any other code is treated as a custom translation. Leave `active_language` unchanged because VelocityNavigator updates it for you.
+Change `language` at the top of `messages.toml`. Built-ins are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn`. Restart or run `/vn reload`; the selected pack replaces the active values. Any other code is treated as a custom translation. Leave `active_language` unchanged because VelocityNavigator updates it for you. Native speakers who want to improve or add a translation are warmly invited to follow the [Language Packs](Language-Packs) contribution guide.
 
 ---
 

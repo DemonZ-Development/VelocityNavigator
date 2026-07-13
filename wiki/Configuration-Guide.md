@@ -430,13 +430,13 @@ Most servers should keep `channel = "release"`. Choose `beta` only if you want s
 ```toml
 [startup]
 welcome_enabled = true
-wiki_url = "https://github.com/DemonZ-Development/VelocityNavigator/wiki"
 ```
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `welcome_enabled` | boolean | `true` | Show the "Getting Started" dashboard on fresh install and the release notes digest on upgrades. |
-| `wiki_url` | string | `"https://github.com/DemonZ-Development/VelocityNavigator/wiki"` | URL used for wiki anchor links in self-documenting config comments and welcome messages. |
+
+Documentation links always use the official VelocityNavigator wiki and are no longer configurable. Existing `startup.wiki_url` entries are removed automatically the next time the configuration is loaded.
 
 ---
 
@@ -541,12 +541,12 @@ refresh_seconds = 5
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `enabled` | boolean | `false` | Enable the HTML dashboard. |
-| `port` | int | `9226` | Port for the dashboard HTTP server. |
-| `bind_host` | string | `"127.0.0.1"` | Host/IP to bind the dashboard server. |
+| `port` | int | `9226` | Port for the dashboard HTTP server. Hosting-panel users must replace this with a separate allocated port. |
+| `bind_host` | string | `"127.0.0.1"` | Local interface used by the listener. `127.0.0.1` is universal loopback, not a public IP; containers commonly require `0.0.0.0`. |
 | `bearer_token` | string | `""` | Optional bearer token required through the `Authorization` header. Blank means no authentication and is suitable only for a loopback listener. |
 | `refresh_seconds` | int | `5` | Browser refresh interval. Values below two seconds are normalized to two. |
 
-Keep the listener on loopback when possible. For remote access, set a strong bearer token and restrict the port with a firewall or reverse proxy. Tokens are sent through the authorization header, not the URL.
+Keep the listener on loopback when possible. The browser address may be your provider hostname or dashboard domain even when `bind_host` is `0.0.0.0` or a private address. For remote access, set a strong bearer token and restrict the allocated port with a firewall or reverse proxy. Tokens are sent through the authorization header, not the URL.
 
 ---
 
@@ -639,7 +639,6 @@ database_path = ""
 
 [startup]
 welcome_enabled = true
-wiki_url = "https://github.com/DemonZ-Development/VelocityNavigator/wiki"
 
 [bedrock]
 enabled = false

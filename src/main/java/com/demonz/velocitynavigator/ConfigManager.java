@@ -324,9 +324,13 @@ public final class ConfigManager {
         boolean notifyOnStartup = readBoolean(toml, state, "notify_on_startup", defaults.notifyOnStartup(), "notify_on_startup");
         boolean notifyAdminsOnJoin = readBoolean(toml, state, "notify_admins_on_join", defaults.notifyAdminsOnJoin(), "notify_admins_on_join");
 
+        if (rawValue(toml, "startup.wiki_url") != null) {
+            state.normalized = true;
+            state.warnings.add("Removed legacy startup.wiki_url; documentation links now always use the official VelocityNavigator wiki.");
+        }
         Config.StartupSettings startup = new Config.StartupSettings(
                 readBoolean(toml, state, "startup.welcome_enabled", defaults.startup().welcomeEnabled(), "startup.welcome_enabled"),
-                readString(toml, state, "startup.wiki_url", defaults.startup().wikiUrl(), "startup.wiki_url")
+                Config.OFFICIAL_WIKI_URL
         );
 
         Config.LobbyFallbackSettings lobbyFallback = new Config.LobbyFallbackSettings(
@@ -979,7 +983,7 @@ public final class ConfigManager {
     }
 
     private void writeConfig(Config config) throws IOException {
-        String wiki = config.startup() != null ? config.startup().wikiUrl() : "https://github.com/DemonZ-Development/VelocityNavigator/wiki";
+        String wiki = Config.OFFICIAL_WIKI_URL;
         AdvancedConfig advanced = AdvancedConfig.defaults();
         if (Files.exists(configPath)) {
             try {
@@ -1030,10 +1034,6 @@ public final class ConfigManager {
         b.append("# when upgrading from a previous version.\n");
         b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup-first-run-experience\n");
         b.append("welcome_enabled = ").append(config.startup().welcomeEnabled()).append("\n\n");
-        b.append("# The wiki homepage URL used in console messages and config comments.\n");
-        b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#startup-first-run-experience\n");
-        b.append("wiki_url = ").append(quoted(config.startup().wikiUrl())).append("\n\n");
-
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
         b.append("# │  COMMANDS — Player-facing & admin commands                      │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");

@@ -24,6 +24,14 @@ language = "de"
 
 Restart the proxy or run `/vn reload`. Choosing an included language loads the complete pack, so make a copy first if you have edited the current messages.
 
+Automated tests verify that every included pack has the complete set of messages and menu lists, contains no blank entries, switches correctly, and keeps custom-language text intact. Those checks cannot judge whether every sentence sounds natural to a native speaker, so community review still matters.
+
+## Help us add more languages
+
+We are eagerly looking for native speakers who can help make the included translations more natural and bring VelocityNavigator to more languages. If you can improve an existing pack or contribute a new one, please open an [issue](https://github.com/DemonZ-Development/VelocityNavigator/issues) or [pull request](https://github.com/DemonZ-Development/VelocityNavigator/pulls).
+
+When contributing, include the language name and code, translate every player-facing value, and keep placeholders such as `<player>`, `<server>`, and `<time>` unchanged. Native review is especially valuable for party, queue, error, and menu wording that automated checks cannot evaluate.
+
 ## Custom translations
 
 Use your own short code when you want to keep custom text:
@@ -33,6 +41,15 @@ language = "nl"
 ```
 
 Unknown codes are treated as custom packs and your current values are preserved. Leave `active_language` alone; VelocityNavigator updates it to remember which built-in pack is currently written to the file.
+
+To make a private translation for your own network:
+
+1. Back up `messages.toml`.
+2. Set `language` to a code that is not in the included-language table, such as `nl` or `pirate`.
+3. Run `/vn reload` once so the custom code becomes active without replacing your current values.
+4. Translate the message, menu, party, and queue values and reload again.
+
+Because the code is custom, VelocityNavigator will not overwrite those translations with a built-in pack.
 
 VelocityNavigator uses one language for the whole proxy. It does not switch messages automatically from each player's client locale.
 

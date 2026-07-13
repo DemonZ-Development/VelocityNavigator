@@ -37,6 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Dashboard documentation now distinguishes the universal `127.0.0.1` loopback example from provider addresses and explains allocated ports, container binds, and browser URLs.
+- The official wiki URL is now built in. `startup.wiki_url` is no longer written or accepted as a custom documentation target, and legacy entries are removed during configuration normalization.
+- Language documentation now explains structural test coverage, custom packs, and how native speakers can contribute new or improved translations.
 - `routing.use_menu_for_lobby` replaces `use_chat_menu_for_lobby`; the old key remains a compatible alias.
 - Selector mode/fallback lives in `navigator.toml`, language in `messages.toml`, GUI presentation in `gui.toml`, and managed lobby metadata in `servers.toml`. The plugin/config versions are 4.3.0/v8.
 - MiniMessage, classic `&`/`§`, `&#RRGGBB`, and Bungee-style hex colors are accepted in configurable text.

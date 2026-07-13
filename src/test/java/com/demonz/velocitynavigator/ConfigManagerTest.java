@@ -45,6 +45,28 @@ class ConfigManagerTest {
         String navigator = Files.readString(tempDir.resolve("navigator.toml"));
         assertTrue(navigator.contains("Authorization: Bearer <token>"));
         assertFalse(navigator.contains("?token"));
+        assertFalse(navigator.contains("wiki_url"));
+        assertTrue(navigator.contains(Config.OFFICIAL_WIKI_URL));
+    }
+
+    @Test
+    void removesLegacyCustomWikiUrl() throws Exception {
+        Path configPath = tempDir.resolve("navigator.toml");
+        Files.writeString(configPath, """
+                config_version = 8
+
+                [startup]
+                welcome_enabled = true
+                wiki_url = "https://example.invalid/custom-wiki"
+                """);
+
+        ConfigLoadResult result = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test")).load();
+        String rewritten = Files.readString(configPath);
+
+        assertTrue(result.normalized());
+        assertEquals(Config.OFFICIAL_WIKI_URL, result.config().startup().wikiUrl());
+        assertFalse(rewritten.contains("wiki_url"));
+        assertFalse(rewritten.contains("example.invalid"));
     }
 
     @Test

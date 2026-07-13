@@ -26,6 +26,7 @@ import java.util.Map;
 public final class Config {
 
     public static final int CURRENT_VERSION = 8;
+    public static final String OFFICIAL_WIKI_URL = "https://github.com/DemonZ-Development/VelocityNavigator/wiki";
 
     private final int configVersion;
     private final Commands commands;
@@ -75,7 +76,7 @@ public final class Config {
                 geoRouting,
                 notifyOnStartup,
                 notifyAdminsOnJoin,
-                new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki"),
+                new StartupSettings(true, OFFICIAL_WIKI_URL),
                 new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", ""),
                 new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>")
         );
@@ -177,7 +178,7 @@ public final class Config {
         this.geoRouting = geoRouting;
         this.notifyOnStartup = notifyOnStartup;
         this.notifyAdminsOnJoin = notifyAdminsOnJoin;
-        this.startup = startup == null ? new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki") : startup;
+        this.startup = startup == null ? new StartupSettings(true, OFFICIAL_WIKI_URL) : startup;
         this.lobbyFallback = lobbyFallback == null ? new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", "") : lobbyFallback;
         this.bedrock = bedrock == null ? new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>") : bedrock;
         this.dashboard = dashboard == null ? DashboardSettings.disabled() : dashboard;
@@ -245,7 +246,7 @@ public final class Config {
                 new GeoRoutingSettings(false, ""),
                 true,
                 true,
-                new StartupSettings(true, "https://github.com/DemonZ-Development/VelocityNavigator/wiki"),
+                new StartupSettings(true, OFFICIAL_WIKI_URL),
                 new LobbyFallbackSettings("disconnect", "<red>No lobby servers are currently available. Please try again later.</red>", ""),
                 new BedrockSettings(false, true, true, true, true, "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient>", "<gray>Select a lobby server to connect:</gray>", "<white><bold>{server}</bold></white> <gray>({players} Players)</gray>")
         );
@@ -697,7 +698,7 @@ public final class Config {
 
     public record StartupSettings(boolean welcomeEnabled, String wikiUrl) {
         public StartupSettings {
-            wikiUrl = sanitizeText(wikiUrl, "https://github.com/DemonZ-Development/VelocityNavigator/wiki");
+            wikiUrl = OFFICIAL_WIKI_URL;
         }
     }
 

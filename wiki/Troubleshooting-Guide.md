@@ -150,11 +150,11 @@ VelocityNavigator keeps timestamped backups in `plugins/velocitynavigator/backup
 
 Check `dashboard.enabled`, `dashboard.port`, and `dashboard.bind_host`. The dashboard and Prometheus exporter cannot use the same port.
 
-`127.0.0.1` accepts connections only from the proxy machine. For remote access, bind to a private interface, set a strong bearer token, and restrict the port with a firewall or reverse proxy. See [HTML Dashboard](HTML-Dashboard).
+`127.0.0.1` is universal loopback and accepts connections only from the proxy machine; it is not a personal or public IP. For remote access, bind to a private interface, set a strong bearer token, and restrict the port with a firewall or reverse proxy. Pterodactyl and other hosting-panel users must allocate a separate dashboard port, put that exact number in `dashboard.port`, and normally use `0.0.0.0` inside the container. See [HTML Dashboard](HTML-Dashboard).
 
 ## Prometheus cannot bind
 
-An “address already in use” error means another process has the configured port. Choose a free port. “Cannot assign requested address” means the selected IP is not attached to that host or container.
+An “address already in use” error means another process has the configured port. Choose a free port, or another allocation supplied by your provider. “Cannot assign requested address” means the selected IP is not attached to that host or container; do not paste the provider's public IP into `bind_host` unless its documentation requires it.
 
 For local scraping, use `127.0.0.1`. For a container or remote scraper, use an appropriate private bind address, bearer token, and firewall rule. The [Prometheus and Grafana Setup](Prometheus-&-Grafana-Setup) page includes a ready configuration and dashboard import flow.
 
