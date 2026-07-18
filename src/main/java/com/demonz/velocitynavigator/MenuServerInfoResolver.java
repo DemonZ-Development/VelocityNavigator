@@ -9,6 +9,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,6 +27,11 @@ final class MenuServerInfoResolver {
         Set<String> online = onlineCandidates == null ? Set.of() : onlineCandidates.stream()
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
+        ServerHealthService healthService = plugin.healthService();
+        Map<String, ServerHealthService.HealthSnapshot> snapshots = healthService == null
+                ? Map.of() : healthService.getHealthSnapshots();
+        Map<String, String> backendStates = healthService == null
+                ? Map.of() : healthService.getBackendStates();
         List<MenuServerInfo> result = new ArrayList<>();
         for (String serverName : candidates) {
             String normalized = serverName.toLowerCase(Locale.ROOT);
@@ -35,56 +41,80 @@ final class MenuServerInfoResolver {
                     ? CircuitBreaker.State.CLOSED
                     : plugin.circuitBreaker().getState(normalized);
 
-            String status;
-            String statusColor;
-            if (!available) {
-                status = config.language().text("menus.status_offline");
-                statusColor = config.messages().dashboardOffline();
-            } else if (circuitState == CircuitBreaker.State.OPEN) {
-                status = config.language().text("menus.status_open");
-                statusColor = config.messages().dashboardOpen();
-            } else if (drained) {
-                status = config.language().text("menus.status_draining");
-                statusColor = config.messages().dashboardDraining();
-            } else {
-                status = config.language().text("menus.status_healthy");
-                statusColor = config.messages().dashboardHealthy();
-            }
-
             Optional<RegisteredServer> registered = plugin.server().getServer(serverName);
             int players = registered.map(value -> value.getPlayersConnected().size()).orElse(0);
-            int maxPlayers = findMaxPlayers(config, serverName);
+            int maxPlayers = plugin.lobbyEntry(serverName)
+                    .map(Config.LobbyEntry::maxPlayers)
+                    .orElse(Config.LobbyEntry.UNCAPPED);
             String maxPlayersText = maxPlayers == Config.LobbyEntry.UNCAPPED ? "-" : String.valueOf(maxPlayers);
-            long latency = plugin.healthService() == null
+            ServerHealthService.HealthSnapshot snapshot = snapshots.get(normalized);
+            String backendState = snapshot != null && snapshot.state() != null && !snapshot.state().isBlank()
+                    ? snapshot.state()
+                    : backendStates.getOrDefault(normalized, "");
+            MenuServerState menuState = resolveState(
+                    available,
+                    snapshot == null ? null : snapshot.online(),
+                    drained,
+                    circuitState == CircuitBreaker.State.CLOSED,
+                    maxPlayers != Config.LobbyEntry.UNCAPPED && players >= maxPlayers,
+                    backendState,
+                    healthService == null || healthService.isRoutingStateAllowed(serverName)
+            );
+            String status = config.language().text(menuState.languageKey());
+            String statusColor = switch (menuState) {
+                case HEALTHY -> config.messages().dashboardHealthy();
+                case DRAINING -> config.messages().dashboardDraining();
+                case OFFLINE -> config.messages().dashboardOffline();
+                case FULL -> "<red>";
+                case IN_GAME -> "<light_purple>";
+            };
+            long latency = healthService == null
                     ? -1L
-                    : plugin.healthService().getLatencies().getOrDefault(normalized, -1L);
+                    : healthService.getLatencies().getOrDefault(normalized, -1L);
 
             result.add(new MenuServerInfo(
                     serverName,
+                    plugin.guiConfig().displayName(serverName),
+                    plugin.guiConfig().description(serverName),
                     players,
                     maxPlayersText,
                     status,
                     statusColor,
                     latency < 0 ? "?" : String.valueOf(latency),
-                    available
+                    available,
+                    menuState
             ));
         }
         return List.copyOf(result);
     }
 
-    private static int findMaxPlayers(Config config, String serverName) {
-        for (Config.LobbyEntry entry : config.routing().defaultLobbies()) {
-            if (entry.server().equalsIgnoreCase(serverName)) {
-                return entry.maxPlayers();
-            }
-        }
-        for (Config.GroupConfig group : config.routing().contextual().groups().values()) {
-            for (Config.LobbyEntry entry : group.servers()) {
-                if (entry.server().equalsIgnoreCase(serverName)) {
-                    return entry.maxPlayers();
-                }
-            }
-        }
-        return Config.LobbyEntry.UNCAPPED;
+    static MenuServerState resolveState(boolean available, Boolean healthOnline, boolean drained,
+                                        boolean circuitHealthy, boolean full, String backendState) {
+        return resolveState(available, healthOnline, drained, circuitHealthy, full, backendState, true);
     }
+
+    static MenuServerState resolveState(boolean available, Boolean healthOnline, boolean drained,
+                                        boolean circuitHealthy, boolean full, String backendState,
+                                        boolean backendStateAllowed) {
+        if (Boolean.FALSE.equals(healthOnline) || !circuitHealthy) {
+            return MenuServerState.OFFLINE;
+        }
+        if (drained) {
+            return MenuServerState.DRAINING;
+        }
+        if (backendState != null && "IN_GAME".equalsIgnoreCase(backendState.trim())) {
+            return MenuServerState.IN_GAME;
+        }
+        if (!backendStateAllowed) {
+            return MenuServerState.OFFLINE;
+        }
+        if (full) {
+            return MenuServerState.FULL;
+        }
+        if (available || Boolean.TRUE.equals(healthOnline)) {
+            return MenuServerState.HEALTHY;
+        }
+        return MenuServerState.OFFLINE;
+    }
+
 }

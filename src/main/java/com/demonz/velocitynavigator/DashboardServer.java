@@ -29,13 +29,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class DashboardServer {
 
     private final VelocityNavigator plugin;
     private final Logger logger;
-    private final AtomicLong recentEventCounter = new AtomicLong(0);
     private HttpServer server;
     private volatile String bearerToken = "";
 

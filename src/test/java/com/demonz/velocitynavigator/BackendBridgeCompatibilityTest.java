@@ -29,7 +29,7 @@ class BackendBridgeCompatibilityTest {
         String plugin = Files.readString(Path.of("src/main/resources/plugin.yml"));
         String config = Files.readString(Path.of("src/main/resources/config.yml"));
         assertTrue(plugin.contains("main: com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge"));
-        assertTrue(plugin.contains("version: '4.3.0'"));
+        assertTrue(plugin.contains("version: '4.4.0'"));
         assertTrue(plugin.contains("api-version: '1.16'"));
         assertTrue(config.contains("enabled: true"));
         assertTrue(config.contains("inventory_menu_enabled: true"));

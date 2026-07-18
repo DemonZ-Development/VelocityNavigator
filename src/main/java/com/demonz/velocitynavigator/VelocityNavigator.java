@@ -59,7 +59,7 @@ import java.util.concurrent.TimeUnit;
 @Plugin(
         id = "velocitynavigator",
         name = "VelocityNavigator",
-        version = "4.3.0",
+        version = "4.4.0",
         description = "Lobby routing and load balancing for Velocity proxies.",
         authors = {"DemonZDevelopment"}
 )
@@ -686,6 +686,7 @@ public final class VelocityNavigator implements NavigatorAPI {
                 <gray>/velocitynavigator server remove &lt;name&gt;</gray> <white>Remove a managed backend</white>
                 <gray>/velocitynavigator server list</gray> <white>List command-managed lobbies</white>
                 <gray>/velocitynavigator config validate</gray> <white>Validate runtime and managed configuration</white>
+                <gray>/vn menu validate</gray> <white>Validate gui.toml selector IDs, slots, materials, and placeholders</white>
                 <gray>/velocitynavigator version</gray> <white>Show installed and remote version info</white>
                 <gray>/velocitynavigator updatecheck</gray> <white>Check Modrinth for updates</white>
                 <gray>/velocitynavigator debug player &lt;name&gt;</gray> <white>Preview routing for a player</white>

@@ -18,13 +18,13 @@ Also back up your entire `plugins/velocitynavigator/` directory if you want to b
 
 ## Step 1: Replace the JAR
 
-1. Download `VelocityNavigator-4.3.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
+1. Download `VelocityNavigator-4.4.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
 2. Remove the old JAR from `plugins/`.
 3. Place the new JAR in `plugins/`.
 
 ```
 plugins/
-├── VelocityNavigator-4.3.0.jar   ← new
+├── VelocityNavigator-4.4.0.jar   ← new
 └── velocitynavigator/
     ├── navigator.toml              ← will be auto-migrated
     └── ...
@@ -263,6 +263,32 @@ All advanced systems can remain disabled. Review [Advanced Proxy Systems](Advanc
 | `/vn config validate` | Validate commands, listeners, Redis, queue, and managed files |
 
 After migration, run `/vn config validate`, restart every bridged backend, and use `/vn bridge status` before enabling the Java inventory selector for players.
+
+---
+
+## v4.4.0 Update: Selector Customization
+
+VelocityNavigator 4.4.0 keeps `navigator.toml` at config version 8 and advances the menu-only `gui.toml` schema to `config_version = 2`. On first load, a v1 GUI file is copied to `gui.toml.v1.bak` and normalized as v2. Existing server IDs and routing configuration continue to work unchanged. Old GUI entries remain compatible: missing names fall back to raw IDs, descriptions are empty, ordering stays unchanged, and servers remain visible. Existing explicit item-name, lore, material, and unavailable-material overrides are preserved; entries without an explicit override inherit the new v4.4 state defaults.
+
+```toml
+config_version = 2
+
+[servers]
+"lobby1" = { display_name = "Main Lobby 1", description = "Events and portals", menu_order = 10, show_in_menu = true, slot = -1, material = "", unavailable_material = "", name = "", lore = [] }
+"holding" = { display_name = "Holding Server", description = "", menu_order = -1, show_in_menu = false, slot = -1, material = "", unavailable_material = "", name = "", lore = [] }
+```
+
+The table key remains the raw `velocity.toml` ID. `display_name` and `description` are shared by Java inventory, Java chat, and Bedrock templates. A blank display name falls back to the raw ID. Templates can use `{server}`/`{display_name}`, `{server_id}`, and `{description}`.
+
+Explicit nonnegative `menu_order` values sort first across all selectors; `-1` preserves existing order. `show_in_menu = false` hides an entry from all selectors but does not remove it from automatic routing. Java's fixed `slot` still controls the physical inventory cell.
+
+Optional `[states.full]`, `[states.draining]`, `[states.offline]`, and `[states.in_game]` tables add Java inventory `material`, `name`, and `lore` templates. A per-server name/lore remains final, then the matching state template, then the localized default. State materials are Java-only; chat and Bedrock can use `{status}` in their own templates.
+
+Bedrock `sort_mode = "name"` now sorts the displayed aliases. Duplicate aliases are allowed because selection security and connection requests still use raw IDs, but unique labels are recommended so players can distinguish the choices.
+
+After upgrading, run `/vn reload`, `/vn menu validate`, and `/vn config validate`. The menu validator checks unknown server IDs, duplicate labels, slots, material-identifier syntax, and curly-brace placeholders. No routing-ID rename or proxy restart is required.
+
+Localized per-language display names are not included in v4.4.0. Language packs continue to control shared selector templates and status text.
 
 ---
 

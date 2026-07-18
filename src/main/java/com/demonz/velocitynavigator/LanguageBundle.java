@@ -127,9 +127,11 @@ public final class LanguageBundle {
         strings.put("queue.not_queued", "<gray>You are not currently queued.</gray>");
 
         strings.put("menus.status_healthy", "HEALTHY");
+        strings.put("menus.status_full", "FULL");
         strings.put("menus.status_draining", "DRAINED");
         strings.put("menus.status_open", "CB_OPEN");
         strings.put("menus.status_offline", "OFFLINE");
+        strings.put("menus.status_in_game", "IN GAME");
         strings.put("menus.chat.header", "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient> <gray>(Hover to view status, click to connect)</gray>");
         strings.put("menus.chat.entry", "  <gray>•</gray> <white><bold>{server}</bold></white> <gray>| Click to connect</gray>");
         strings.put("menus.chat.tooltip", "<white><bold>{server}</bold></white>\n<gray>Status:</gray> {status_color}{status}\n<gray>Players:</gray> <white>{players}/{max_players}</white>\n<gray>Ping:</gray> <white>{ping}ms</white>");

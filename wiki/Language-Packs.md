@@ -66,6 +66,15 @@ cooldown = "<yellow>Please wait <time> more second(s).</yellow>"
 
 Party, queue, menu, and admin messages have their own placeholders. The comments written above each setting show the values available there.
 
+Selector templates have an additional distinction:
+
+- `{server}` and `{display_name}` show the player-facing alias configured under `[servers]` in `gui.toml`.
+- `{server_id}` shows the exact server ID registered in `velocity.toml`.
+- `{description}` shows the shared per-server selector description.
+- If `display_name` is blank or missing, all display-name placeholders fall back to the raw ID.
+
+These braces are used by chat, inventory, and Bedrock selector templates. Connection messages such as `connecting = "...<server>..."` continue to receive the actual connection target. Display aliases never replace the raw ID in routing, selector tokens, or connection requests.
+
 ## Colors and formatting
 
 The text fields accept:
@@ -85,7 +94,9 @@ The same file also contains the default text used by selectors:
 - `[menus.inventory]` for the Java inventory title, item names, and lore
 - `[menus.bedrock]` for the Bedrock form title, content, and buttons
 
-Per-server icons, slots, names, and lore overrides belong in `gui.toml`; see [Java and Bedrock Selectors](Java-and-Bedrock-Selectors).
+Per-server display aliases, descriptions, ordering, visibility, icons, slots, inventory templates, and state styles belong in `gui.toml`; see [Selector Customization](Server-Display-Names). The inventory `name`/`lore` fields are final per-server templates and take precedence over state and localized defaults. Run `/vn reload` after changing either file.
+
+Version 4.4.0 has one `display_name` and `description` per server; it does not provide localized per-language aliases. Language packs translate the surrounding selector templates, controls, status values, and other shared wording.
 
 ## After editing
 

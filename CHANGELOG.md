@@ -5,6 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [4.4.0] - Unreleased
+
+### Added
+
+- Added verified Velocity 4.0.0 support while retaining the Java 17 bytecode and Velocity 3.4 API baseline used by Velocity 3.4.x and 3.5.x installations. A Java 25/API 4/Adventure 5 compatibility build and a Velocity 4.0.0 startup smoke test now guard the same JAR in CI.
+- Added optional per-server `display_name` values in `gui.toml`. A name such as `lobby1` in `velocity.toml` can now appear as `Main Lobby 1` in the Java inventory, Java chat selector, and Bedrock form.
+- Added optional per-server `description`, `menu_order`, and `show_in_menu` values. Descriptions are available through `{description}`, explicit menu order is shared by all selectors, and hidden entries remain eligible for automatic routing.
+- Added selector placeholders for presentation and diagnostics: `{server}` and `{display_name}` resolve to the configured alias, `{server_id}` exposes the raw Velocity server ID, and `{description}` resolves to the shared menu description.
+- Added `/vn menu validate` to audit selector server IDs, duplicate display names, slots, material-identifier syntax, and curly-brace placeholders before players open a menu.
+- Added global Java inventory styles for `[states.full]`, `[states.draining]`, `[states.offline]`, and `[states.in_game]`, each with optional `material`, `name`, and `lore` overrides.
+
+### Changed
+
+- Inventory navigation controls are now kept in the reserved bottom row for every supported `layout.rows` value. This prevents an automatic server item from occupying a custom control slot and silently hiding that control.
+- Bedrock `sort_mode = "name"` now sorts by the displayed alias instead of the raw server ID.
+- Explicit nonnegative `menu_order` values are the primary order in Java inventory, Java chat, and Bedrock selectors. Unset values keep the existing candidate order; Bedrock uses its configured `sort_mode` to resolve equal ordering values.
+- `show_in_menu = false` removes a server from all three selectors without draining it or removing it from automatic routing.
+- Blank or missing aliases fall back to the raw server ID. Selector changes are applied by `/vn reload`; no proxy restart or `navigator.toml` schema migration is required.
+- Display aliases are presentation-only. Inventory targets, one-time token allowlists, chat callbacks, Bedrock response mapping, health lookups, and connection requests continue to use the raw registered server ID.
+- Java inventory state styles are applied after availability is resolved. A per-server `name` or `lore` remains final; otherwise the matching state template is used before the localized default. For unavailable entries, a per-server `unavailable_material` remains final, followed by the state material and global unavailable fallback. Healthy entries keep their per-server/global normal material.
+- `gui.toml` now uses `config_version = 2`; `navigator.toml` remains at config version 8.
+
+### Not included
+
+- Localized per-language display names are not part of 4.4.0. Existing language packs still control shared selector templates and status text.
+
+---
+
 ## [4.3.0] - 2026-07-14
 
 ### Advanced proxy systems

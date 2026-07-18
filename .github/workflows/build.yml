@@ -22,7 +22,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -49,17 +51,78 @@ jobs:
           name: VelocityNavigator-${{ steps.version.outputs.version }}
           path: target/VelocityNavigator-*.jar
 
+  velocity4-compatibility:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Verify against Velocity 4 API
+        run: mvn clean verify -Pvelocity4-compat --batch-mode --no-transfer-progress
+
+      - name: Download release-candidate universal JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: VelocityNavigator-${{ needs.build.outputs.version }}
+          path: target/velocity4-smoke/plugins
+
+      - name: Smoke test release-candidate JAR on Velocity 4.0.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.build.outputs.version }}'
+          mkdir -p target/velocity4-smoke/plugins
+          curl --fail --location --silent --show-error \
+            'https://fill-data.papermc.io/v1/objects/4540289f48c83e305fc2f2c495a84d1f4d0b7f360830251e169dd5a208740e70/velocity-4.0.0-6.jar' \
+            --output target/velocity4-smoke/velocity.jar
+          echo '4540289f48c83e305fc2f2c495a84d1f4d0b7f360830251e169dd5a208740e70  target/velocity4-smoke/velocity.jar' | sha256sum --check
+          test -f "target/velocity4-smoke/plugins/VelocityNavigator-${version}.jar"
+          cd target/velocity4-smoke
+          { sleep 10; echo 'vn status'; sleep 2; echo 'shutdown'; } | timeout 45s java -Xms128M -Xmx512M -jar velocity.jar > velocity4.log 2>&1
+          cat velocity4.log
+          grep -F 'Booting up Velocity 4.0.0' velocity4.log
+          grep -F "Loaded plugin velocitynavigator ${version}" velocity4.log
+          grep -F "VelocityNavigator v${version} enabled" velocity4.log
+          grep -F 'Done (' velocity4.log
+
+  release:
+    needs: [build, velocity4-compatibility]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.create_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified release JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: VelocityNavigator-${{ needs.build.outputs.version }}
+          path: release-artifacts
+
       - name: Extract Release Notes
         run: |
           awk '/^## \[/{if (p) exit; p=1; print; next} p' CHANGELOG.md > release_notes.md
 
       - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.create_release }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: VelocityNavigator v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: VelocityNavigator v${{ needs.build.outputs.version }}
           body_path: release_notes.md
-          files: target/VelocityNavigator-*.jar
+          files: release-artifacts/VelocityNavigator-*.jar
           draft: false
           prerelease: ${{ inputs.prerelease }}

@@ -6,7 +6,7 @@ The backend bridge is optional. Install it when you want a Java inventory select
 
 ## Install and verify
 
-1. Put the same `VelocityNavigator-4.3.0.jar` on the Velocity proxy and the backend's `plugins/` directory.
+1. Put the same `VelocityNavigator-4.4.0.jar` on the Velocity proxy and the backend's `plugins/` directory.
 2. Start the backend once to create `plugins/VelocityNavigator/config.yml`.
 3. Join that backend through the proxy once.
 4. On the proxy, run `/vn bridge status` and confirm the backend is listed.

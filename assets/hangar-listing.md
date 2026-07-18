@@ -8,6 +8,15 @@ It works well on a small network with two lobbies, but it also has the controls 
 
 > Get the current JAR with the **Download** button on this Hangar page. The same JAR runs on Velocity and, when needed, on Paper or Spigot.
 
+## New in 4.4: one selector identity, three menu types
+
+- Give `lobby1` a friendly `display_name` and shared `description` without changing its routing ID
+- Use `menu_order` across Java inventory, Java chat, and Bedrock, or hide internal entries with `show_in_menu = false`
+- Style full, draining, offline, and in-game Java inventory items with reusable materials, names, and lore
+- Run `/vn menu validate` to check IDs, duplicate labels, slots, material identifiers, and `{...}` placeholders before rollout
+
+Visibility and presentation are menu-only: health checks, tokens, callbacks, automatic routing, and connections retain the raw Velocity server ID.
+
 ## Better lobby routing
 
 ![A player being routed to a healthy lobby](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/01-smart-routing.png?v=2)
@@ -39,7 +48,7 @@ Java players can use a paginated chest-style inventory rendered by the optional 
 
 Geyser/Floodgate players can use a native Bedrock form. Networks without either GUI can keep the clickable chat selector.
 
-Both screenshots come from running Minecraft clients. The layout lives in `gui.toml`; you can change rows, materials, filler items, server icons, fixed slots, titles, lore, navigation buttons, refresh timing, and unavailable-server styling. Menu text supports MiniMessage, classic color codes, and RGB colors.
+Both screenshots come from running Minecraft clients. The layout lives in `gui.toml`; you can change rows, materials, filler items, server icons, fixed slots, titles, lore, navigation buttons, refresh timing, and state styling. Per-server display names, descriptions, ordering, and visibility are shared by all three selectors. Java inventory items can inherit separate full, draining, offline, and in-game styles. Menu text supports MiniMessage, classic color codes, RGB colors, and safe placeholders for both friendly labels and raw IDs.
 
 ## One JAR, optional backend install
 
@@ -87,7 +96,7 @@ The most useful first checks are `/vn health`, `/vn servers`, `/vn bridge status
 
 ## Quick setup
 
-1. Download `VelocityNavigator-4.3.0.jar` with this page's **Download** button.
+1. Download `VelocityNavigator-4.4.0.jar` with this page's **Download** button.
 2. Put it in the Velocity proxy's `plugins` folder.
 3. Start the proxy once to create the configuration files.
 4. Add your lobby names to `navigator.toml` or use `/vn server add lobby`.
@@ -121,23 +130,24 @@ The server names must already exist in Velocity's `velocity.toml`.
 | `/vn server add game|lobby ...` | Add a normal game backend or an active routed lobby |
 | `/vn server dry-run ...`, `/vn server list`, `/vn server remove <name>` | Preview, inspect, or remove managed server entries |
 | `/vn config validate` | Check the active configuration for common mistakes |
+| `/vn menu validate` | Audit selector IDs, labels, slots, material identifiers, and `{...}` placeholders |
 | `/vn reload` | Reload proxy-side configuration files |
 
 `velocitynavigator.use` controls the player lobby command. `velocitynavigator.admin` controls the admin commands.
 
 ## Compatibility
 
-- Velocity 3.x
-- Java 17 or newer
+- Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with the same JAR
+- Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, or Java 25 for Velocity 4.0.0
 - Minecraft versions supported by your Velocity build
 - Optional Paper/Spigot bridge built against the 1.16.5 API without version-specific NMS
 - Geyser and Floodgate for native Bedrock forms
 
-VelocityNavigator does not run on BungeeCord or Waterfall. Redis Cluster and Sentinel discovery are not included. GeoIP routing is not available in 4.3.0.
+VelocityNavigator does not run on BungeeCord or Waterfall. Redis Cluster and Sentinel discovery are not included. GeoIP routing is not available in 4.4.0.
 
-## Updating from 4.2
+## Updating from 4.3
 
-Keep a copy of your current JAR and plugin folder, replace the JAR, then start one proxy first. Version 4.3 updates the configuration layout and keeps a backup of the previous file. Run `/vn config validate` and try `/lobby` before updating the rest of the network.
+Keep a copy of your current JAR and plugin folder, replace the JAR, then start one proxy first. Version 4.4 keeps `navigator.toml` at schema 8 and advances the menu-only `gui.toml` schema to 2. Existing menu entries remain compatible. Add optional selector metadata/state styles, run `/vn reload`, then run both `/vn menu validate` and `/vn config validate` before trying `/lobby`. Localized per-language server names are not included in 4.4.
 
 ## Help
 

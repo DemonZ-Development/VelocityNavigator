@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,6 +48,10 @@ class ConfigManagerTest {
         assertFalse(navigator.contains("?token"));
         assertFalse(navigator.contains("wiki_url"));
         assertTrue(navigator.contains(Config.OFFICIAL_WIKI_URL));
+        String gui = Files.readString(tempDir.resolve("gui.toml"));
+        assertTrue(gui.contains("config_version = 2"));
+        assertTrue(gui.contains("display_name = \"Main Lobby 1\""));
+        assertTrue(gui.contains("[states.full]"));
     }
 
     @Test
@@ -147,15 +152,120 @@ class ConfigManagerTest {
                 refresh_material = "CLOCK"
                 next_material = "ARROW"
                 [servers]
-                "lobby-1" = { slot = 10, material = "NETHER_STAR", name = "&#55FFFFLobby One", lore = ["&7Custom"] }
+                "lobby-1" = { display_name = "  Main Lobby 一  ", description = "  Classic lobby  ", menu_order = 7, show_in_menu = false, slot = 10, material = "NETHER_STAR", name = "&#55FFFFLobby One", lore = ["&7Custom"] }
                 """);
 
+        String navigatorBeforeGuiMigration = Files.readString(tempDir.resolve("navigator.toml"));
         manager.load();
         GuiConfig gui = manager.guiConfig();
         assertEquals(5, gui.rows());
         assertEquals("ENDER_PEARL", gui.defaultMaterial());
         assertEquals(10, gui.server("LOBBY-1").slot());
         assertEquals("NETHER_STAR", gui.server("lobby-1").material());
+        assertEquals("Main Lobby 一", gui.server("lobby-1").displayName());
+        assertEquals("Main Lobby 一", gui.displayName("LOBBY-1"));
+        assertEquals("Classic lobby", gui.description("LOBBY-1"));
+        assertEquals(7, gui.server("lobby-1").menuOrder());
+        assertFalse(gui.server("lobby-1").showInMenu());
+        assertEquals("&#55FFFFLobby One", gui.server("lobby-1").name());
+        assertTrue(Files.exists(tempDir.resolve("gui.toml.v1.bak")));
+        assertTrue(Files.readString(tempDir.resolve("gui.toml.v1.bak")).contains("config_version = 1"));
+        assertTrue(Files.readString(tempDir.resolve("gui.toml")).contains("config_version = 2"));
+        assertEquals(navigatorBeforeGuiMigration, Files.readString(tempDir.resolve("navigator.toml")));
+    }
+
+    @Test
+    void existingBuiltInLanguageUsesTranslatedFallbacksForNewMessageKeys() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Path messages = tempDir.resolve("messages.toml");
+        Files.writeString(messages, Files.readString(messages)
+                .replaceFirst("(?m)^language = \"en\"$", "language = \"es\""));
+        manager.load();
+
+        String withoutNewStatuses = Files.readString(messages)
+                .replaceAll("(?m)^status_full = .*\\R?", "")
+                .replaceAll("(?m)^status_in_game = .*\\R?", "");
+        Files.writeString(messages, withoutNewStatuses);
+
+        LanguageBundle loaded = manager.load().config().language();
+        LanguageBundle spanish = LanguagePacks.bundle("es");
+        assertEquals(spanish.text("menus.status_full"), loaded.text("menus.status_full"));
+        assertEquals(spanish.text("menus.status_in_game"), loaded.text("menus.status_in_game"));
+    }
+
+    @Test
+    void loadsVersionTwoStatePresentationAndServerMetadata() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Files.writeString(tempDir.resolve("gui.toml"), """
+                config_version = 2
+
+                [states.full]
+                material = "REDSTONE_BLOCK"
+                name = "<red>{server}: {status}</red>"
+                lore = ["<gray>{description}</gray>"]
+
+                [states.in_game]
+                material = "ENDER_CHEST"
+                name = "<light_purple>{status}</light_purple>"
+                lore = []
+
+                [servers]
+                "lobby-1" = { display_name = "Main Lobby", description = "Survival", menu_order = 3, show_in_menu = true }
+                "internal" = { show_in_menu = false }
+                """);
+
+        ConfigLoadResult result = manager.load();
+        GuiConfig gui = manager.guiConfig();
+
+        assertFalse(result.warnings().stream().anyMatch(warning -> warning.contains("Migrated gui.toml")));
+        assertEquals("REDSTONE_BLOCK", gui.stateStyle(MenuServerState.FULL).material());
+        assertEquals("<red>{server}: {status}</red>", gui.stateStyle(MenuServerState.FULL).name());
+        assertEquals(List.of("<gray>{description}</gray>"), gui.stateStyle(MenuServerState.FULL).lore());
+        assertEquals("ENDER_CHEST", gui.stateStyle(MenuServerState.IN_GAME).material());
+        assertEquals("Survival", gui.description("lobby-1"));
+        assertEquals(3, gui.server("lobby-1").menuOrder());
+        assertFalse(gui.server("internal").showInMenu());
+        assertFalse(Files.exists(tempDir.resolve("gui.toml.v1.bak")));
+    }
+
+    @Test
+    void warnsAndFallsBackWhenGuiDisplayNameIsNotAString() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Files.writeString(tempDir.resolve("gui.toml"), """
+                config_version = 1
+                [servers]
+                "lobby-1" = { display_name = 42, name = "<aqua>{server}</aqua>" }
+                """);
+
+        ConfigLoadResult result = manager.load();
+
+        assertTrue(result.warnings().stream().anyMatch(warning ->
+                warning.contains("lobby-1") && warning.contains("display_name must be a string")));
+        assertEquals("", manager.guiConfig().server("lobby-1").displayName());
+        assertEquals("lobby-1", manager.guiConfig().displayName("lobby-1"));
+        assertEquals("<aqua>{server}</aqua>", manager.guiConfig().server("lobby-1").name());
+    }
+
+    @Test
+    void warnsButKeepsDistinctTargetsWhenGuiDisplayNamesMatch() throws Exception {
+        ConfigManager manager = new ConfigManager(tempDir, LoggerFactory.getLogger("config-test"));
+        manager.load();
+        Files.writeString(tempDir.resolve("gui.toml"), """
+                config_version = 1
+                [servers]
+                "lobby-1" = { display_name = "Main Lobby" }
+                "lobby-2" = { display_name = "main lobby" }
+                """);
+
+        ConfigLoadResult result = manager.load();
+
+        assertTrue(result.warnings().stream().anyMatch(warning ->
+                warning.contains("lobby-1") && warning.contains("lobby-2") && warning.contains("ambiguous")));
+        assertEquals("Main Lobby", manager.guiConfig().displayName("lobby-1"));
+        assertEquals("main lobby", manager.guiConfig().displayName("lobby-2"));
     }
 
     @Test

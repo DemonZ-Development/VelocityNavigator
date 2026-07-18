@@ -32,6 +32,8 @@ import java.util.Objects;
 
 public final class ConfigManager {
 
+    private static final int GUI_CONFIG_VERSION = 2;
+
     private final Path dataDirectory;
     private final Path configPath;
     private final Path messagesPath;
@@ -73,7 +75,7 @@ public final class ConfigManager {
             writeGui(this.guiConfig);
             return new ConfigLoadResult(
                     defaults,
-                    List.of("Created navigator.toml, messages.toml, and gui.toml with the v4.3 default layout; servers.toml is initialized by server management."),
+                    List.of("Created navigator.toml, messages.toml, and gui.toml with the v4.4 default layout; servers.toml is initialized by server management."),
                     true,
                     false,
                     null,
@@ -439,6 +441,14 @@ public final class ConfigManager {
             return switched;
         }
 
+        LanguageBundle languageDefaults = LanguagePacks.isSupported(selectedLanguage)
+                ? LanguagePacks.bundle(selectedLanguage)
+                : defaults;
+        strings.clear();
+        strings.putAll(languageDefaults.strings());
+        lists.clear();
+        lists.putAll(languageDefaults.lists());
+
         for (String key : defaults.strings().keySet()) {
             Object value = rawValue(messageToml, key);
             if (value instanceof String text && !text.isBlank()) {
@@ -471,7 +481,7 @@ public final class ConfigManager {
         }
         String formatting = strings.get("messages.formatting").trim().toLowerCase(Locale.ROOT);
         if (!List.of("auto", "minimessage", "legacy").contains(formatting)) {
-            strings.put("messages.formatting", defaults.text("messages.formatting"));
+            strings.put("messages.formatting", languageDefaults.text("messages.formatting"));
             state.warnings.add("messages.formatting must be auto, minimessage, or legacy; the default was used.");
         }
         LanguageBundle loaded = new LanguageBundle(selectedLanguage, selectedLanguage, strings, lists);
@@ -484,7 +494,7 @@ public final class ConfigManager {
 
     private void writeMessages(LanguageBundle language) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.3.0 language and menu text\n");
+        b.append("# VelocityNavigator 4.4.0 language and menu text\n");
         b.append("# MiniMessage formatting and documented placeholders are supported.\n");
         b.append("# Built-ins: ").append(String.join(", ", LanguagePacks.supportedCodes())).append(". Any other code is treated as a custom language.\n");
         b.append("# Change language, restart or /vn reload, and built-in text will be replaced automatically.\n\n");
@@ -564,16 +574,23 @@ public final class ConfigManager {
         Toml guiToml;
         try {
             guiToml = new Toml().read(guiPath.toFile());
-            if (guiToml.getTable("bedrock") == null) {
-                Files.writeString(guiPath, "\n[bedrock]\nenabled = true\nfallback_to_chat = true\nsort_mode = \"routing\"\nmax_buttons = 100\nshow_players = true\nshow_max_players = true\nshow_ping = true\nshow_status = true\ntitle = \"\"\ncontent = \"\"\nbutton_format = \"\"\n", StandardOpenOption.APPEND);
-                guiToml = new Toml().read(guiPath.toFile());
-            }
         } catch (RuntimeException exception) {
             Path backup = dataDirectory.resolve("gui.toml.invalid.bak");
             Files.copy(guiPath, backup, StandardCopyOption.REPLACE_EXISTING);
             writeGui(defaults);
             state.warnings.add("gui.toml could not be parsed; it was backed up and regenerated with defaults.");
             return defaults;
+        }
+
+        int sourceGuiVersion = numberValue(rawValue(guiToml, "config_version"), 1);
+        boolean migrateGui = sourceGuiVersion < GUI_CONFIG_VERSION;
+        Path guiMigrationBackup = null;
+        if (migrateGui) {
+            guiMigrationBackup = dataDirectory.resolve("gui.toml.v" + sourceGuiVersion + ".bak");
+            Files.copy(guiPath, guiMigrationBackup, StandardCopyOption.REPLACE_EXISTING);
+        } else if (sourceGuiVersion > GUI_CONFIG_VERSION) {
+            state.warnings.add("gui.toml uses newer config_version " + sourceGuiVersion
+                    + "; known settings were loaded without rewriting the file.");
         }
 
         Map<String, GuiConfig.ServerItem> servers = new LinkedHashMap<>();
@@ -588,9 +605,34 @@ public final class ConfigManager {
                 int slot = numberValue(values.get("slot"), -1);
                 String material = stringValue(values.get("material"), "");
                 String unavailable = stringValue(values.get("unavailable_material"), "");
-                String displayName = stringValue(values.get("name"), "");
+                Object rawDisplayName = values.get("display_name");
+                if (rawDisplayName != null && !(rawDisplayName instanceof String)) {
+                    state.warnings.add("gui.toml server override '" + name + "' display_name must be a string and was ignored.");
+                }
+                String displayName = stringValue(rawDisplayName, "");
+                Object rawDescription = values.get("description");
+                if (rawDescription != null && !(rawDescription instanceof String)) {
+                    state.warnings.add("gui.toml server override '" + name + "' description must be a string and was ignored.");
+                }
+                String description = stringValue(rawDescription, "");
+                int menuOrder = numberValue(values.get("menu_order"), -1);
+                boolean showInMenu = booleanValue(values.get("show_in_menu"), true);
+                String itemName = stringValue(values.get("name"), "");
                 List<String> lore = stringListValue(values.get("lore"));
-                servers.put(name, new GuiConfig.ServerItem(slot, material, unavailable, displayName, lore));
+                servers.put(name, new GuiConfig.ServerItem(
+                        slot, material, unavailable, displayName, description, menuOrder, showInMenu, itemName, lore));
+            }
+        }
+        Map<String, String> displayNameOwners = new LinkedHashMap<>();
+        for (Map.Entry<String, GuiConfig.ServerItem> entry : servers.entrySet()) {
+            String displayName = entry.getValue().displayName().trim();
+            if (displayName.isEmpty()) {
+                continue;
+            }
+            String previous = displayNameOwners.putIfAbsent(displayName.toLowerCase(Locale.ROOT), entry.getKey());
+            if (previous != null) {
+                state.warnings.add("gui.toml servers '" + previous + "' and '" + entry.getKey()
+                        + "' share display_name '" + displayName + "'; selections remain safe, but the menu labels may be ambiguous.");
             }
         }
 
@@ -608,7 +650,27 @@ public final class ConfigManager {
                 stringValue(rawValue(guiToml, "bedrock.button_format"), defaults.bedrock().buttonFormat())
         );
 
-        return new GuiConfig(
+        Map<MenuServerState, GuiConfig.StateStyle> stateStyles = new java.util.EnumMap<>(MenuServerState.class);
+        stateStyles.put(MenuServerState.HEALTHY, GuiConfig.StateStyle.empty());
+        for (MenuServerState menuState : List.of(
+                MenuServerState.FULL,
+                MenuServerState.DRAINING,
+                MenuServerState.OFFLINE,
+                MenuServerState.IN_GAME)) {
+            GuiConfig.StateStyle fallback = defaults.stateStyle(menuState);
+            String path = "states." + menuState.configKey();
+            Object rawLore = rawValue(guiToml, path + ".lore");
+            if (rawLore != null && !(rawLore instanceof List<?>)) {
+                state.warnings.add("gui.toml " + path + ".lore must be a string list; the default was used.");
+            }
+            stateStyles.put(menuState, new GuiConfig.StateStyle(
+                    stringValue(rawValue(guiToml, path + ".material"), fallback.material()),
+                    stringValue(rawValue(guiToml, path + ".name"), fallback.name()),
+                    rawLore == null ? fallback.lore() : stringListValue(rawLore)
+            ));
+        }
+
+        GuiConfig loaded = new GuiConfig(
                 numberValue(rawValue(guiToml, "layout.rows"), defaults.rows()),
                 stringValue(rawValue(guiToml, "layout.default_material"), defaults.defaultMaterial()),
                 stringValue(rawValue(guiToml, "layout.unavailable_material"), defaults.unavailableMaterial()),
@@ -622,15 +684,22 @@ public final class ConfigManager {
                 stringValue(rawValue(guiToml, "controls.refresh_material"), defaults.refreshMaterial()),
                 stringValue(rawValue(guiToml, "controls.next_material"), defaults.nextMaterial()),
                 servers,
-                bedrockMenu
+                bedrockMenu,
+                stateStyles
         );
+        if (migrateGui) {
+            writeGui(loaded);
+            state.warnings.add("Migrated gui.toml from v" + sourceGuiVersion + " to v"
+                    + GUI_CONFIG_VERSION + " and saved " + guiMigrationBackup.getFileName() + ".");
+        }
+        return loaded;
     }
 
     private void writeGui(GuiConfig gui) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.3.0 Java inventory and Bedrock form layout\n");
-        b.append("# Text defaults live in messages.toml; per-server name/lore overrides may use MiniMessage, & codes, § codes, or hex colors.\n\n");
-        b.append("config_version = 1\n\n");
+        b.append("# VelocityNavigator 4.4.0 Java inventory and Bedrock form layout\n");
+        b.append("# Text defaults live in messages.toml; per-server names/lore may use MiniMessage, & codes, § codes, or hex colors.\n\n");
+        b.append("config_version = ").append(GUI_CONFIG_VERSION).append("\n\n");
         b.append("[layout]\n");
         b.append("# Java inventories have nine fixed columns. Choose 2-6 rows (18-54 slots);\n");
         b.append("# the bottom row is reserved for controls by default.\n");
@@ -660,14 +729,31 @@ public final class ConfigManager {
         b.append("title = ").append(quoted(gui.bedrock().title())).append("\n");
         b.append("content = ").append(quoted(gui.bedrock().content())).append("\n");
         b.append("button_format = ").append(quoted(gui.bedrock().buttonFormat())).append("\n\n");
-        b.append("# Optional per-server overrides. slot = -1 enables automatic placement.\n");
+        b.append("# State presentation is used by the Java inventory selector. Names and lore support every server placeholder.\n");
+        for (MenuServerState menuState : List.of(
+                MenuServerState.FULL,
+                MenuServerState.DRAINING,
+                MenuServerState.OFFLINE,
+                MenuServerState.IN_GAME)) {
+            GuiConfig.StateStyle style = gui.stateStyle(menuState);
+            b.append("[states.").append(menuState.configKey()).append("]\n");
+            b.append("material = ").append(quoted(style.material())).append("\n");
+            b.append("name = ").append(quoted(style.name())).append("\n");
+            b.append("lore = ").append(formatList(style.lore())).append("\n\n");
+        }
+        b.append("# Optional per-server overrides. display_name and description are shared by every selector; name/lore customize Java items.\n");
+        b.append("# menu_order = -1 keeps routing order, show_in_menu only affects selectors, and slot = -1 enables automatic placement.\n");
         b.append("# [servers]\n");
-        b.append("# \"lobby-1\" = { slot = 10, material = \"NETHER_STAR\", unavailable_material = \"BARRIER\", name = \"&#55FFFF&lLobby One\", lore = [\"&7Players: &f{players}/{max_players}\", \"&eClick to connect\"] }\n");
+        b.append("# \"lobby-1\" = { display_name = \"Main Lobby 1\", description = \"Classic survival lobby\", menu_order = 10, show_in_menu = true, slot = 10, material = \"NETHER_STAR\", unavailable_material = \"BARRIER\", name = \"&#55FFFF&l{server}\", lore = [\"&7{description}\", \"&7Players: &f{players}/{max_players}\", \"&eClick to connect\"] }\n");
         if (!gui.servers().isEmpty()) {
             b.append("[servers]\n");
             for (Map.Entry<String, GuiConfig.ServerItem> entry : gui.servers().entrySet()) {
                 GuiConfig.ServerItem item = entry.getValue();
-                b.append(quoted(entry.getKey())).append(" = { slot = ").append(item.slot())
+                b.append(quoted(entry.getKey())).append(" = { display_name = ").append(quoted(item.displayName()))
+                        .append(", description = ").append(quoted(item.description()))
+                        .append(", menu_order = ").append(item.menuOrder())
+                        .append(", show_in_menu = ").append(item.showInMenu())
+                        .append(", slot = ").append(item.slot())
                         .append(", material = ").append(quoted(item.material()))
                         .append(", unavailable_material = ").append(quoted(item.unavailableMaterial()))
                         .append(", name = ").append(quoted(item.name()))
@@ -1333,7 +1419,7 @@ public final class ConfigManager {
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[geo_routing]\n\n");
         b.append("# Retained so older configuration files continue to load.\n");
-        b.append("# Geographic routing is not active in 4.3.0; keep this disabled.\n");
+        b.append("# Geographic routing is not active in 4.4.0; keep this disabled.\n");
         b.append("enabled = ").append(config.geoRouting().enabled()).append("\n\n");
         b.append("# Absolute path to the GeoLite2-Country.mmdb or GeoLite2-City.mmdb file.\n");
         b.append("database_path = ").append(quoted(config.geoRouting().databasePath())).append("\n\n");

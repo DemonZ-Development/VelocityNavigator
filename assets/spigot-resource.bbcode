@@ -1,11 +1,23 @@
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/hero-banner.png?v=7[/IMG]
 
-[SIZE=6][B]VelocityNavigator 4.3.0[/B][/SIZE]
+[SIZE=6][B]VelocityNavigator 4.4.0[/B][/SIZE]
 [SIZE=4]Health-aware lobby routing for Velocity networks[/SIZE][/CENTER]
 
 Velocity's normal try list always prefers the first available server. VelocityNavigator chooses a suitable lobby for every initial join and every /lobby request, so one lobby does not fill while the others sit empty.
 
 [INDENT][B]Download the current JAR with this Spigot resource's download button.[/B] The same JAR runs on Velocity and, when needed, on Paper or Spigot.[/INDENT]
+
+[SIZE=5][B]New in 4.4: selector customization[/B][/SIZE]
+
+[LIST]
+[*]Friendly display_name and description values without changing raw Velocity routing IDs
+[*]Shared menu_order across Java inventory, Java chat, and Bedrock selectors
+[*]show_in_menu for hiding internal choices without disabling automatic routing
+[*]Reusable full, draining, offline, and in-game Java item styles
+[*]/vn menu validate for IDs, duplicate labels, slots, material identifiers, and curly-brace placeholders
+[/LIST]
+
+Visibility and presentation are menu-only. Health checks, secure tokens, callbacks, automatic routing, and connections retain the raw server ID.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/01-smart-routing.png?v=2[/IMG][/CENTER]
 
@@ -29,7 +41,7 @@ For most networks, power_of_two is a good starting point. Smaller setups may pre
 [B]Bedrock form[/B]
 [IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png?v=2[/IMG][/CENTER]
 
-The Java inventory is rendered by the optional Paper/Spigot bridge. The native Bedrock form uses Geyser/Floodgate, and a clickable chat selector remains available without either GUI. Both images above are real in-game captures. gui.toml controls the layout, icons, slots, filler items, titles, lore, navigation, refresh timing, and unavailable-server display.
+The Java inventory is rendered by the optional Paper/Spigot bridge. The native Bedrock form uses Geyser/Floodgate, and a clickable chat selector remains available without either GUI. Both images above are real in-game captures. gui.toml controls the layout, icons, slots, filler items, titles, lore, navigation, refresh timing, and state presentation. Display names, descriptions, ordering, and visibility are shared by all three selectors. Java items can inherit separate full, draining, offline, and in-game styles.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/02-universal-jar.png?v=2[/IMG][/CENTER]
 
@@ -61,6 +73,7 @@ Parties and queue positions stay on the proxy where they were created. Keep thos
 [*]/vn bridge status for optional backend installations
 [*]/vn redis status and /vn redis test for Redis checks
 [*]/vn drain and /vn undrain for maintenance
+[*]/vn menu validate for selector configuration checks
 [*]/vn server add game or lobby, dry-run, list, and remove for managed backends
 [*]Prometheus metrics, Grafana setup, and an optional local HTML dashboard
 [*]Validated server add/remove commands with dry-run support
@@ -69,7 +82,7 @@ Parties and queue positions stay on the proxy where they were created. Keep thos
 [SIZE=5][B]Quick setup[/B][/SIZE]
 
 [LIST=1]
-[*]Download VelocityNavigator-4.3.0.jar with this resource's download button.
+[*]Download VelocityNavigator-4.4.0.jar with this resource's download button.
 [*]Put it in the Velocity proxy's plugins folder.
 [*]Start the proxy once to create the configuration files.
 [*]Add your lobby names to navigator.toml or use /vn server add lobby.
@@ -89,18 +102,18 @@ The lobby names must already exist in Velocity's velocity.toml.
 [SIZE=5][B]Compatibility[/B][/SIZE]
 
 [LIST]
-[*]Velocity 3.x
-[*]Java 17 or newer
+[*]Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with the same JAR
+[*]Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, or Java 25 for Velocity 4.0.0
 [*]Minecraft versions supported by your Velocity build
 [*]Optional Paper/Spigot bridge built against the 1.16.5 API
 [*]Geyser and Floodgate for native Bedrock forms
 [/LIST]
 
-BungeeCord and Waterfall are not supported. Redis Cluster/Sentinel discovery and GeoIP routing are not included in 4.3.0.
+BungeeCord and Waterfall are not supported. Redis Cluster/Sentinel discovery and GeoIP routing are not included in 4.4.0.
 
-[SIZE=5][B]Updating from 4.2[/B][/SIZE]
+[SIZE=5][B]Updating from 4.3[/B][/SIZE]
 
-Keep a copy of the current JAR and plugin folder, replace the JAR, and update one proxy first. Version 4.3 keeps a backup while updating the configuration layout. Run /vn config validate and try /lobby before updating the rest of the network.
+Keep a copy of the current JAR and plugin folder, replace the JAR, and update one proxy first. Version 4.4 keeps navigator.toml at schema 8 and advances the menu-only gui.toml schema to 2. Existing entries remain compatible. Add optional selector metadata and state styles, run /vn reload, then run /vn menu validate and /vn config validate before trying /lobby. Localized per-language server names are not included in 4.4.
 
 [SIZE=5][B]Help and updates[/B][/SIZE]
 

@@ -4,7 +4,7 @@
 
 The optional dashboard gives operators a live browser view of lobby health, player counts, routing activity, affinity, and the active configuration summary. It uses its own port and can be changed in `navigator.toml`.
 
-![Live VelocityNavigator 4.3.0 dashboard](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/dashboard-preview.png)
+![Live VelocityNavigator 4.4.0 dashboard](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/dashboard-preview.png)
 
 This capture comes from a running proxy with one configured lobby and one Redis-discovered lobby. Dynamic servers appear alongside configured servers and keep their advertised capacity.
 

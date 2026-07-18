@@ -32,7 +32,7 @@ Redis is optional. Enable it only when multiple Velocity nodes need to synchroni
 
 ### Do I need GeoIP?
 
-No. GeoIP/MaxMind routing is intentionally deferred and is not implemented in 4.3.0. The compatibility keys remain accepted, but enabling them does not change route selection.
+No. GeoIP/MaxMind routing is intentionally deferred and is not implemented in 4.4.0. The compatibility keys remain accepted, but enabling them does not change route selection.
 
 Do not purchase or configure a GeoLite2 database for this release. Contextual groups are the closest alternative when different game modes or regions already use separate entry points.
 
@@ -86,9 +86,11 @@ See [Operations Runbook](Operations-Runbook) for the full procedure.
 
 ---
 
-### Does it work with Velocity 3.x only?
+### Which Velocity versions are supported?
 
-Yes, VelocityNavigator is built for Velocity 3.x. It requires Java 17 or higher.
+VelocityNavigator supports Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with the same JAR. The release stays on Java 17 bytecode and the Velocity 3.4 API baseline, while CI also compiles against the Velocity 4.0.0 API and Adventure 5 and boots that JAR on Velocity 4.0.0.
+
+Use Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0. The optional backend bridge requires Java 17 or newer independently of the proxy runtime.
 
 It does **not** work with BungeeCord, Waterfall, or other proxy software.
 
@@ -215,7 +217,7 @@ Redis Cluster discovery and Sentinel failover are not implemented. Point every p
 
 Velocity owns routing but cannot open Bukkit inventories. The same universal JAR runs as a lightweight Paper/Spigot bridge that only renders the menu and returns clicks. Startup logs identify `VELOCITY PROXY mode` or `BACKEND GUI BRIDGE mode`. Use `/vn bridge status` after a player joins each backend. Without a detected bridge, `fallback_to_chat = true` safely shows the clickable chat selector.
 
-The bridge is built against the Spigot API 1.16.5 baseline and uses no version-specific NMS. Java 17+ is required on both runtimes.
+The bridge is built against the Spigot API 1.16.5 baseline and uses no version-specific NMS. Java 17+ is required on backends; the proxy must use the Java version required by its Velocity release.
 
 ---
 
@@ -229,7 +231,7 @@ Use `/vn server dry-run ...` first. Managed writes create backups, validate conf
 
 ### Is Redis required for parties or queues?
 
-No. Parties and queues run locally on Velocity and do not require Redis. Redis does not make those two systems global in 4.3.0.
+No. Parties and queues run locally on Velocity and do not require Redis. Redis does not make those two systems global in 4.4.0.
 
 ---
 
@@ -253,7 +255,31 @@ Change `language` at the top of `messages.toml`. Built-ins are `en`, `ru`, `es`,
 
 ### Can every lobby have a different GUI icon and slot?
 
-Yes. Add an inline entry under `[servers]` in `gui.toml` with `slot`, `material`, `unavailable_material`, `name`, and `lore`. Text accepts MiniMessage, `&`/`§`, inline hex, and Bungee hex codes. Entries without overrides use localized defaults and automatic pagination.
+Yes. Add an inline entry under `[servers]` in `gui.toml` with `display_name`, `description`, `menu_order`, `show_in_menu`, `slot`, `material`, `unavailable_material`, `name`, and `lore`. The name, description, order, and visibility are shared by Java inventory, chat, and Bedrock; `slot`, materials, `name`, and `lore` customize Java inventory presentation. Text accepts MiniMessage, `&`/`§`, inline hex, and Bungee hex codes. Blank aliases fall back to the raw server ID. Run `/vn reload` and `/vn menu validate` after editing.
+
+---
+
+### Does `show_in_menu = false` stop players being routed to that server?
+
+No. It only removes the entry from the Java inventory, Java chat, and Bedrock selectors. The server can still receive automatic initial-join and `/lobby` routes. Remove it from the relevant routing pool or use `/vn drain <server>` when it must stop receiving new traffic.
+
+---
+
+### How do `menu_order` and Java `slot` interact?
+
+`menu_order` is shared cross-selector ordering: lower nonnegative values appear first and `-1` leaves order unset. A nonnegative `slot` controls the physical cell in the Java inventory. Use `menu_order` for automatic placement, pages, chat, and Bedrock; use `slot` only for a fixed Java cell. Bedrock's `sort_mode` resolves ties after `menu_order`.
+
+---
+
+### Why is my Java state style not being used?
+
+A nonblank per-server `name` or nonempty `lore` is intentionally final. Clear it to inherit `[states.full]`, `[states.draining]`, `[states.offline]`, or `[states.in_game]`; if no state template applies, the localized inventory default is used. Compare `/vn servers` health, drain, circuit, and capacity signals, verify the backend lifecycle marker separately for `IN_GAME`, and run `/vn menu validate` to check the GUI configuration.
+
+---
+
+### Can display names be different for each language?
+
+Not in v4.4.0. Each server has one `display_name` and one `description` for all players. Language packs still translate the surrounding selector templates, controls, and status text.
 
 ---
 

@@ -6,14 +6,14 @@ This setup uses two lobbies and `power_of_two`, a good default for most networks
 
 ## Step 1: Download and Install
 
-1. Download `VelocityNavigator-4.3.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
+1. Download `VelocityNavigator-4.4.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
 2. Place the JAR in your Velocity proxy's `plugins/` folder.
 3. Restart the proxy (or run `/vn reload` if you are already running an older version).
-4. Optional: place the same JAR in each backend Paper/Spigot 1.16.5+ `plugins/` folder for the Java inventory selector. Backend and proxy must run Java 17+.
+4. Optional: place the same JAR in each backend Paper/Spigot 1.16.5+ `plugins/` folder for the Java inventory selector. Backends require Java 17+; use Java 17 for a Velocity 3.4.x proxy, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0.
 
 ```
 plugins/
-├── VelocityNavigator-4.3.0.jar
+├── VelocityNavigator-4.4.0.jar
 └── ...
 ```
 
@@ -138,7 +138,8 @@ Verify distribution across your servers:
 
 ---
 
-Total time: about 5 minutes. You are now running VelocityNavigator v4.3.
+Total time: about 5 minutes. You are now running VelocityNavigator v4.4.0.
+
 # Optional advanced systems
 
-VelocityNavigator 4.3.0 can also provide native parties, full-pool queues, Redis multi-proxy synchronization, dynamic backend registration, and MOTD lifecycle-state routing. Configure them in `navigator.toml` using the [Advanced Proxy Systems guide](Advanced-Proxy-Systems).
+VelocityNavigator 4.4.0 can also provide native parties, full-pool queues, Redis multi-proxy synchronization, dynamic backend registration, and MOTD lifecycle-state routing. Configure them in `navigator.toml` using the [Advanced Proxy Systems guide](Advanced-Proxy-Systems).

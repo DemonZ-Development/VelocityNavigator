@@ -277,6 +277,17 @@ public final class LanguagePacks {
     }
 
     private static void advanced(Map<String, String> s, String language) {
+        String[] selectorStates = switch (language) {
+            case "ru" -> new String[]{"\u0417\u0410\u041f\u041e\u041b\u041d\u0415\u041d", "\u0412 \u0418\u0413\u0420\u0415"};
+            case "es" -> new String[]{"LLENO", "EN JUEGO"};
+            case "fr" -> new String[]{"COMPLET", "EN JEU"};
+            case "de" -> new String[]{"VOLL", "IM SPIEL"};
+            case "pt_br" -> new String[]{"LOTADO", "EM JOGO"};
+            case "zh_cn" -> new String[]{"\u5df2\u6ee1", "\u6e38\u620f\u4e2d"};
+            default -> new String[]{"FULL", "IN GAME"};
+        };
+        s.put("menus.status_full", selectorStates[0]);
+        s.put("menus.status_in_game", selectorStates[1]);
         String[] values = switch (language) {
             case "ru" -> new String[]{"Система групп отключена.", "Вы пригласили <target> в группу.", "<player> приглашает вас в группу. Используйте /party accept или /party deny.", "Вы присоединились к группе.", "Вы не состоите в группе.", "Только лидер группы может это сделать.", "[Группа] <player>: <message>", "Место в очереди: <position>/<size>", "Пулы лобби заполнены. Вы добавлены в очередь на позицию <position>.", "Освободилось место. Подключение к <server>...", "Вы покинули очередь.", "Сейчас вы не в очереди."};
             case "es" -> new String[]{"El sistema de grupos está desactivado.", "Invitaste a <target> a tu grupo.", "<player> te invitó a un grupo. Usa /party accept o /party deny.", "Te uniste al grupo.", "No estás en un grupo.", "Solo el líder del grupo puede hacer eso.", "[Grupo] <player>: <message>", "Posición en la cola: <position>/<size>", "Los lobbies están llenos. Entraste en la cola en la posición <position>.", "Hay un espacio libre. Conectando a <server>...", "Saliste de la cola.", "No estás en la cola."};

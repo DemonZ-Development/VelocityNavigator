@@ -30,7 +30,7 @@ public final class MessageFormatter {
 
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     private static final Set<String> ALLOWED_PLACEHOLDERS = Set.of(
-            "server", "time", "reason", "mode", "player", "attempt", "max",
+            "server", "server_id", "display_name", "description", "time", "reason", "mode", "player", "attempt", "max",
             "max_players", "status", "status_color", "ping", "command", "attempts",
             "page", "pages", "language", "version", "target", "members", "count",
             "message", "position", "size", "state", "host", "port"

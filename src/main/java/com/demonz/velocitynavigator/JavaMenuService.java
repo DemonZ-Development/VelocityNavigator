@@ -21,6 +21,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 
 public final class JavaMenuService {
@@ -30,7 +31,10 @@ public final class JavaMenuService {
 
     public static void showLobbyMenu(Player player, VelocityNavigator plugin, RouteDecision decision) {
         Config config = plugin.config();
-        List<String> candidates = decision.onlineCandidates();
+        List<String> routedCandidates = decision.onlineCandidates();
+        List<String> candidates = routedCandidates == null
+                ? List.of()
+                : plugin.guiConfig().visibleServers(List.copyOf(new LinkedHashSet<>(routedCandidates)));
         if (candidates == null || candidates.isEmpty()) {
             player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(), Map.of("reason", config.language().text("reasons.no_online_lobbies"), "player", player.getUsername()), player));
             return;
@@ -59,10 +63,6 @@ public final class JavaMenuService {
     }
 
     private static String replacePlaceholders(String template, MenuServerInfo info) {
-        String result = template;
-        for (Map.Entry<String, String> entry : info.placeholders().entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return result;
+        return MenuTemplateFormatter.replace(template, info.placeholders());
     }
 }

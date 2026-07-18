@@ -97,7 +97,7 @@ public final class FirstRunHandler {
             logger.info("  ");
             logger.info("  • Universal Velocity/backend inventory selector with startup mode identification.");
             logger.info("  • Configurable language packs and custom-language workflow in messages.toml.");
-            logger.info("  • Separate gui.toml for Java/Bedrock menus and servers.toml for command-managed lobbies.");
+            logger.info("  • Friendly per-server display names shared by Java inventory, chat, and Bedrock selectors.");
             logger.info("  • /vn bridge status reports detected backend bridge versions.");
             logger.info("  • Persistent player affinity and the optional HTML operations dashboard.");
             logger.info("  ");

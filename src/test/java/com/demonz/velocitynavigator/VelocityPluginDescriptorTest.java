@@ -26,8 +26,8 @@ class VelocityPluginDescriptorTest {
 
             assertEquals("com.demonz.velocitynavigator.VelocityNavigator",
                     descriptor.get("main").getAsString(),
-                    "Velocity 3.5+ requires the descriptor to declare its main class");
-            assertEquals("4.3.0", descriptor.get("version").getAsString());
+                    "Velocity 3.x and 4.x require the descriptor to declare its main class");
+            assertEquals("4.4.0", descriptor.get("version").getAsString());
         }
     }
 }

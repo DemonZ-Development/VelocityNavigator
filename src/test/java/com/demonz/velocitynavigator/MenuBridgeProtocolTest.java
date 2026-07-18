@@ -49,9 +49,9 @@ class MenuBridgeProtocolTest {
 
     @Test
     void helloRoundTripsAndIdentifiesPacketType() throws Exception {
-        byte[] hello = MenuBridgeProtocol.encodeHello("4.3.0");
+        byte[] hello = MenuBridgeProtocol.encodeHello("4.4.0");
         assertEquals(MenuBridgeProtocol.PacketType.HELLO, MenuBridgeProtocol.packetType(hello));
-        assertEquals("4.3.0", MenuBridgeProtocol.decodeHello(hello).version());
+        assertEquals("4.4.0", MenuBridgeProtocol.decodeHello(hello).version());
     }
 
     @Test

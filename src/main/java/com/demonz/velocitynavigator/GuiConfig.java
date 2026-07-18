@@ -5,6 +5,8 @@
 package com.demonz.velocitynavigator;
 
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,10 +26,15 @@ public record GuiConfig(
         String refreshMaterial,
         String nextMaterial,
         Map<String, ServerItem> servers,
-        BedrockMenu bedrock
+        BedrockMenu bedrock,
+        Map<MenuServerState, StateStyle> states
 ) {
     public GuiConfig(int rows, String defaultMaterial, String unavailableMaterial, boolean fillEmptySlots, String fillerMaterial, int refreshSeconds, int previousSlot, int refreshSlot, int nextSlot, String previousMaterial, String refreshMaterial, String nextMaterial, Map<String, ServerItem> servers) {
-        this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, BedrockMenu.defaults());
+        this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, BedrockMenu.defaults(), defaultStateStyles());
+    }
+
+    public GuiConfig(int rows, String defaultMaterial, String unavailableMaterial, boolean fillEmptySlots, String fillerMaterial, int refreshSeconds, int previousSlot, int refreshSlot, int nextSlot, String previousMaterial, String refreshMaterial, String nextMaterial, Map<String, ServerItem> servers, BedrockMenu bedrock) {
+        this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, bedrock, defaultStateStyles());
     }
 
     public GuiConfig {
@@ -54,6 +61,16 @@ public record GuiConfig(
         }
         servers = Collections.unmodifiableMap(normalized);
         bedrock = bedrock == null ? BedrockMenu.defaults() : bedrock;
+        Map<MenuServerState, StateStyle> normalizedStates = new EnumMap<>(MenuServerState.class);
+        normalizedStates.putAll(defaultStateStyles());
+        if (states != null) {
+            states.forEach((state, style) -> {
+                if (state != null && style != null) {
+                    normalizedStates.put(state, style.normalized());
+                }
+            });
+        }
+        states = Collections.unmodifiableMap(normalizedStates);
     }
 
     public static GuiConfig defaults() {
@@ -71,14 +88,49 @@ public record GuiConfig(
         return name == null ? null : servers.get(name.toLowerCase(Locale.ROOT));
     }
 
-    private static int slot(int value, int size, int fallback) {
-        return value >= 0 && value < size ? value : fallback;
+    public String displayName(String serverName) {
+        if (serverName == null) {
+            return "";
+        }
+        ServerItem item = server(serverName);
+        return item == null || item.displayName().isBlank() ? serverName : item.displayName();
+    }
+
+    public String description(String serverName) {
+        ServerItem item = server(serverName);
+        return item == null ? "" : item.description();
+    }
+
+    public StateStyle stateStyle(MenuServerState state) {
+        return states.getOrDefault(state == null ? MenuServerState.HEALTHY : state, StateStyle.empty());
+    }
+
+    public List<String> visibleServers(List<String> serverNames) {
+        if (serverNames == null || serverNames.isEmpty()) {
+            return List.of();
+        }
+        List<String> visible = serverNames.stream()
+                .filter(name -> {
+                    ServerItem item = server(name);
+                    return item == null || item.showInMenu();
+                })
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        visible.sort(Comparator
+                .comparingInt((String name) -> menuOrder(name) >= 0 ? 0 : 1)
+                .thenComparingInt(name -> Math.max(0, menuOrder(name))));
+        return List.copyOf(visible);
+    }
+
+    private int menuOrder(String serverName) {
+        ServerItem item = server(serverName);
+        return item == null ? -1 : item.menuOrder();
     }
 
     private static int uniqueSlot(int value, int size, int fallback, java.util.Set<Integer> used) {
-        int selected = slot(value, size, fallback);
+        int firstControlSlot = size - 9;
+        int selected = value >= firstControlSlot && value < size ? value : fallback;
         if (!used.add(selected)) {
-            for (int candidate = size - 9; candidate < size; candidate++) {
+            for (int candidate = firstControlSlot; candidate < size; candidate++) {
                 if (used.add(candidate)) {
                     return candidate;
                 }
@@ -88,19 +140,81 @@ public record GuiConfig(
     }
 
     private static String material(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value.trim().toUpperCase(Locale.ROOT);
+        String selected = value == null || value.isBlank() ? fallback : value.trim();
+        if (selected == null || selected.isBlank()) {
+            return "";
+        }
+        int namespaceSeparator = selected.indexOf(':');
+        if (namespaceSeparator > 0) {
+            String namespace = selected.substring(0, namespaceSeparator).toLowerCase(Locale.ROOT);
+            String key = selected.substring(namespaceSeparator + 1).toUpperCase(Locale.ROOT);
+            return namespace + ":" + key;
+        }
+        return selected.toUpperCase(Locale.ROOT);
     }
 
-    public record ServerItem(int slot, String material, String unavailableMaterial, String name, List<String> lore) {
+    public record ServerItem(
+            int slot,
+            String material,
+            String unavailableMaterial,
+            String displayName,
+            String description,
+            int menuOrder,
+            boolean showInMenu,
+            String name,
+            List<String> lore
+    ) {
+        public ServerItem(int slot, String material, String unavailableMaterial, String name, List<String> lore) {
+            this(slot, material, unavailableMaterial, "", "", -1, true, name, lore);
+        }
+
+        public ServerItem(int slot, String material, String unavailableMaterial, String displayName, String name, List<String> lore) {
+            this(slot, material, unavailableMaterial, displayName, "", -1, true, name, lore);
+        }
+
         private ServerItem normalized(int inventorySize) {
             return new ServerItem(
                     slot >= 0 && slot < inventorySize ? slot : -1,
-                    material == null ? "" : material.trim().toUpperCase(Locale.ROOT),
-                    unavailableMaterial == null ? "" : unavailableMaterial.trim().toUpperCase(Locale.ROOT),
+                    GuiConfig.material(material, ""),
+                    GuiConfig.material(unavailableMaterial, ""),
+                    displayName == null ? "" : displayName.trim(),
+                    description == null ? "" : description.trim(),
+                    Math.max(-1, menuOrder),
+                    showInMenu,
                     name == null ? "" : name,
                     lore == null ? List.of() : List.copyOf(lore)
             );
         }
+    }
+
+    public record StateStyle(String material, String name, List<String> lore) {
+        public StateStyle {
+            material = GuiConfig.material(material, "");
+            name = name == null ? "" : name;
+            lore = lore == null ? List.of() : List.copyOf(lore);
+        }
+
+        private StateStyle normalized() {
+            return new StateStyle(material, name, lore);
+        }
+
+        public static StateStyle empty() {
+            return new StateStyle("", "", List.of());
+        }
+    }
+
+    public static Map<MenuServerState, StateStyle> defaultStateStyles() {
+        Map<MenuServerState, StateStyle> defaults = new EnumMap<>(MenuServerState.class);
+        defaults.put(MenuServerState.HEALTHY, StateStyle.empty());
+        defaults.put(MenuServerState.FULL, new StateStyle(
+                "RED_CONCRETE", "<red><bold>{server}</bold></red> <gray>({status})</gray>", List.of()));
+        defaults.put(MenuServerState.DRAINING, new StateStyle(
+                "YELLOW_CONCRETE", "<yellow><bold>{server}</bold></yellow> <gray>({status})</gray>", List.of()));
+        defaults.put(MenuServerState.OFFLINE, new StateStyle(
+                "BARRIER", "<gray><bold>{server}</bold> ({status})</gray>", List.of()));
+        defaults.put(MenuServerState.IN_GAME, new StateStyle(
+                "ENDER_EYE", "<light_purple><bold>{server}</bold></light_purple> <gray>({status})</gray>", List.of()));
+        return Collections.unmodifiableMap(defaults);
     }
 
     public record BedrockMenu(boolean enabled, boolean fallbackToChat, String sortMode, int maxButtons, boolean showPlayers, boolean showMaxPlayers, boolean showPing, boolean showStatus, String title, String content, String buttonFormat) {

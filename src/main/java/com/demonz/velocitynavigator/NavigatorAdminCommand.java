@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 public final class NavigatorAdminCommand implements SimpleCommand {
 
-    private static final List<String> ROOT_SUBCOMMANDS = List.of("reload", "status", "health", "bridge", "redis", "version", "updatecheck", "debug", "drain", "undrain", "server", "servers", "config", "setup", "help");
+    private static final List<String> ROOT_SUBCOMMANDS = List.of("reload", "status", "health", "bridge", "redis", "version", "updatecheck", "debug", "drain", "undrain", "server", "servers", "config", "menu", "setup", "help");
     private static final List<String> DEBUG_TYPES = List.of("player", "server");
     private static final List<String> DRAIN_SUBCOMMANDS = List.of("status");
 
@@ -67,6 +67,7 @@ public final class NavigatorAdminCommand implements SimpleCommand {
             case "server" -> server(invocation.source(), arguments);
             case "servers" -> ServersSubCommand.execute(invocation.source(), arguments, plugin);
             case "config" -> config(invocation.source(), arguments);
+            case "menu" -> menu(invocation.source(), arguments);
             case "setup" -> setup(invocation.source(), arguments);
             case "help" -> invocation.source().sendMessage(plugin.buildHelpComponent());
             default -> invocation.source().sendMessage(Component.text("Unknown subcommand. Use /velocitynavigator help.", NamedTextColor.YELLOW));
@@ -154,6 +155,7 @@ public final class NavigatorAdminCommand implements SimpleCommand {
             if (args.length == 3 && "remove".equalsIgnoreCase(args[1])) return plugin.server().getAllServers().stream().map(server -> server.getServerInfo().getName()).filter(value -> value.toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
         }
         if ("config".equalsIgnoreCase(args[0]) && args.length == 2) return "validate".startsWith(args[1].toLowerCase(Locale.ROOT)) ? List.of("validate") : List.of();
+        if ("menu".equalsIgnoreCase(args[0]) && args.length == 2) return "validate".startsWith(args[1].toLowerCase(Locale.ROOT)) ? List.of("validate") : List.of();
 
         return List.of();
     }
@@ -279,6 +281,23 @@ public final class NavigatorAdminCommand implements SimpleCommand {
         else source.sendMessage(Component.text("Configuration validation found " + errors.size() + " error(s) and " + warnings.size() + " warning(s).", NamedTextColor.RED));
         errors.forEach(error -> source.sendMessage(Component.text("Error: " + error, NamedTextColor.RED)));
         warnings.forEach(warning -> source.sendMessage(Component.text("Warning: " + warning, NamedTextColor.YELLOW)));
+    }
+
+    private void menu(CommandSource source, String[] arguments) {
+        if (arguments.length != 2 || !"validate".equalsIgnoreCase(arguments[1])) {
+            source.sendMessage(Component.text("Usage: /vn menu validate", NamedTextColor.YELLOW));
+            return;
+        }
+        java.util.Set<String> registeredServers = plugin.server().getAllServers().stream()
+                .map(server -> server.getServerInfo().getName())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        MenuConfigValidator.Validation validation = MenuConfigValidator.validate(
+                plugin.getDataDirectory().resolve("gui.toml"), plugin.guiConfig(), registeredServers
+        );
+        source.sendMessage(Component.text(validation.summary(),
+                validation.valid() ? NamedTextColor.GREEN : NamedTextColor.RED));
+        validation.errors().forEach(error -> source.sendMessage(Component.text("Error: " + error, NamedTextColor.RED)));
+        validation.warnings().forEach(warning -> source.sendMessage(Component.text("Warning: " + warning, NamedTextColor.YELLOW)));
     }
 
     private void debug(CommandSource source, String[] arguments) {

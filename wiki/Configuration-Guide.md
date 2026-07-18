@@ -24,7 +24,7 @@ The operational file `navigator.toml` is organized into these sections:
 3. `[circuit_breaker]` — Automatic failure detection
 4. `[degradation]` — Fallback behavior when all health checks fail
 5. `[routing.affinity]` — Player Affinity (Sticky Sessions) configuration
-6. `[geo_routing]` — Deferred compatibility keys (no routing effect in 4.3.0)
+6. `[geo_routing]` — Deferred compatibility keys (no routing effect in 4.4.0)
 7. `[routing.contextual]` — Context-aware routing groups
 8. `[health_checks]` — Server monitoring configuration
 9. `[update_checker]` — Update check settings
@@ -137,7 +137,7 @@ Chat selector header, entry, and tooltip text now live under `[menus.chat]` in `
 
 ### Java inventory selector setup
 
-1. Put `VelocityNavigator-4.3.0.jar` in the Velocity proxy's `plugins/` directory.
+1. Put `VelocityNavigator-4.4.0.jar` in the Velocity proxy's `plugins/` directory.
 2. Put the same JAR in every backend Paper/Spigot server's `plugins/` directory.
 3. Set `routing.use_menu_for_lobby = true`.
 4. Set `routing.java_menu.type = "inventory"` and run `/vn reload`.
@@ -148,7 +148,11 @@ Use `/vn bridge status` after a player has joined each backend to confirm its br
 
 ## `gui.toml`
 
+VelocityNavigator 4.4.0 uses `config_version = 2` for this menu-only file. The main `navigator.toml` schema remains version 8.
+
 ```toml
+config_version = 2
+
 [layout]
 rows = 6
 default_material = "COMPASS"
@@ -166,16 +170,59 @@ refresh_material = "CLOCK"
 next_material = "ARROW"
 
 [servers]
-"lobby-1" = { slot = 10, material = "NETHER_STAR", unavailable_material = "BARRIER", name = "&#55FFFF&lLobby One", lore = ["&7Players: &f{players}/{max_players}", "&eClick to connect"] }
+"lobby1" = { display_name = "Main Lobby 1", description = "Events, portals, and network help", menu_order = 10, show_in_menu = true, slot = 10, material = "NETHER_STAR", unavailable_material = "", name = "&#55FFFF&l{server}", lore = ["&7{description}", "&7Players: &f{players}/{max_players}", "&8Target: &7{server_id}", "&eClick to connect"] }
+"holding" = { display_name = "", description = "", menu_order = -1, show_in_menu = false, slot = -1, material = "", unavailable_material = "", name = "", lore = [] }
+
+[states.full]
+material = "REDSTONE_BLOCK"
+name = "<red><bold>{server}</bold></red>"
+lore = ["<gray>{description}</gray>", "<red>This lobby is full.</red>"]
+
+[states.draining]
+material = "YELLOW_CONCRETE"
+name = "<yellow><bold>{server}</bold></yellow>"
+lore = ["<gray>{description}</gray>", "<yellow>Closed for maintenance.</yellow>"]
+
+[states.offline]
+material = "BARRIER"
+name = "<gray><bold>{server}</bold></gray>"
+lore = ["<gray>{description}</gray>", "<red>This lobby is offline.</red>"]
+
+[states.in_game]
+material = "CLOCK"
+name = "<gold><bold>{server}</bold></gold>"
+lore = ["<gray>{description}</gray>", "<gold>A game is in progress.</gold>"]
 ```
 
 `layout.rows` is customizable from `2` to `6`. Java chest menus always use nine columns, so this produces 18–54 total slots. The bottom row is reserved for controls by default, leaving `(rows - 1) × 9` automatic server slots per page; a six-row menu therefore displays 45 servers before adding another page. `refresh_seconds = 0` disables automatic refresh; otherwise the proxy re-evaluates availability while the GUI remains open. Offline configured candidates use `unavailable_material`, localized unavailable lore, and cannot be clicked.
 
-Per-server entries are optional. `slot = -1` enables automatic placement. Empty `material`, `name`, or `lore` values inherit the global or localized defaults. Fixed slots cannot replace previous/refresh/next controls.
+Per-server entries are optional. Each key is the raw server ID registered in `velocity.toml`. `display_name` is the player-facing alias shared by Java inventory, Java chat, and Bedrock; `description` is shared through `{description}`. Blank aliases fall back to the raw ID and blank descriptions remain empty. `/vn reload` applies changes without a proxy restart.
 
-Inventory title, item-name, lore, and control colors are configured under `[menus.inventory]` in `messages.toml`. Per-server `name` and `lore` overrides live in `gui.toml`. Both accept MiniMessage, gradients, named colors, classic `&`/`§` codes, and hex colors such as `&#55FFFF`.
+`menu_order = -1` leaves order unset. Explicit nonnegative values sort first from lowest to highest in all selectors. Java and chat retain configured candidate order for ties; Bedrock resolves ties through `bedrock.sort_mode`. `show_in_menu = false` removes an entry from all selectors but does not remove, drain, or disable it for automatic routing. `slot = -1` enables automatic Java placement; a fixed `slot` still controls the physical Java inventory cell. Fixed slots cannot replace previous/refresh/next controls.
 
-Bedrock forms have no configurable row count because the Bedrock client renders their layout. Use `bedrock.max_buttons` to cap the number of choices and the `[menus.bedrock]` text values to change their wording. Advanced formatting may be stripped according to `bedrock.strip_advanced_formatting` in `navigator.toml`.
+| Per-server field | Default | Scope |
+|---|---:|---|
+| `display_name` | Raw ID | Friendly label in all selectors |
+| `description` | Empty | `{description}` in all selector templates |
+| `menu_order` | `-1` | Primary cross-selector ordering |
+| `show_in_menu` | `true` | Menu visibility only; routing is unchanged |
+| `slot` | `-1` | Java fixed slot or automatic placement |
+| `material` | Empty | Java healthy-material override |
+| `unavailable_material` | Empty | Final per-server unavailable material; empty inherits the state/global style |
+| `name` | Empty | Final Java item-name template |
+| `lore` | Empty list | Final Java item-lore template |
+
+Inventory title, item-name, lore, and control colors are configured under `[menus.inventory]` in `messages.toml`. Per-server and state overrides live in `gui.toml`. All templates accept MiniMessage, gradients, named colors, classic `&`/`§` codes, and hex colors such as `&#55FFFF`.
+
+For Java names and lore, a nonblank/nonempty per-server override is final; otherwise the matching `[states.*]` template is used, then the localized inventory default. An unavailable entry first uses its per-server `unavailable_material`, then the matching state material, then the global unavailable material. Healthy entries use the per-server/global normal material. A routable `IN_GAME` entry uses its state material before its normal-material fallback. `IN_GAME` presentation follows the backend lifecycle marker even if that state remains routable.
+
+When conditions overlap, the effective menu-state order is offline/unhealthy circuit, draining, `IN_GAME`, full, then healthy. The default materials are `FULL = RED_CONCRETE`, `DRAINING = YELLOW_CONCRETE`, `OFFLINE = BARRIER`, and `IN_GAME = ENDER_EYE`.
+
+Selector templates may use `{server}` or `{display_name}` for the player-facing alias, `{server_id}` for the exact registered ID, and `{description}` for shared descriptive text. The alias is never used as a route target: inventory tokens, chat callbacks, Bedrock responses, health lookups, and connection requests retain the raw ID. Duplicate aliases are allowed because identity is still based on the raw ID, but they are discouraged because players cannot easily tell identical labels apart.
+
+Run `/vn menu validate` to audit selector IDs, duplicate labels, slots, material-identifier syntax, and curly-brace placeholders. Because it runs on Velocity, it cannot guarantee that a syntactically valid material exists on every backend Minecraft version. See [Selector Customization](Server-Display-Names) for complete examples, precedence rules, migration behavior, and troubleshooting.
+
+Bedrock forms have no configurable row count because the Bedrock client renders their layout. Use `bedrock.max_buttons` to cap the number of choices and the `[menus.bedrock]` text values to change their wording. `bedrock.sort_mode = "name"` sorts by the displayed alias, falling back to the raw ID. Advanced formatting may be stripped according to `bedrock.strip_advanced_formatting` in `navigator.toml`.
 
 ### LobbyEntry Format
 
@@ -292,7 +339,7 @@ stickiness = 0.7
 
 ## `[geo_routing]`
 
-These old compatibility keys are still accepted so an existing config can load, but GeoIP routing is not available in 4.3.0. Leave the section disabled; no GeoLite2 database is needed.
+These old compatibility keys are still accepted so an existing config can load, but GeoIP routing is not available in 4.4.0. Leave the section disabled; no GeoLite2 database is needed.
 
 ```toml
 [geo_routing]
@@ -302,8 +349,8 @@ database_path = ""
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `enabled` | boolean | `false` | Compatibility switch only. Enabling it logs a warning and does not change routing in 4.3.0. |
-| `database_path` | string | `""` | Compatibility value only. No GeoLite2 database is loaded in 4.3.0. |
+| `enabled` | boolean | `false` | Compatibility switch only. Enabling it logs a warning and does not change routing in 4.4.0. |
+| `database_path` | string | `""` | Compatibility value only. No GeoLite2 database is loaded in 4.4.0. |
 
 The section name is `[geo_routing]` (with an underscore), not `[routing.geo]`.
 
@@ -553,7 +600,7 @@ Keep the listener on loopback when possible. The browser address may be your pro
 ## Full Example Config
 
 ```toml
-# VelocityNavigator v4.3.0 Configuration
+# VelocityNavigator v4.4.0 Configuration
 # https://github.com/DemonZ-Development/VelocityNavigator/wiki
 
 notify_on_startup = true

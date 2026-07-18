@@ -62,8 +62,11 @@ All `/vn` and `/velocitynavigator` commands require `velocitynavigator.admin`.
 | `/vn drain status` | Lists drained servers |
 | `/vn reload` | Reloads `navigator.toml`, `messages.toml`, `gui.toml`, and managed lobbies from `servers.toml` |
 | `/vn config validate` | Checks command conflicts, ports, Redis safety, queue requirements, and managed files |
+| `/vn menu validate` | Audits selector server IDs, duplicate display names, Java slots, material-identifier syntax, and `{...}` placeholders |
 
 Drain state is saved across proxy restarts. See [Operations Runbook](Operations-Runbook) for a maintenance workflow.
+
+`/vn menu validate` is read-only. Use it after editing `gui.toml` to catch menu-specific mistakes before players open a selector. `/vn config validate` remains the broader configuration and network-safety check; one command does not replace the other.
 
 ## Managed servers
 

@@ -24,10 +24,12 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 import java.util.regex.Pattern;
 
 public final class BedrockFormService {
@@ -46,18 +48,31 @@ public final class BedrockFormService {
             JavaMenuService.showLobbyMenu(player, plugin, decision);
             return;
         }
-        List<String> candidates = decision.onlineCandidates() == null ? new ArrayList<>() : new ArrayList<>(decision.onlineCandidates());
+        List<String> candidates = decision.onlineCandidates() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(new LinkedHashSet<>(decision.onlineCandidates()));
         if (candidates.isEmpty()) {
             player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(), Map.of("reason", config.language().text("reasons.no_online_lobbies"), "player", player.getUsername()), player));
             return;
         }
-        if ("name".equals(menu.sortMode())) candidates.sort(String.CASE_INSENSITIVE_ORDER);
-        if ("players".equals(menu.sortMode())) candidates.sort(Comparator.comparingInt(name -> plugin.server().getServer(name).map(server -> server.getPlayersConnected().size()).orElse(Integer.MAX_VALUE)));
+        candidates = new ArrayList<>(orderedCandidates(
+                candidates,
+                plugin.guiConfig(),
+                menu,
+                name -> plugin.server().getServer(name)
+                        .map(server -> server.getPlayersConnected().size())
+                        .orElse(Integer.MAX_VALUE)
+        ));
+        if (candidates.isEmpty()) {
+            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(), Map.of("reason", config.language().text("reasons.no_online_lobbies"), "player", player.getUsername()), player));
+            return;
+        }
         if (candidates.size() > menu.maxButtons()) candidates = new ArrayList<>(candidates.subList(0, menu.maxButtons()));
         List<String> formCandidates = List.copyOf(candidates);
+        List<MenuServerInfo> formServers = MenuServerInfoResolver.resolve(plugin, config, formCandidates);
 
         try {
-            Object builder = createSimpleFormBuilder(player, plugin, config, formCandidates);
+            Object builder = createSimpleFormBuilder(player, plugin, config, formServers);
             Class<?> formBuilderClass = Class.forName("org.geysermc.cumulus.form.util.FormBuilder");
             Class<?> responseClass = Class.forName("org.geysermc.cumulus.response.SimpleFormResponse");
             Method clickedButtonIdMethod = responseClass.getMethod("clickedButtonId");
@@ -86,7 +101,7 @@ public final class BedrockFormService {
         }
     }
 
-    private static Object createSimpleFormBuilder(Player player, VelocityNavigator plugin, Config config, List<String> candidates)
+    private static Object createSimpleFormBuilder(Player player, VelocityNavigator plugin, Config config, List<MenuServerInfo> servers)
             throws ReflectiveOperationException {
         Class<?> simpleFormClass = Class.forName("org.geysermc.cumulus.form.SimpleForm");
         Class<?> simpleFormBuilderClass = Class.forName("org.geysermc.cumulus.form.SimpleForm$Builder");
@@ -102,27 +117,69 @@ public final class BedrockFormService {
         simpleFormBuilderClass.getMethod("content", String.class).invoke(builder,
                 stripFormattingCodesIfRequested(content, config));
 
-        for (String serverName : candidates) {
-            int currentPlayers = 0;
-            Optional<RegisteredServer> registered = plugin.server().getServer(serverName);
-            if (registered.isPresent()) {
-                currentPlayers = registered.get().getPlayersConnected().size();
-            }
-            Config.LobbyEntry lobby = plugin.lobbyEntry(serverName).orElse(new Config.LobbyEntry(serverName, Config.LobbyEntry.UNCAPPED, Config.LobbyEntry.DEFAULT_WEIGHT));
-            String maxPlayers = lobby.maxPlayers() == Config.LobbyEntry.UNCAPPED ? "∞" : String.valueOf(lobby.maxPlayers());
-            String ping = String.valueOf(plugin.healthService().getLatencies().getOrDefault(serverName.toLowerCase(java.util.Locale.ROOT), -1L));
-            String status = plugin.healthService().getBackendStates().getOrDefault(serverName.toLowerCase(java.util.Locale.ROOT), "HEALTHY");
-            String buttonText = buttonFormat
-                    .replace("{server}", serverName)
-                    .replace("{players}", menu.showPlayers() ? String.valueOf(currentPlayers) : "")
-                    .replace("{max_players}", menu.showMaxPlayers() ? maxPlayers : "")
-                    .replace("{ping}", menu.showPing() ? ping : "")
-                    .replace("{status}", menu.showStatus() ? status : "");
+        for (MenuServerInfo info : servers) {
+            String buttonText = formatButtonText(
+                    buttonFormat,
+                    info.server(),
+                    info.displayName(),
+                    info.description(),
+                    menu.showPlayers() ? String.valueOf(info.players()) : "",
+                    menu.showMaxPlayers() ? ("-".equals(info.maxPlayers()) ? "∞" : info.maxPlayers()) : "",
+                    menu.showPing() ? info.ping() : "",
+                    menu.showStatus() ? info.status() : "",
+                    menu.showStatus() ? info.statusColor() : ""
+            );
 
             simpleFormBuilderClass.getMethod("button", String.class).invoke(builder,
                     stripFormattingCodesIfRequested(buttonText, config));
         }
         return builder;
+    }
+
+    static String formatButtonText(String template, String serverId, String displayName, String players,
+                                   String maxPlayers, String ping, String status) {
+        return formatButtonText(template, serverId, displayName, "", players, maxPlayers, ping, status);
+    }
+
+    static String formatButtonText(String template, String serverId, String displayName, String description,
+                                   String players, String maxPlayers, String ping, String status) {
+        return formatButtonText(template, serverId, displayName, description, players, maxPlayers, ping, status, "");
+    }
+
+    static String formatButtonText(String template, String serverId, String displayName, String description,
+                                   String players, String maxPlayers, String ping, String status,
+                                   String statusColor) {
+        return MenuTemplateFormatter.replace(template, Map.of(
+                "server", displayName,
+                "display_name", displayName,
+                "server_id", serverId,
+                "description", description,
+                "players", players,
+                "max_players", maxPlayers,
+                "ping", ping,
+                "status", status,
+                "status_color", statusColor
+        ));
+    }
+
+    static List<String> orderedCandidates(List<String> candidates, GuiConfig gui, GuiConfig.BedrockMenu menu,
+                                          ToIntFunction<String> playerCount) {
+        List<String> ordered = candidates == null
+                ? new ArrayList<>()
+                : new ArrayList<>(new LinkedHashSet<>(candidates));
+        if ("name".equals(menu.sortMode())) {
+            ordered.sort(displayNameComparator(gui));
+        } else if ("players".equals(menu.sortMode())) {
+            ordered.sort(Comparator.comparingInt(playerCount));
+        }
+        return gui.visibleServers(ordered);
+    }
+
+    static Comparator<String> displayNameComparator(GuiConfig gui) {
+        return Comparator.comparing(
+                (String name) -> gui.displayName(name),
+                String.CASE_INSENSITIVE_ORDER
+        ).thenComparing(String.CASE_INSENSITIVE_ORDER);
     }
 
     private static void sendFloodgateForm(UUID playerId, Object builder, Class<?> formBuilderClass)

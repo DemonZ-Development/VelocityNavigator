@@ -19,6 +19,7 @@
 
 **Player Experience**
 - [Java & Bedrock Selectors](Java-and-Bedrock-Selectors)
+- [Selector Customization](Server-Display-Names)
 - [Language Packs](Language-Packs)
 - [Party System](Party-System)
 - [Capacity Queue](Capacity-Queue)
@@ -41,4 +42,4 @@
 - [FAQ](FAQ)
 
 ---
-*VelocityNavigator 4.3.0*
+*VelocityNavigator 4.4.0*

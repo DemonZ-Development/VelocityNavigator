@@ -20,7 +20,9 @@ Start with [Routing Algorithms](Routing-Algorithms), then add [Contextual Routin
 
 ![Bedrock lobby form running in Minecraft](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png)
 
-Java players can use a paginated inventory, Bedrock players can use a native Geyser/Floodgate form, and any network can fall back to a clickable chat selector. Icons, slots, names, lore, colors, paging, and refresh timing are configurable in `gui.toml`.
+Java players can use a paginated inventory, Bedrock players can use a native Geyser/Floodgate form, and any network can fall back to a clickable chat selector. Shared display names and descriptions make raw Velocity IDs player-friendly; menu ordering and visibility stay consistent across selectors without changing automatic routing.
+
+Java inventory icons, fixed slots, names, lore, colors, paging, and refresh timing are configurable in `gui.toml`. Full, draining, offline, and in-game entries can each inherit a state-specific material, name, and lore. `/vn menu validate` catches unknown IDs, duplicate labels, bad slots, malformed material identifiers, and unsupported `{...}` placeholders before rollout.
 
 The Java inventory needs the optional backend bridge. Bedrock forms and chat menus work from the proxy.
 
@@ -66,9 +68,10 @@ English, Russian, Spanish, French, German, Brazilian Portuguese, and Simplified 
 
 ## Compatibility
 
-- Velocity 3.x and Java 17+
+- Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with one JAR
+- Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0
 - Minecraft versions supported by your Velocity build
 - Optional Paper/Spigot 1.16.5+ backend bridge
 - Geyser and Floodgate for native Bedrock forms
 
-BungeeCord and Waterfall are not supported. Redis Cluster/Sentinel discovery and GeoIP routing are not included in 4.3.0.
+BungeeCord and Waterfall are not supported. Redis Cluster/Sentinel discovery and GeoIP routing are not included in 4.4.0.

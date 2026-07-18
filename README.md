@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.3.0-cyan?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.4.0-cyan?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/channel-stable-38d6e0?style=for-the-badge" alt="Stable release channel">
-  <img src="https://img.shields.io/badge/platform-Velocity_3.x-blue?style=for-the-badge" alt="Platform">
-  <img src="https://img.shields.io/badge/java-17+-orange?style=for-the-badge" alt="Java">
+  <img src="https://img.shields.io/badge/platform-Velocity_3.4.x_%2F_3.5.x_%2B_4.0.0-blue?style=for-the-badge" alt="Platform">
+  <img src="https://img.shields.io/badge/java-17_%2F_21_%2F_25-orange?style=for-the-badge" alt="Java">
   <img src="https://img.shields.io/badge/license-Apache_2.0-green?style=for-the-badge" alt="License">
 </p>
 
@@ -25,6 +25,41 @@ VelocityNavigator balances initial joins and lobby commands across healthy Veloc
 </p>
 
 The JAR always runs on Velocity. Install the same JAR on Paper or Spigot only when a backend needs to render the Java inventory selector or publish dynamic registration events.
+
+---
+
+## What's New in v4.4
+
+| Feature | Description |
+|---------|-------------|
+| **Cross-selector display names** | Give a raw Velocity ID such as `lobby1` a player-facing `display_name` such as `Main Lobby 1` across Java inventory, Java chat, and Bedrock selectors |
+| **Descriptions and safe placeholders** | Share `{description}` across selector templates; `{server}`/`{display_name}` show the alias, while `{server_id}` exposes the raw routing ID |
+| **Shared ordering and visibility** | `menu_order` controls selector order and `show_in_menu = false` hides internal servers from menus without removing them from automatic routing |
+| **State-aware inventory presentation** | Give full, draining, offline, and in-game servers their own Java inventory material, item name, and lore |
+| **Menu validator** | `/vn menu validate` checks server IDs, duplicate labels, slots, material identifiers, and `{...}` placeholders before players encounter a broken selector |
+| **Alias-aware Bedrock sorting** | `sort_mode = "name"` orders buttons by their displayed names; blank aliases fall back to the registered ID |
+
+Selector metadata lives under `[servers]` in `gui.toml`, while reusable Java inventory state styles live under `[states.*]`. Changes apply after `/vn reload`. Raw Velocity IDs remain the only routing and connection targets.
+
+Set Java inventory size in the proxy's `plugins/velocitynavigator/gui.toml`. `rows` accepts `2` through `6` (18 through 54 slots); the bottom row is reserved for controls. For a 36-slot menu:
+
+```toml
+[layout]
+rows = 4
+
+[controls]
+previous_slot = 27
+refresh_slot = 31
+next_slot = 35
+```
+
+Run `/vn reload`, then `/vn menu validate`. See the [Java and Bedrock Selectors guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Java-and-Bedrock-Selectors#inventory-size-and-slots) for every size.
+
+Per-language display names are not included in v4.4; language packs continue to translate the surrounding selector templates and status text.
+
+See the [Selector Customization guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Server-Display-Names) for complete examples and troubleshooting.
+
+See the [CHANGELOG](CHANGELOG.md) for the full list of changes.
 
 ---
 
@@ -76,7 +111,7 @@ See the [CHANGELOG](CHANGELOG.md) for the full list of changes.
 | **Per-group selection mode** | Contextual groups can override the global selection algorithm |
 | **Fallback priority chain** | Ordered fallback groups when a group's servers are unavailable |
 | **Graceful degradation** | Fall back to random selection when all health checks fail |
-| **Geo routing placeholder** | Compatibility config remains, but MaxMind/GeoIP routing is intentionally deferred beyond 4.3.0 |
+| **Geo routing placeholder** | Compatibility config remains, but MaxMind/GeoIP routing is intentionally deferred beyond 4.4.0 |
 | **Admin update notifications** | In-game notification for admins when updates are available |
 
   See [Migration Guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Migration-Guide-v3-to-v4) for upgrade instructions.
@@ -97,7 +132,7 @@ See the [CHANGELOG](CHANGELOG.md) for the full list of changes.
 | **Server drain mode** | `/vn drain` and `/vn undrain` for maintenance |
 | **bStats telemetry** | Anonymous usage metrics via [bStats](https://bstats.org/plugin/velocity/Velocity%20Navigator/28341) |
 | **Self-documenting config** | `navigator.toml` generates with inline docs explaining every setting |
-| **Admin suite** | `/vn status`, `/vn health`, `/vn bridge status`, `/vn reload`, `/vn debug`, `/vn drain`, `/vn updatecheck` with tab-completion |
+| **Admin suite** | `/vn status`, `/vn health`, `/vn bridge status`, `/vn menu validate`, `/vn reload`, `/vn debug`, `/vn drain`, `/vn updatecheck` with tab-completion |
 | **Native parties** | `/party` lifecycle commands, `/p` chat, and automatic online-member follow when the leader changes server |
 | **Virtual capacity queue** | Full pools place players in a live position queue and connect them as soon as slots open |
 | **Multi-proxy Redis sync** | Dynamic backend registration plus circuit-breaker, health-cache, and affinity synchronization |
@@ -107,7 +142,7 @@ See the [CHANGELOG](CHANGELOG.md) for the full list of changes.
 
 ## Installation
 
-1. Download `VelocityNavigator-4.3.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator)
+1. Download `VelocityNavigator-4.4.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator)
 2. Place it in your Velocity proxy's `plugins/` folder
 3. Start (or restart) the proxy
 4. Edit `navigator.toml` for systems, `messages.toml` for language, `gui.toml` for Java/Bedrock menus, and `servers.toml` for command-managed lobbies
@@ -115,7 +150,7 @@ See the [CHANGELOG](CHANGELOG.md) for the full list of changes.
 
 The universal JAR prints `VELOCITY PROXY mode` or `BACKEND GUI BRIDGE mode` at startup.
 
-**Requirements**: Velocity 3.x • Java 17+ • Minecraft 1.7.2 through 26.2 via Velocity • Paper/Spigot 1.16.5+ for the optional backend inventory bridge
+**Requirements**: Velocity 3.4.x, Velocity 3.5.x, or Velocity 4.0.0 with the same JAR • Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, or Java 25 for Velocity 4.0.0 • Minecraft 1.7.2 through 26.2 via Velocity • Paper/Spigot 1.16.5+ with Java 17+ for the optional backend inventory bridge
 
 The optional backend bridge is built against Spigot API 1.16.5 and uses no version-specific NMS. Proxy-only installations do not need the JAR on game or lobby backends.
 
@@ -206,6 +241,7 @@ Configurable text supports MiniMessage, classic `&`/`§` codes, `&#RRGGBB`, and 
 | `/vn server remove <name>` | `velocitynavigator.admin` | Remove a server from managed Velocity/plugin configuration |
 | `/vn server list` | `velocitynavigator.admin` | List plugin-managed lobby entries and the Velocity config path |
 | `/vn config validate` | `velocitynavigator.admin` | Check command collisions, Redis/HTTP safety, queue holding server, and managed files |
+| `/vn menu validate` | `velocitynavigator.admin` | Audit GUI server IDs, duplicate labels, slots, material identifiers, and placeholders |
 | `/vn reload` | `velocitynavigator.admin` | Hot-reload navigator.toml, messages.toml, gui.toml, and servers.toml |
 | `/vn status` | `velocitynavigator.admin` | View runtime status, distribution, circuit breakers |
 | `/vn health` | `velocitynavigator.admin` | Consolidated one-shot diagnostics screen |
@@ -259,6 +295,7 @@ See the [HTML Dashboard guide](https://github.com/DemonZ-Development/VelocityNav
 |----------|-------------|
 | [Quick Start Guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Quick-Start-Guide) | Get running in under 10 minutes |
 | [Configuration Guide](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Configuration-Guide) | Every `navigator.toml`, `messages.toml`, `gui.toml`, and `servers.toml` setting explained |
+| [Selector Customization](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Server-Display-Names) | Display names, descriptions, ordering, visibility, state styles, precedence, and menu validation |
 | [Commands and Permissions](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Commands-and-Permissions) | Complete player, admin, party, queue, managed-server, and integration command reference |
 | [Routing Algorithms](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Routing-Algorithms) | Deep dive into all 8 routing modes |
 | [Algorithm Visualizations](https://github.com/DemonZ-Development/VelocityNavigator/wiki/Algorithm-Visualizations) | Distribution patterns at different load levels |
@@ -280,7 +317,7 @@ See the [HTML Dashboard guide](https://github.com/DemonZ-Development/VelocityNav
 git clone https://github.com/DemonZ-Development/VelocityNavigator.git
 cd VelocityNavigator
 mvn clean verify
-# JAR output: target/VelocityNavigator-4.3.0.jar
+# JAR output: target/VelocityNavigator-4.4.0.jar
 ```
 
 ---

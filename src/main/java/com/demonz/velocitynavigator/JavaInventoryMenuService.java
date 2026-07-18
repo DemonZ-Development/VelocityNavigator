@@ -40,7 +40,12 @@ public final class JavaInventoryMenuService {
             return true;
         }
 
-        List<String> candidates = List.copyOf(new LinkedHashSet<>(configured));
+        List<String> candidates = gui.visibleServers(List.copyOf(new LinkedHashSet<>(configured)));
+        if (candidates.isEmpty()) {
+            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
+                    Map.of("reason", config.language().text("reasons.no_online_lobbies"), "player", player.getUsername()), player));
+            return true;
+        }
         List<MenuServerInfo> all = MenuServerInfoResolver.resolve(plugin, config, candidates, decision.onlineCandidates());
         int pageSize = gui.serverPageSize();
         int totalPages = Math.max(1, (all.size() + pageSize - 1) / pageSize);
@@ -76,10 +81,13 @@ public final class JavaInventoryMenuService {
         }
     }
 
-    private static List<MenuBridgeProtocol.MenuItem> buildServerItems(Player player, Config config, GuiConfig gui,
-                                                                       List<MenuServerInfo> visible) {
+    static List<MenuBridgeProtocol.MenuItem> buildServerItems(Player player, Config config, GuiConfig gui,
+                                                               List<MenuServerInfo> visible) {
         int automaticLimit = gui.rows() * 9 - 9;
         Set<Integer> used = new LinkedHashSet<>();
+        used.add(gui.previousSlot());
+        used.add(gui.refreshSlot());
+        used.add(gui.nextSlot());
         List<MenuBridgeProtocol.MenuItem> result = new ArrayList<>();
         Map<MenuServerInfo, Integer> assigned = new LinkedHashMap<>();
 
@@ -109,17 +117,17 @@ public final class JavaInventoryMenuService {
         for (Map.Entry<MenuServerInfo, Integer> entry : assigned.entrySet()) {
             MenuServerInfo info = entry.getKey();
             GuiConfig.ServerItem override = gui.server(info.server());
-            String material;
-            if (info.available()) {
-                material = override != null && !override.material().isBlank() ? override.material() : gui.defaultMaterial();
-            } else {
-                material = override != null && !override.unavailableMaterial().isBlank()
-                        ? override.unavailableMaterial() : gui.unavailableMaterial();
-            }
+            GuiConfig.StateStyle stateStyle = gui.stateStyle(info.state());
+            String material = resolveMaterial(gui, info, override, stateStyle);
             String nameTemplate = override != null && !override.name().isBlank()
-                    ? override.name() : config.language().text("menus.inventory.item_name");
+                    ? override.name()
+                    : !stateStyle.name().isBlank()
+                    ? stateStyle.name()
+                    : config.language().text("menus.inventory.item_name");
             List<String> loreTemplate = override != null && !override.lore().isEmpty()
                     ? override.lore()
+                    : !stateStyle.lore().isEmpty()
+                    ? stateStyle.lore()
                     : config.language().lines(info.available()
                     ? "menus.inventory.item_lore" : "menus.inventory.unavailable_lore");
             String name = legacy(replace(nameTemplate, info.placeholders()), player);
@@ -128,6 +136,20 @@ public final class JavaInventoryMenuService {
                     material, name, lore));
         }
         return result;
+    }
+
+    private static String resolveMaterial(GuiConfig gui, MenuServerInfo info, GuiConfig.ServerItem override,
+                                          GuiConfig.StateStyle stateStyle) {
+        if (!info.available() && override != null && !override.unavailableMaterial().isBlank()) {
+            return override.unavailableMaterial();
+        }
+        if (info.state() != MenuServerState.HEALTHY && !stateStyle.material().isBlank()) {
+            return stateStyle.material();
+        }
+        if (info.available() && override != null && !override.material().isBlank()) {
+            return override.material();
+        }
+        return info.available() ? gui.defaultMaterial() : gui.unavailableMaterial();
     }
 
     private static void addControls(Player player, Config config, GuiConfig gui, int page, int pages,
@@ -155,11 +177,6 @@ public final class JavaInventoryMenuService {
     }
 
     private static String replace(String template, Map<String, String> placeholders) {
-        String result = template;
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue())
-                    .replace("<" + entry.getKey() + ">", entry.getValue());
-        }
-        return result;
+        return MenuTemplateFormatter.replace(template, placeholders);
     }
 }
