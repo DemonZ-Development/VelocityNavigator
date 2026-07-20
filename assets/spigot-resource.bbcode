@@ -1,93 +1,113 @@
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/hero-banner.png?v=7[/IMG]
 
 [SIZE=6][B]VelocityNavigator 4.4.0[/B][/SIZE]
-[SIZE=4]Health-aware lobby routing for Velocity networks[/SIZE][/CENTER]
+[SIZE=4]Lobby routing and player selectors for Velocity[/SIZE][/CENTER]
 
-Velocity's normal try list always prefers the first available server. VelocityNavigator chooses a suitable lobby for every initial join and every /lobby request, so one lobby does not fill while the others sit empty.
+Velocity's try list is useful for fallbacks, but it is not a load balancer: while the first lobby is available, most players are sent there. VelocityNavigator chooses a lobby for initial joins and /lobby requests using live health, capacity, maintenance state, and the routing mode you select.
 
-[INDENT][B]Download the current JAR with this Spigot resource's download button.[/B] The same JAR runs on Velocity and, when needed, on Paper or Spigot.[/INDENT]
+[INDENT][B]Download the current JAR with this resource's Download button.[/B] It always runs on Velocity; the same file can also be installed on Paper or Spigot when you want the Java inventory selector.[/INDENT]
 
-[SIZE=5][B]New in 4.4: selector customization[/B][/SIZE]
+[SIZE=5][B]Version 4.4.0[/B][/SIZE]
+
+Version 4.4 separates the name players see from the server ID Velocity uses. A backend registered as lobby1 can appear as Main Lobby 1 in the Java inventory, clickable chat menu, and Bedrock form.
+
+[CODE]
+[servers]
+"lobby1" = { display_name = "Main Lobby 1", description = "Events, portals, and network help", menu_order = 10, show_in_menu = true }
+"staff-lobby" = { display_name = "Staff Lobby", menu_order = -1, show_in_menu = false }
+[/CODE]
+
+The real IDs stay in velocity.toml. Routing, health checks, callbacks, secure menu tokens, and connection requests continue to use those IDs.
 
 [LIST]
-[*]Friendly display_name and description values without changing raw Velocity routing IDs
-[*]Shared menu_order across Java inventory, Java chat, and Bedrock selectors
-[*]show_in_menu for hiding internal choices without disabling automatic routing
-[*]Reusable full, draining, offline, and in-game Java item styles
-[*]/vn menu validate for IDs, duplicate labels, slots, material identifiers, and curly-brace placeholders
+[*]Shared descriptions, ordering, and visibility across all three selectors
+[*]Reusable Java item styles for full, draining, offline, and in-game servers
+[*]Inventory sizes from two to six rows, with navigation kept in the reserved bottom row
+[*]/vn menu validate for unknown IDs, duplicate labels, slot conflicts, materials, and placeholders
+[*]One Java 17-bytecode JAR verified on Velocity 3.4.x, 3.5.x, and 4.0.0
 [/LIST]
-
-Visibility and presentation are menu-only. Health checks, secure tokens, callbacks, automatic routing, and connections retain the raw server ID.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/01-smart-routing.png?v=2[/IMG][/CENTER]
 
-[SIZE=5][B]Routing that fits your network[/B][/SIZE]
+[SIZE=5][B]Routing[/B][/SIZE]
 
 [LIST]
-[*]Eight routing modes, including least players, power of two, weighted routing, consistent hash, and latency
-[*]Initial-join balancing as well as /lobby, /hub, and /spawn
-[*]Health checks, capacity limits, drain mode, circuit breakers, and fallback pools
-[*]Contextual lobby groups for networks with several game modes
-[*]Persistent player affinity across proxy restarts
+[*][B]least_players[/B] for straightforward balancing in a small pool
+[*][B]power_of_two[/B] as a fast default for busy networks
+[*][B]weighted_round_robin[/B] when lobby capacities differ
+[*][B]consistent_hash[/B] when players should return to a familiar lobby
+[*][B]latency[/B] when proxy-to-backend response time matters
+[*][B]least_connections[/B] for routing by recent connection load
+[*][B]round_robin or random[/B] for simple rotation
 [/LIST]
 
-For most networks, power_of_two is a good starting point. Smaller setups may prefer least_players, while weighted_round_robin is useful when lobby sizes differ.
+A candidate can be excluded when it is offline, full, drained, circuit-broken, or in a disallowed lifecycle state. Fallback pools and contextual groups keep different game modes tied to the right hubs. Initial joins use the same checks as /lobby.
 
-[SIZE=5][B]Real Java, Bedrock, and chat selectors[/B][/SIZE]
+[SIZE=5][B]Player selectors[/B][/SIZE]
 
-[CENTER][B]Java Edition inventory[/B]
+[CENTER][B]Java inventory[/B]
 [IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png?v=1[/IMG]
 
 [B]Bedrock form[/B]
 [IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png?v=2[/IMG][/CENTER]
 
-The Java inventory is rendered by the optional Paper/Spigot bridge. The native Bedrock form uses Geyser/Floodgate, and a clickable chat selector remains available without either GUI. Both images above are real in-game captures. gui.toml controls the layout, icons, slots, filler items, titles, lore, navigation, refresh timing, and state presentation. Display names, descriptions, ordering, and visibility are shared by all three selectors. Java items can inherit separate full, draining, offline, and in-game styles.
+The optional Paper/Spigot bridge renders the paginated Java inventory. Geyser/Floodgate players can use a native Bedrock form. If neither GUI is installed, VelocityNavigator can fall back to the clickable Java chat selector.
+
+gui.toml controls the inventory row count, filler, icons, fixed slots, navigation, refresh interval, names, lore, and state styles. Display names, descriptions, ordering, and visibility stay consistent between all three selectors. The screenshots above are from running Minecraft clients.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/02-universal-jar.png?v=2[/IMG][/CENTER]
 
-[SIZE=5][B]One JAR, optional backend install[/B][/SIZE]
+[SIZE=5][B]Install only what you use[/B][/SIZE]
 
-Install VelocityNavigator on the Velocity proxy for routing and commands. Install the same JAR on Paper or Spigot only when a backend needs to open the Java inventory selector or publish optional Redis registration. Proxy-only use is fully supported.
+[LIST]
+[*][B]Velocity only:[/B] routing, initial-join balancing, chat selector, Bedrock forms, health checks, parties, queues, commands, and metrics
+[*][B]Velocity plus backend bridge:[/B] everything above, plus the Java inventory and optional backend Redis registration
+[*][B]Multiple proxies plus Redis:[/B] shared health, circuit-breaker, affinity, and backend-state information
+[/LIST]
+
+A proxy-only installation is fully supported. Put the JAR on a backend only when that server needs bridge features. Startup logs state whether the file is running in VELOCITY PROXY or BACKEND GUI BRIDGE mode.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/05-optional-systems.png?v=2[/IMG][/CENTER]
 
 [SIZE=5][B]Optional network features[/B][/SIZE]
 
 [LIST]
-[*][B]Parties:[/B] invitations, member list, private chat, and leader follow
-[*][B]Capacity queue:[/B] live position updates and automatic connection when space opens
-[*][B]Redis:[/B] shared health, circuit, affinity, and backend-state information between proxies
-[*][B]Dynamic registration:[/B] backends can announce themselves using a shared secret and host allowlist
-[*][B]Lifecycle states:[/B] MOTD markers can keep in-game or unavailable backends out of routing
+[*][B]Parties:[/B] invites, member management, private chat, and leader-follow transfers
+[*][B]Capacity queue:[/B] position updates and automatic connection when a lobby opens
+[*][B]Redis sync:[/B] shared routing state and authenticated backend registration
+[*][B]Operations:[/B] Prometheus metrics, Grafana setup, and an optional local HTML dashboard
+[*][B]Affinity:[/B] persistent sticky routing across proxy restarts
 [/LIST]
 
-Parties and queue positions stay on the proxy where they were created. Keep those players pinned to the same Velocity node on a multi-proxy network.
+These systems are optional until configured. Party membership and queue positions are local to one proxy, so players using those features should remain pinned to that proxy in a multi-proxy deployment.
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/06-operations.png?v=2[/IMG][/CENTER]
 
-[SIZE=5][B]Straightforward administration[/B][/SIZE]
+[SIZE=5][B]Useful administration commands[/B][/SIZE]
 
 [LIST]
-[*]/vn health and /vn servers for a quick network overview
-[*]/vn debug player and /vn debug server when a route looks wrong
-[*]/vn bridge status for optional backend installations
-[*]/vn redis status and /vn redis test for Redis checks
-[*]/vn drain and /vn undrain for maintenance
-[*]/vn menu validate for selector configuration checks
-[*]/vn server add game or lobby, dry-run, list, and remove for managed backends
-[*]Prometheus metrics, Grafana setup, and an optional local HTML dashboard
-[*]Validated server add/remove commands with dry-run support
+[*]/vn health — quick network and routing summary
+[*]/vn servers — health, players, capacity, drain, and circuit state
+[*]/vn debug player <name> — explain a player's routing result
+[*]/vn bridge status — show detected backend bridges
+[*]/vn drain <server> and /vn undrain <server> — control maintenance rotation
+[*]/vn server add, dry-run, list, and remove — safely manage Velocity entries
+[*]/vn config validate — check the main configuration
+[*]/vn menu validate — check selector IDs, labels, slots, materials, and placeholders
+[*]/vn reload — reload proxy-side configuration
 [/LIST]
+
+velocitynavigator.use controls the player lobby command. velocitynavigator.admin controls administration commands.
 
 [SIZE=5][B]Quick setup[/B][/SIZE]
 
 [LIST=1]
-[*]Download VelocityNavigator-4.4.0.jar with this resource's download button.
+[*]Download VelocityNavigator-4.4.0.jar from this page.
 [*]Put it in the Velocity proxy's plugins folder.
-[*]Start the proxy once to create the configuration files.
-[*]Add your lobby names to navigator.toml or use /vn server add lobby.
+[*]Start the proxy once so the configuration files are created.
+[*]Add registered lobby IDs to navigator.toml, or use /vn server add lobby.
 [*]Run /vn config validate, then /vn reload.
-[*]Optionally place the same JAR on Paper/Spigot for the Java inventory selector.
+[*]Install the same JAR on selected Paper/Spigot backends only if you need the Java inventory.
 [/LIST]
 
 [CODE]
@@ -97,15 +117,15 @@ balance_initial_join = true
 default_lobbies = ["lobby-1", "lobby-2"]
 [/CODE]
 
-The lobby names must already exist in Velocity's velocity.toml.
+Each lobby name must already exist under [servers] in Velocity's velocity.toml.
 
-[SIZE=5][B]Compatibility[/B][/SIZE]
+[SIZE=5][B]Compatibility and limits[/B][/SIZE]
 
 [LIST]
-[*]Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with the same JAR
-[*]Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, or Java 25 for Velocity 4.0.0
-[*]Minecraft versions supported by your Velocity build
-[*]Optional Paper/Spigot bridge built against the 1.16.5 API
+[*]Velocity 3.4.x, 3.5.x, and 4.0.0
+[*]Java 17 for Velocity 3.4.x, Java 21 for 3.5.x, and Java 25 for 4.0.0
+[*]Minecraft versions supported by the selected Velocity build
+[*]Optional Paper/Spigot bridge built against API 1.16.5 without version-specific NMS
 [*]Geyser and Floodgate for native Bedrock forms
 [/LIST]
 
@@ -113,12 +133,12 @@ BungeeCord and Waterfall are not supported. Redis Cluster/Sentinel discovery and
 
 [SIZE=5][B]Updating from 4.3[/B][/SIZE]
 
-Keep a copy of the current JAR and plugin folder, replace the JAR, and update one proxy first. Version 4.4 keeps navigator.toml at schema 8 and advances the menu-only gui.toml schema to 2. Existing entries remain compatible. Add optional selector metadata and state styles, run /vn reload, then run /vn menu validate and /vn config validate before trying /lobby. Localized per-language server names are not included in 4.4.
+Back up the current JAR and plugin folder, replace the JAR on one proxy, and start that proxy first. navigator.toml remains on schema 8. A version 1 gui.toml is backed up as gui.toml.v1.bak and rewritten as schema 2; existing server entries and item overrides are kept. Run /vn menu validate and /vn config validate before rolling the update across the network.
 
-[SIZE=5][B]Help and updates[/B][/SIZE]
+[SIZE=5][B]Support[/B][/SIZE]
 
-Use this Spigot resource for downloads and updates. Join [URL='https://discord.com/invite/GYsTt96ypf']DemonZ Development on Discord[/URL] for setup help or bug reports.
+Use this Spigot resource for downloads and updates. For setup help or bug reports, join [URL='https://discord.com/invite/GYsTt96ypf']DemonZ Development on Discord[/URL].
 
-Velocity-side anonymous usage statistics are provided through [URL='https://bstats.org/plugin/velocity/Velocity%20Navigator/28341']bStats[/URL] and can be disabled. Backend metrics are configured separately.
+Velocity-side anonymous usage statistics are provided through [URL='https://bstats.org/plugin/velocity/Velocity%20Navigator/28341']bStats[/URL] and can be disabled in configuration. Backend metrics are configured separately.
 
 [CENTER][SIZE=3][URL='https://nexeu.zip/']Nexeu Hosting[/URL] supports the project. VelocityNavigator does not require a specific host.[/SIZE][/CENTER]
