@@ -142,7 +142,11 @@ Back up the current JAR and plugin folder, replace the JAR on one proxy, and sta
 
 Use this Modrinth page for downloads and updates. For setup help or bug reports, join [DemonZ Development on Discord](https://discord.com/invite/GYsTt96ypf).
 
-Velocity-side anonymous usage statistics are provided through [bStats](https://bstats.org/plugin/velocity/Velocity%20Navigator/28341) and can be disabled in configuration. Backend metrics are configured separately.
+## Live usage statistics
+
+[![VelocityNavigator live bStats statistics](https://bstats.org/signatures/velocity/Velocity%20Navigator.svg)](https://bstats.org/plugin/velocity/Velocity%20Navigator/28341)
+
+The chart reports anonymous Velocity-side usage through bStats and refreshes automatically. Metrics can be disabled in configuration. Backend metrics are configured separately.
 
 ---
 
