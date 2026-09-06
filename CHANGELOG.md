@@ -19,24 +19,50 @@ A completely new, zero-dependency in-game NPC server selector engine built nativ
 - **Automatic Fallback for Older Servers**: Automatically detects backends older than 1.20.5 and seamlessly uses an optimized armor-stand mannequin with Interaction hitboxes.
 - **Full In-Game Management (`/vnavnpc`)**: Comprehensive command tree with tab completion (`create`, `action`, `skin`, `glow`, `hand`, `offhand`, `status`, `respawn`, `tp`, `remove`, `list`, `reload`).
 
+### New — Full GeoIP Distance Routing Engine (`geo.toml`)
+
+Route players to the lowest-latency lobby clusters based on physical geographic location:
+
+- **Geo-Distance Selection Mode (`geo_distance`)**: Calculates mathematical Great-Circle distance (Haversine formula) between player coordinates and server datacenter locations, automatically choosing the physically closest backend.
+- **Multiple GeoIP Providers**: Native support for MaxMind GeoLite2 databases (`.mmdb`), real-time HTTP fallback via ip-api.com, and seamless [GeoRestrict](https://modrinth.com/plugin/georestrict) integration.
+- **VPN & ASN Detection**: Built-in integration with GeoRestrict as a primary lookup source for proxy, VPN, and autonomous system verification.
+- **Country & Continent Affinity Overrides**: Map specific countries or continents directly to designated lobby pools (`geo_routing.affinity_countries`).
+- **Thread-Safe Subnet Matching**: High-performance in-memory IP cache with CIDR subnet matching for instantaneous routing decisions with zero main-thread impact.
+- **Contextual Initial Join Affinity**: Regional affinity rules apply immediately during initial connection handshakes as well as `/lobby` commands.
+
 ### New — Dynamic MOTD Subsystem & Configuration (`motd.toml`)
 
-- **Dynamic Server List MOTD Rotation**: Support for auto-rotating (`ROTATING`), `RANDOM`, and `SEQUENTIAL` server list ping MOTDs via `motd.toml`
-- **Readable Multiline TOML Formatting**: MOTD entries use clean multiline TOML strings with preserved comments and automatic backups (`backups/`)
-- **Maintenance MOTD Overrides**: Automatically overrides server list MOTD with custom maintenance text when global maintenance is enabled (`override_motd_on_maintenance = true`)
-- **Rich Text & MiniMessage**: Full support for legacy color codes (`&a`, `&b`) and Adventure MiniMessage gradients, tags, and font styling
-- **Placeholders**: Supported placeholders `{online}`, `{max}`, `{maintenance_reason}`, and `{version}`
-- **MOTD Admin Commands**: Added `/vn motd reload`, `/vn motd list`, `/vn motd add <text>`, `/vn motd remove <index>`, and `/vn motd setmode <mode>`
+A standalone, multi-mode server list MOTD engine:
+
+- **Dynamic Server List Rotation**: Configurable rotation engines supporting auto-rotating intervals (`ROTATING`), randomized selections (`RANDOM`), and sequential cycles (`SEQUENTIAL`) via `motd.toml`.
+- **Readable Multiline TOML Formatting**: MOTD configuration uses clean, human-readable multiline TOML strings with comment preservation and automated version backups.
+- **Emergency Maintenance Overrides**: Dedicated maintenance MOTD templates that automatically take over when global maintenance mode is enabled (`override_motd_on_maintenance = true`).
+- **MiniMessage & Gradient Styling**: Rich text styling with native MiniMessage gradients, hex colors, font tags, and legacy color code (`&a`, `&b`) translation.
+- **Real-Time Placeholders**: Embed dynamic network information including `{online}`, `{max}`, `{maintenance_reason}`, and `{version}`.
+- **Console & In-Game Administration**: Dedicated command suite (`/vn motd reload`, `/vn motd list`, `/vn motd add <text>`, `/vn motd remove <index>`, `/vn motd setmode <mode>`).
+
+### New — Authentication & Defensive Security Engine (`auth.toml`)
+
+Proxy-side authentication engine with military-grade hashing, holding-server quarantine, and native interfaces for both Java and Bedrock clients:
+
+- **Argon2id Password Hashing**: State-of-the-art password security powered by BouncyCastle with configurable memory cost, iterations, and parallelism.
+- **Legacy SHA-256 Verification**: Automatic backward-compatible password verification and upgrade path for pre-existing password databases.
+- **Interactive Sign-Board GUI for Java**: Java players receive an interactive in-game sign prompt to enter passwords privately without typing in open chat, with automatic command fallback.
+- **Native Floodgate Bedrock Forms**: Bedrock players via Floodgate receive native modal dialog forms for registration and password input.
+- **Holding Lobby Physical Quarantine**: Unauthenticated players are confined to a holding server with movement, interaction, block breaking/placing, item pickup/drop, and chat locked down until authentication succeeds (with optional blindness effect).
+- **Brute-Force Rate Limiting**: Global and per-account failure counters trigger an automatic 5-minute lockout with player notifications upon repeated failed logins.
+- **Bridge-Authenticated Sign Sessions**: Sign submissions route directly over the internal proxy-backend bridge channel with token validation to prevent spoofing.
+- **Reload-Persistent Sessions**: In-memory and persistent session tokens survive proxy reloads without forcing online players to log in again.
 
 ### New — Cross-Server Party & Team Engine (/party)
 
 Complete proxy-wide party management with dual Bedrock & Java interfaces and full backend synchronization:
 
-- **Party Hierarchy & Roles**: `LEADER`, `OFFICER`, and `MEMBER` roles with promotion and demotion (`/party promote`, `/party demote`)
-- **Custom Party Names & Formatting**: Rename parties (`/party rename <name>`) with MiniMessage and color support
-- **Leader Follow**: Party members automatically follow the party leader when transferring between lobbies or game servers
-- **Open & Invite-Only Modes**: Public or private join toggles (`/party open`, `/party close`)
-- **Dual Platform GUIs**: Dedicated `/party menu` with native Bedrock Cumulus modal forms and Java Edition chest inventories
+- **Party Hierarchy & Roles**: `LEADER`, `OFFICER`, and `MEMBER` roles with promotion and demotion (`/party promote`, `/party demote`).
+- **Custom Party Names & Formatting**: Rename parties (`/party rename <name>`) with MiniMessage and color support.
+- **Leader Follow**: Party members automatically follow the party leader when transferring between lobbies or game servers.
+- **Open & Invite-Only Modes**: Public or private join toggles (`/party open`, `/party close`).
+- **Dual Platform GUIs**: Dedicated `/party menu` with native Bedrock Cumulus modal forms and Java Edition chest inventories.
 - **Complete PlaceholderAPI Expansion**: Real-time team and party values exposed on all Paper/Spigot backends:
   - `%velocitynavigator_party_in_party%` (`true` / `false`)
   - `%velocitynavigator_party_name%` (Party / team display name)
@@ -46,128 +72,92 @@ Complete proxy-wide party management with dual Bedrock & Java interfaces and ful
   - `%velocitynavigator_party_role%` (`LEADER`, `OFFICER`, `MEMBER`)
   - `%velocitynavigator_party_is_open%` (`true` / `false`)
   - `%velocitynavigator_party_members%` (Formatted comma-separated member list for tablists/scoreboards)
-  - `%velocitynavigator_ping%`, `%velocitynavigator_lobby%`, and EssentialsX integration placeholders
-
-### New — External `.properties` Language Pack Overrides & Built-In Selection
-
-- **External Property File Overrides**: Support for dropping custom `.properties` language files into `plugins/velocitynavigator/languages/` (e.g. `custom_test.properties` or `hi.properties`)
-- **15 Built-in Language Selection**: Instant language switching across 15 built-in language packs (`en`, `es`, `fr`, `de`, `zh`, `ja`, `hi`, `ar`, `ko`, `pt`, `ru`, `tr`, `it`, `nl`, `pl`) via `navigator.toml` / `messages.toml`
+  - `%velocitynavigator_ping%`, `%velocitynavigator_lobby%`, and EssentialsX integration placeholders.
 
 ### New — Custom Menu System (Backend)
 
-Fully customizable YAML-based menus on Paper/Spigot servers. Create your own server selectors, minigame menus, or any interactive GUI.
+Fully customizable YAML-based menus on Paper/Spigot servers. Create your own server selectors, minigame menus, or any interactive GUI:
 
 - Create unlimited custom menus in `menus/*.yml` files
-- Items with slots, materials, names, lore, and targets
-- Nested menus — link to another menu (`menu:games`)
-- Command execution — run any server command on click (`cmd:/command`)
-- Server routing — send players to a specific lobby
-- Live refresh (`@refresh:N`) — items update automatically
-- Pagination (`@page:N`) — handle large server lists
-- Disabled items (`@disabled`) — greyed-out placeholder items
-- Menu validation rejects out-of-range slots, missing fields, reserved prefixes, excessive lore
+- Items with configurable slots, materials, custom model data, skull owners, and sounds
+- Nested menus — link directly to submenus (`menu:games`)
+- Command execution — execute proxy or backend commands on click (`cmd:/command`)
+- Server routing — send players to specific lobby clusters
+- Live item refresh (`@refresh:N`) and pagination (`@page:N`) for large networks
+- Disabled items (`@disabled`) for greyed-out coming-soon placeholders
 - Default starter menus (main, games, lobbies) auto-generated on first run
-- `/vnavmenu` command with 7 subcommands: `open`, `add`, `remove`, `title`, `rows`, `list`, `reload`
-
-### New — Authentication & Security
-
-Proxy-side authentication engine with password hashing, holding-server enforcement, and client-specific login interfaces.
-
-- Argon2id password hashing (via BouncyCastle) — configurable as primary or fallback algorithm
-- SHA-256 fallback for existing password databases
-- Configurable minimum password length (`auth.min_password_length`, default 8)
-- Native Floodgate registration and login forms for Bedrock players, with command fallback
-- Configurable `auth.bedrock_form_enabled` switch; Bedrock form inputs visibly warn that passwords are not masked
-- TOTP fields are reserved for a future release and runtime validation rejects `enable_2fa = true`
-- Expiring sessions
-- Holding-lobby route enforcement
-- Java-compatible login, registration, and logout commands
+- `/vnavmenu` command with 7 subcommands (`open`, `add`, `remove`, `title`, `rows`, `list`, `reload`)
 
 ### New — Folia Support
 
-Full compatibility with Folia's regionized threading model.
+Full compatibility with Folia's regionized multi-threaded architecture:
 
 - Runtime Folia detection via MethodHandle reflection
-- Backend scheduling uses entity-owned region threads on Folia
-- Falls back to `Bukkit.getScheduler()` on standard servers
-- `plugin.yml` declares `folia-supported: true`
+- Backend task scheduling uses entity-owned region threads on Folia
+- Gracefully falls back to standard Bukkit schedulers on Paper/Spigot
+- `plugin.yml` declares native `folia-supported: true`
 
-### New — GeoIP Distance Routing
+### New — Multi-Engine Database Storage (`storage.toml`)
 
-Route players to the nearest lobby based on real-world location.
+Choose where your player affinity, sessions, and credentials live:
 
-- `geo_distance` selection mode — picks the lobby closest to the player's real-world location
-- MaxMind GeoLite2 reader for country and continent lookups
-- ip-api.com HTTP fallback when MaxMind is unavailable
-- GeoRestrict integration as primary source (VPN detection, ASN lookup, ISP lookup)
-- Configurable geo provider (`geo_routing.provider`: `maxmind`, `georestrict`, `ip_api`)
-- Fallback mode toggle (`geo_routing.fallback_enabled`, `geo_routing.fallback_mode`)
-- Country affinity overrides (`geo_routing.affinity_countries`) — map countries to preferred lobbies
-- Thread-safe IP lookup cache
-- Subnet matching for accurate results
-- Configurable via `geo.toml` or `navigator.toml`
+- **Embedded SQLite**: Zero-configuration embedded database with native driver bundling
+- **MySQL & MariaDB**: High-throughput database storage with HikariCP connection pooling
+- **PostgreSQL**: Enterprise SQL database storage for multi-proxy architectures
+- **Plain JSON Files**: Lightweight, zero-setup file storage for smaller communities
+- **Automatic Schema Migrations**: Tables and column upgrades applied automatically on boot
 
-### New — Database Storage Backends
+### New — Maintenance & Graceful Evacuation
 
-Choose where your data lives.
-
-- File JSON, SQLite, MySQL, MariaDB, PostgreSQL
-- HikariCP connection pooling
-- Automated schema migration on upgrade
-- Configurable via `storage.toml` / `db.toml`
-
-### New — Maintenance Mode
-
-Take lobbies or the entire network offline safely.
+Take servers offline without disrupting player gameplay:
 
 - Network-wide or per-server maintenance states (`maintenance global on|off`, `/vn maintenance [server] [on/off]`)
-- Safe player evacuation to healthy destination lobbies without kicks
+- Safe player evacuation to healthy eligible destination lobbies without kicks
 - Maintenance blocks direct backend transfers as well as Navigator routing
-- Custom reason messages and countdowns
+- Custom kick reasons and dynamic countdown badges
 
 ### New — Backend Update Checker
 
-Independent update checker for Paper/Spigot servers.
+Independent update checker for Paper/Spigot servers:
 
-- Checks Modrinth API periodically
-- Exponential backoff on HTTP 429
+- Periodically checks Modrinth API for new releases
+- Exponential backoff on HTTP 429 rate limits
 - Configurable interval via `update_check_interval_minutes`
 
 ### New — Version Mismatch Detection
 
-Proxy warns when backends are out of date.
+Proxy continuously monitors backend bridge compatibility:
 
-- Compares backend version to proxy version on HELLO handshake
-- `/vn bridge` shows `✓ (up to date)`, `⚠ (outdated)`, or `✗ (not detected)` per server
+- Compares backend plugin versions against the proxy version during HELLO handshakes
+- `/vn bridge` displays `✓ (up to date)`, `⚠ (outdated)`, or `✗ (not detected)` per backend
 
-### New — Backend bStats
+### New — Backend bStats Telemetry
 
-Dedicated telemetry for Paper/Spigot servers (plugin ID 32887).
+Dedicated metrics telemetry for Paper/Spigot backends (plugin ID 32887):
 
 - Custom charts: `folia_enabled`, `server_software`, `inventory_menu_enabled`, `handshake_enabled`, `refresh_enabled`, `redis_registration_enabled`
 
-### New — Configuration
+### New — Modular Configuration Architecture
 
-- **Modular Config Files**: Separate `storage.toml`, `geo.toml`, and `auth.toml` for cleaner organization
-- **Config version 9**: Auto-migration from v8 with holding-server key added
-- **Organized Backup System**: All backups now stored in a dedicated `backups/` subfolder
-- **Legacy Backup Cleanup**: Old `.bak` files in the plugin root are automatically moved to `backups/`
-- **Automatic Backup Pruning**: Only the most recent backup per config file is kept — old version backups are deleted
-- **Backend Config Auto-Migration**: Old `config.yml` files auto-migrated from v1 to v2 with backup before migration
+- **Separated Config Files**: Dedicated `storage.toml`, `geo.toml`, `auth.toml`, and `motd.toml` for clean organization
+- **Config Version 9**: Automatic migration from legacy v8 configs
+- **Organized Backup Folder**: All version backups stored in a dedicated `backups/` subfolder
+- **Automatic Backup Pruning**: Only the latest backup per file is retained — stale backups are cleaned automatically
+- **Backend Config Auto-Migration**: `config.yml` auto-migrated from v1 to v2 on first boot
 
-### New — Admin Commands
+### New — Administrative Commands
 
 | Command | Description |
 |---|---|
 | `/vnavnpc` | In-game NPC management (create, action, skin, glow, hand, offhand, status, respawn, tp, remove, list, reload) |
 | `/vnavmenu` | Custom menu management (open, add, remove, title, rows, list, reload) |
-| `/vn config validate` | Runtime validation of navigator.toml and server registry |
-| `/vn server dry-run` | Validate a server add operation without writing |
+| `/vn config validate` | Runtime validation of navigator.toml and server registry with typo suggestions |
+| `/vn server dry-run` | Validate a server add operation without writing to disk |
 | `/vn affinity clean` | Purge expired sticky-session entries |
 
 ### Updated — Multi-Proxy Synchronization
 
-Extended from v4.3. Now includes:
+Extended from v4.3:
 
 - HMAC-SHA256 signature verification on registration payloads
 - Timestamp freshness validation to prevent replay attacks
@@ -176,14 +166,14 @@ Extended from v4.3. Now includes:
 
 ### Updated — NavigatorAPI
 
-Expanded from v4.0. External plugins can now access:
+Expanded developer API:
 
-- `pluginVersion()`, `server()`, `logger()`, `dataDirectory()`, `config()`, `bedrockHandler()`
-- No need to cast `NavigatorAPIProvider.get()` to `VelocityNavigator`
+- Access `pluginVersion()`, `server()`, `logger()`, `dataDirectory()`, `config()`, `bedrockHandler()` directly
+- No need to cast `NavigatorAPIProvider.get()` to internal implementation classes
 
-### Updated — Language Packs
+### Updated — Language Packs (15 Languages)
 
-Expanded from 7 to 15 languages.
+Expanded from 7 to 15 fully bundled languages:
 
 | Code | Language | Status |
 |---|---|---|
@@ -205,26 +195,26 @@ Expanded from 7 to 15 languages.
 
 ### Fixed
 
-- **Sign Board GUI authentication**: Password entries are now forwarded to the proxy over the backend bridge channel, where rate limiting, validation, and session handling apply. Previously the backend tried to execute `register`/`login` commands that only exist on the proxy, so sign submissions never authenticated anyone.
-- **Brute-force protection**: Registration and login attempts are rate limited per account and globally; repeated failures lock the account for five minutes. Lockouts are communicated to players instead of silent failures.
-- **`/vn connect` token bypass**: Connecting to a server manually no longer bypasses menu-token validation; backend menu selections use a dedicated authenticated selection token.
-- **Geo routing for contextual groups**: `geo_distance` groups now receive country affinity on the initial join, matching `/lobby` behavior. Previously affinity only applied when the global selection mode was `geo_distance`.
-- **Party ghost invites**: Invites sent by players who leave, are kicked, or whose party is disbanded are invalidated, so accepting them can no longer resurrect a disbanded party.
-- **Circuit breaker half-open recovery**: If half-open probe requests never complete, the breaker now trips back open after the cooldown instead of remaining stuck in half-open limbo.
-- **Server health cache invalidation**: `clearCache()` during `/vn reload` no longer reports servers as nonexistent or leaks raw `CancellationException` to callers; the next ping still completes normally.
-- **Fail-closed dynamic registration**: A blank `registration_secret` now rejects all incoming backend registrations instead of trusting unsigned announcements.
-- **Redis subscriber timeouts**: The registration subscriber applies the configured `subscriber_timeout_ms` so a stalled connection can recover.
-- **Auth sessions across reload**: In-memory authentication sessions survive `/vn reload` instead of forcing players to log in again.
-- **`{version}` MOTD placeholder**: Uses the plugin version instead of a hardcoded string.
-- **Command permissions**: `/vn help` and `/vn version` pass Velocity's outer permission gate without granting admin operations. Maintenance target/state completion and MOTD command/mode/index completion are available.
-- **Robustness**: Version parts that overflow an `int` no longer crash `SemanticVersion`; the cooldown map purges expired entries; the connections log is capped to keep runtime files bounded; the backend skin cache deduplicates in-flight lookups and always closes HTTP connections.
+- **Sign Board GUI authentication**: Password entries are forwarded to the proxy over the bridge channel where rate limiting and session validation apply, resolving failures on proxy-only auth setups.
+- **Brute-force protection**: Registration and login attempts are rate limited per account and globally; repeated failures lock the account for five minutes with informative lockout messages.
+- **`/vn connect` token bypass**: Connecting to a server manually no longer bypasses menu-token validation; backend menu selections use dedicated authenticated selection tokens.
+- **Geo routing for contextual groups**: `geo_distance` groups receive country affinity on the initial join, matching `/lobby` behavior.
+- **Party ghost invites**: Invites sent by players who leave, are kicked, or whose party is disbanded are invalidated immediately.
+- **Circuit breaker half-open recovery**: If half-open probe requests never complete, the breaker trips back open after the cooldown instead of remaining stuck in half-open state.
+- **Server health cache invalidation**: `clearCache()` during `/vn reload` no longer reports servers as nonexistent or leaks raw `CancellationException` to callers.
+- **Fail-closed dynamic registration**: A blank `registration_secret` rejects all incoming backend registrations instead of trusting unsigned announcements.
+- **Redis subscriber timeouts**: The registration subscriber applies `subscriber_timeout_ms` so stalled connections recover automatically.
+- **Auth sessions across reload**: In-memory authentication sessions survive `/vn reload` without forcing players to re-authenticate.
+- **`{version}` MOTD placeholder**: Dynamically resolves the real plugin version instead of a hardcoded string.
+- **Command permissions**: `/vn help` and `/vn version` pass Velocity's outer permission gate without granting admin privileges.
+- **Robustness**: Version parts that overflow an `int` no longer crash `SemanticVersion`; cooldown maps purge expired entries; connection logs are capped; skin cache deduplicates in-flight lookups and cleanly closes HTTP connections.
 
 ### Improved
 
-- **Uptime in `/vn status`**: Shows how long the proxy has been running
-- **Menu Validation**: Invalid menu files are skipped with a warning instead of causing errors
+- **Uptime in `/vn status`**: Real-time proxy running time display
+- **Menu Validation**: Invalid menu files are skipped with actionable warnings instead of breaking menu loading
 - **Configurable Menu Token Timeout**: Adjust session timeout (5–3600 seconds, default 60)
-- **Theme Uniformity**: Commands consistently use VelocityNavigator's signature aqua accent with gray descriptions
+- **Theme Uniformity**: Commands consistently use VelocityNavigator's signature aqua accent with clean gray descriptions
 
 ## [4.4.0] - 2026-07-20
 - Added optional per-server `description`, `menu_order`, and `show_in_menu` values. Descriptions are available through `{description}`, explicit menu order is shared by all selectors, and hidden entries remain eligible for automatic routing.
