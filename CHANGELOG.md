@@ -5,70 +5,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [4.5.0] - 2026-09-06
 
-### Fixed — MOTD File Layout and Maintenance Reliability
+### New — Native Packet-Level NPC Server Selectors (/vnavnpc)
 
-- MOTD entries are wrapped into readable multiline TOML strings. Startup/reload reformats legacy long entries without changing their displayed text, preserves comments and custom settings, and backs up the original file.
-- The MOTD-only parser handles escaped backslashes, quotes, Unicode, and multiline continuation correctly. Atomic saves are verified before publishing the new in-memory configuration; failed saves/reloads are reported instead of claiming success or silently replacing custom settings with defaults.
-- MOTD mode, interval, and message lists are validated. The last remaining MOTD cannot be removed. `/vn reload` reloads `motd.toml`, and an explicitly enabled maintenance override works when normal MOTD replacement is disabled.
-- `/vn help` and `/vn version` pass Velocity's outer permission gate without granting admin operations. Maintenance target/state completion and MOTD command/mode/index completion are available.
-- Maintenance blocks direct backend transfers as well as Navigator routing. Per-server evacuation checks destinations again between bounded retries, waits for transfer results, and cancels if the player moves or maintenance is cleared. Unknown maintenance targets are rejected.
+A completely new, zero-dependency in-game NPC server selector engine built natively into the backend bridge:
 
-### Changed — NPC Engine Overhaul (Player-Model NPCs)
-
-- **Real Player-Model NPCs on 1.20.5+**: On Paper/Spigot/Folia 1.20.5 and newer, NPCs now render as genuine player models via packet spawning — real Mojang skins (signed textures applied instantly), held items, full-size hitbox, smooth head rotation, no armor stand. Zero external dependencies; the packet layer is built in.
-- **Automatic Fallback Renderer**: Servers older than 1.20.5 keep the improved armor stand renderer (arms-free mannequin with resolved player head + Interaction hitbox). The active mode is logged at startup.
-- **Packet-Level Click Interception**: Left- and right-clicks on packet NPCs are captured through the built-in Netty pipeline handler, limited to NPCs currently visible to that player, and revalidated against a six-block interaction range on the player's scheduler.
-- **Glow Colors Now Work**: `glow_color` is applied through scoreboard teams (with collision and name tags disabled for NPCs); new `/vnavnpc glow <id> <on|off> [color]` command. The never-implemented `pose` option was removed from the config surface.
-- **Hologram Fix**: `TextDisplay` holograms are billboarded (`CENTER`) so lines face players from every direction instead of rendering one-sided.
-- **Skin Pipeline Hardening**: Skins resolve fully async (no main-thread blocking), apply through Paper player profiles where available, and failed lookups are negatively cached for 5 minutes to avoid hammering the Mojang API.
-- **Persistence Fixes**: Each NPC saves back to the exact YAML file it was loaded from, including the legacy root `npcs.yml`; removed definitions and cleared optional fields are deleted from disk instead of returning after reload. Duplicate IDs are rejected deterministically. NPC IDs are validated (`[a-z0-9_-]`, max 32 chars).
-- **Deferred World Spawning**: NPCs retain their configured world name when that world is unavailable at startup and spawn automatically when it loads.
-- **Packet Lifecycle**: Fake-player profiles are registered as unlisted, retained while their bodies exist, and removed during despawn. Skin refreshes use a delayed destroy/recreate sequence so clients cannot discard an immediate same-ID respawn.
-- **Folia Safety**: Viewer reconciliation runs on each player's entity scheduler and proximity scans run on the NPC location's region scheduler.
-- **Command Polish**: `/vnavnpc create <id> [display name...]` now creates the visual NPC first, while `/vnavnpc action <id> <server|menu|command|none> [value...]` configures click behavior separately. Legacy prefixed targets remain loadable without cluttering normal completion. Invalid item names and glow colors are rejected instead of reporting false success, and `none` clears held items.
-- **Protocol Diagnostics**: Spawn delivery, metadata, equipment, skin-profile, rotation, and click-interceptor failures are logged once with actionable detail instead of silently marking an invisible NPC as rendered.
-- **Lifecycle Recovery**: Packet NPC visibility is rebuilt after player respawns and world changes. `/vnavnpc status <id>` reports renderer, spawn state, viewer count, target, skin, glow, and location; `/vnavnpc respawn <id>` rebuilds one NPC without a full reload.
-- **Command Reliability**: `/vnavnpc` provides the complete NPC tab-completion tree. Boolean, skin, item, and glow inputs are validated, sneak targets can be cleared with `none`, multiword command targets are preserved, unloaded-world teleports fail safely, and Folia teleports use the asynchronous cross-region API.
-- **Renderer Detection**: Versioned CraftBukkit package names no longer force the armor-stand renderer. Every server is probed for the built-in player packet layout first, and fallback occurs only after a real compatibility failure.
-- **Paper 26.2 Native NPCs**: Paper's native mannequin entity is used before packet probing, providing a real player-shaped, skinnable, clickable, immovable NPC without relying on the changed 26.2 packet layout. Online player profiles are reused first so proxy-forwarded skins work even when Mojang username lookup is unavailable.
-- **Offline-Mode Skin Support**: Native NPCs copy the live Paper profile and, when installed, the player's current SkinsRestorer texture property. Paper 26.2 profile construction now supports both builder and direct factory API layouts.
-- **NPC Restart Recovery**: Enabled native NPCs are recreated when their chunk is loaded or a nearby player joins, preventing non-persistent NPC entities from remaining absent after restart or chunk unload.
-- **Sky-Blue Command Theme**: Proxy, backend, NPC, menu, setup, authentication, and usage help now consistently use VelocityNavigator's aqua command color with gray descriptions.
-- **Command Ownership**: Velocity exclusively owns `/vn` and `/velocitynavigator`; backends use `/vnav`, `/vnavnpc`, and `/vnavmenu`, preventing backend command trees from shadowing proxy administration.
-- **Party Discovery and Placeholders**: `/party help` documents the full party surface, `/party create [name]` supports solo party creation, canonical proxy commands cannot be removed by stale configuration, backend handshakes refresh party state, and direct Bedrock GUI changes immediately update PlaceholderAPI values.
-- **Maintenance Execution**: The documented `maintenance global on|off` syntax now controls real global state instead of a backend named `global`. Global mode reloads and overrides the MOTD, rejects new joins, and disconnects existing players; per-server maintenance removes the backend from routing and evacuates its players to healthy eligible destinations.
-- **Shutdown Safety**: NPC shutdown no longer registers scheduler work after the plugin has been disabled, and late asynchronous skin callbacks are ignored.
-- **Interaction Feel**: Click cooldowns are now per-player-per-NPC and silent; clicks cancel underlying item use.
+- **Real Player-Model NPCs on 1.20.5+**: Spawns genuine player models via direct packet transmission on Paper, Spigot, and Folia 1.20.5 through 1.21.x — real Mojang skins, full-size interaction hitboxes, held items, and smooth head rotation. Zero external plugins required (no Citizens, no ProtocolLib).
+- **Billboarded TextDisplay Holograms**: Multi-line floating text labels billboarded (`CENTER`) so names and server stats face players cleanly from every direction.
+- **Scoreboard Team Glowing**: Custom team glowing outline colors (`/vnavnpc glow <id> <on|off> [color]`).
+- **Packet-Level Netty Click Interception**: Direct Netty channel handler captures clicks on fake players with built-in interaction range validation.
+- **Smart Click Actions & Conditional Routing**: Configure NPCs to route players to servers, open backend YAML menus, run commands, or execute conditional permission routing (`action:cond(perm=velocitynavigator.vip?server:vip-lobby|server:lobby)`).
+- **Dynamic Proximity Head Tracking**: NPCs rotate their heads toward the nearest player within 64 blocks.
+- **Paper 26.2 Mannequin & Folia Safety**: Built with native support for Paper mannequin entities and Folia's regionized schedulers.
+- **Automatic Fallback for Older Servers**: Automatically detects backends older than 1.20.5 and seamlessly uses an optimized armor-stand mannequin with Interaction hitboxes.
+- **Full In-Game Management (`/vnavnpc`)**: Comprehensive command tree with tab completion (`create`, `action`, `skin`, `glow`, `hand`, `offhand`, `status`, `respawn`, `tp`, `remove`, `list`, `reload`).
 
 ### New — Dynamic MOTD Subsystem & Configuration (`motd.toml`)
 
 - **Dynamic Server List MOTD Rotation**: Support for auto-rotating (`ROTATING`), `RANDOM`, and `SEQUENTIAL` server list ping MOTDs via `motd.toml`
+- **Readable Multiline TOML Formatting**: MOTD entries use clean multiline TOML strings with preserved comments and automatic backups (`backups/`)
 - **Maintenance MOTD Overrides**: Automatically overrides server list MOTD with custom maintenance text when global maintenance is enabled (`override_motd_on_maintenance = true`)
-- **Rich Text & Color Formatting**: Full support for legacy color codes (`&a`, `&b`) and Adventure MiniMessage gradients and tags
-- **Placeholder Engine**: Supported placeholders `{online}`, `{max}`, `{maintenance_reason}`, and `{version}`
+- **Rich Text & MiniMessage**: Full support for legacy color codes (`&a`, `&b`) and Adventure MiniMessage gradients, tags, and font styling
+- **Placeholders**: Supported placeholders `{online}`, `{max}`, `{maintenance_reason}`, and `{version}`
 - **MOTD Admin Commands**: Added `/vn motd reload`, `/vn motd list`, `/vn motd add <text>`, `/vn motd remove <index>`, and `/vn motd setmode <mode>`
+
+### New — Cross-Server Party & Team Engine (/party)
+
+Complete proxy-wide party management with dual Bedrock & Java interfaces and full backend synchronization:
+
+- **Party Hierarchy & Roles**: `LEADER`, `OFFICER`, and `MEMBER` roles with promotion and demotion (`/party promote`, `/party demote`)
+- **Custom Party Names & Formatting**: Rename parties (`/party rename <name>`) with MiniMessage and color support
+- **Leader Follow**: Party members automatically follow the party leader when transferring between lobbies or game servers
+- **Open & Invite-Only Modes**: Public or private join toggles (`/party open`, `/party close`)
+- **Dual Platform GUIs**: Dedicated `/party menu` with native Bedrock Cumulus modal forms and Java Edition chest inventories
+- **Complete PlaceholderAPI Expansion**: Real-time team and party values exposed on all Paper/Spigot backends:
+  - `%velocitynavigator_party_in_party%` (`true` / `false`)
+  - `%velocitynavigator_party_name%` (Party / team display name)
+  - `%velocitynavigator_party_leader%` (Leader username)
+  - `%velocitynavigator_party_size%` and `%velocitynavigator_party_max_size%`
+  - `%velocitynavigator_party_is_leader%` (`true` / `false`)
+  - `%velocitynavigator_party_role%` (`LEADER`, `OFFICER`, `MEMBER`)
+  - `%velocitynavigator_party_is_open%` (`true` / `false`)
+  - `%velocitynavigator_party_members%` (Formatted comma-separated member list for tablists/scoreboards)
+  - `%velocitynavigator_ping%`, `%velocitynavigator_lobby%`, and EssentialsX integration placeholders
 
 ### New — External `.properties` Language Pack Overrides & Built-In Selection
 
 - **External Property File Overrides**: Support for dropping custom `.properties` language files into `plugins/velocitynavigator/languages/` (e.g. `custom_test.properties` or `hi.properties`)
-- **15+ Built-in Language Selection**: Instant language switching across 15+ built-in language packs (`en`, `es`, `fr`, `de`, `zh`, `ja`, `hi`, `ar`, `ko`, `pt`, `ru`, `tr`, `it`, `nl`, `pl`) via `navigator.toml` / `messages.toml`
-
-### New — Full-Fledged Party Engine & Dual GUI
-
-- **Custom Party Names & Color Codes**: Parties can be renamed (`/party rename <name>`) with full color code translation (`&a`, `&b`, MiniMessage formatting)
-- **Officer & Leader Roles**: Added `LEADER`, `OFFICER`, and `MEMBER` party hierarchy (`/party promote officer/leader`, `/party demote <player>`)
-- **Open / Private Parties**: Toggle public vs invite-only joining (`/party open`, `/party close`, `/party join <leader>`)
-- **Editable Dual Menus**: Added `/party menu` supporting customizable Bedrock Cumulus form GUIs and Java Edition chest menus for member management, role promotion/demotion, settings toggles, and warping
-- **PlaceholderAPI Expansion**: Registered `%velocitynavigator_*%` placeholders on backend Spigot/Paper servers, exposing party name, leader, role, size, open status, members, ping, lobby, and server status
-
-### New — NPC System & Smart Conditional Routing
-
-- **Smart Conditional Action Targets**: NPCs support conditional action strings (e.g. `action:cond(perm=velocitynavigator.vip?server:vip-lobby|server:lobby)`)
-- **NPC Glowing & Pose Customization**: Support glowing outline team colors (`glowing`, `glowColor`) and pose animations (`SNEAKING`, `SWIMMING`, `SITTING`)
-- **Player-Head Skins**: Resolved from Mojang API with persistent file cache
-- **Multi-Line Hologram Text**: Dynamic holograms above NPCs supporting PlaceholderAPI placeholders
-- **Proximity Head Tracking**: NPCs rotate to look at nearest players within 64 blocks
-- `/vnavnpc` command with 13 subcommands: `create`, `remove`, `rename`, `skin`, `target`, `sneak`, `lookatplayer`, `hand`, `offhand`, `tp`, `list`, `reload`
+- **15 Built-in Language Selection**: Instant language switching across 15 built-in language packs (`en`, `es`, `fr`, `de`, `zh`, `ja`, `hi`, `ar`, `ko`, `pt`, `ru`, `tr`, `it`, `nl`, `pl`) via `navigator.toml` / `messages.toml`
 
 ### New — Custom Menu System (Backend)
 
@@ -135,11 +118,12 @@ Choose where your data lives.
 
 ### New — Maintenance Mode
 
-Take lobbies or the entire network offline.
+Take lobbies or the entire network offline safely.
 
-- Network-wide or per-server maintenance states
-- Custom reason messages
-- Players see a clear message instead of connection errors
+- Network-wide or per-server maintenance states (`maintenance global on|off`, `/vn maintenance [server] [on/off]`)
+- Safe player evacuation to healthy destination lobbies without kicks
+- Maintenance blocks direct backend transfers as well as Navigator routing
+- Custom reason messages and countdowns
 
 ### New — Backend Update Checker
 
@@ -174,9 +158,9 @@ Dedicated telemetry for Paper/Spigot servers (plugin ID 32887).
 ### New — Admin Commands
 
 | Command | Description |
-|---------|-------------|
-| `/vnavnpc` | NPC management (13 subcommands) |
-| `/vnavmenu` | Menu management (7 subcommands) |
+|---|---|
+| `/vnavnpc` | In-game NPC management (create, action, skin, glow, hand, offhand, status, respawn, tp, remove, list, reload) |
+| `/vnavmenu` | Custom menu management (open, add, remove, title, rows, list, reload) |
 | `/vn config validate` | Runtime validation of navigator.toml and server registry |
 | `/vn server dry-run` | Validate a server add operation without writing |
 | `/vn affinity clean` | Purge expired sticky-session entries |
@@ -202,7 +186,7 @@ Expanded from v4.0. External plugins can now access:
 Expanded from 7 to 15 languages.
 
 | Code | Language | Status |
-|------|----------|--------|
+|---|---|---|
 | `en` | English | Updated |
 | `ru` | Russian | Updated |
 | `es` | Spanish | Updated |
@@ -232,6 +216,7 @@ Expanded from 7 to 15 languages.
 - **Redis subscriber timeouts**: The registration subscriber applies the configured `subscriber_timeout_ms` so a stalled connection can recover.
 - **Auth sessions across reload**: In-memory authentication sessions survive `/vn reload` instead of forcing players to log in again.
 - **`{version}` MOTD placeholder**: Uses the plugin version instead of a hardcoded string.
+- **Command permissions**: `/vn help` and `/vn version` pass Velocity's outer permission gate without granting admin operations. Maintenance target/state completion and MOTD command/mode/index completion are available.
 - **Robustness**: Version parts that overflow an `int` no longer crash `SemanticVersion`; the cooldown map purges expired entries; the connections log is capped to keep runtime files bounded; the backend skin cache deduplicates in-flight lookups and always closes HTTP connections.
 
 ### Improved
@@ -239,7 +224,7 @@ Expanded from 7 to 15 languages.
 - **Uptime in `/vn status`**: Shows how long the proxy has been running
 - **Menu Validation**: Invalid menu files are skipped with a warning instead of causing errors
 - **Configurable Menu Token Timeout**: Adjust session timeout (5–3600 seconds, default 60)
-
+- **Theme Uniformity**: Commands consistently use VelocityNavigator's signature aqua accent with gray descriptions
 
 ## [4.4.0] - 2026-07-20
 - Added optional per-server `description`, `menu_order`, and `show_in_menu` values. Descriptions are available through `{description}`, explicit menu order is shared by all selectors, and hidden entries remain eligible for automatic routing.
