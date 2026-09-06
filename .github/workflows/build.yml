@@ -46,15 +46,6 @@ jobs:
         shell: bash
         run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare Named Distribution JARs
-        shell: bash
-        run: |
-          set -euo pipefail
-          version='${{ steps.version.outputs.version }}'
-          cp "target/VelocityNavigator-${version}.jar" "target/VelocityNavigator-Proxy-${version}.jar"
-          cp "target/VelocityNavigator-${version}.jar" "target/VelocityNavigator-Spigot-Backend-${version}.jar"
-          ls -la target/VelocityNavigator-*.jar
-
       - name: Upload JAR Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -93,9 +84,6 @@ jobs:
           set -euo pipefail
           version='${{ needs.build.outputs.version }}'
           mkdir -p target/velocity4-smoke/plugins
-          # Keep only primary universal JAR in plugins dir during smoke test to avoid duplicate plugin id warnings
-          rm -f "target/velocity4-smoke/plugins/VelocityNavigator-Proxy-${version}.jar"
-          rm -f "target/velocity4-smoke/plugins/VelocityNavigator-Spigot-Backend-${version}.jar"
           curl --fail --location --silent --show-error \
             'https://fill-data.papermc.io/v1/objects/4540289f48c83e305fc2f2c495a84d1f4d0b7f360830251e169dd5a208740e70/velocity-4.0.0-6.jar' \
             --output target/velocity4-smoke/velocity.jar
