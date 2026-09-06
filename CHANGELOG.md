@@ -5,16 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [4.5.0] - 2026-09-06
 
+VelocityNavigator v4.5.0 is our most comprehensive release to date, introducing a unified universal JAR architecture, a zero-dependency packet NPC engine, global GeoIP distance routing, dynamic server list MOTD rotations, cross-server party synchronization with full PlaceholderAPI expansions, Argon2id authentication with private Sign GUIs, multi-engine database storage, and native Folia multi-threading support.
+
+### New — Universal Single-JAR Architecture
+
+- **Dual-Descriptor Deployment**: VelocityNavigator now compiles as a single universal fat JAR containing both `velocity-plugin.json` (for Velocity proxy) and `plugin.yml` (for Paper, Spigot, and Folia backends).
+- **Automatic Runtime Adaptation**: When installed on Velocity, the JAR boots the proxy routing core; when installed on Paper/Spigot/Folia, it boots backend NPCs, YAML menus, and PlaceholderAPI expansions.
+- **Zero Version Desyncs**: Internal bridge protocol packets (`MenuBridgeProtocol`) and Redis payload serializers are guaranteed to be 100% binary-compatible across the entire network.
+- **Multi-Platform Support**: Formally tested and compatible with Velocity 3.4.x, 3.5.x, and Velocity 4.0.0 on Java 17, 21, and 25.
+
 ### New — Native Packet-Level NPC Server Selectors (/vnavnpc)
 
 A completely new, zero-dependency in-game NPC server selector engine built natively into the backend bridge:
 
 - **Real Player-Model NPCs on 1.20.5+**: Spawns genuine player models via direct packet transmission on Paper, Spigot, and Folia 1.20.5 through 1.21.x — real Mojang skins, full-size interaction hitboxes, held items, and smooth head rotation. Zero external plugins required (no Citizens, no ProtocolLib).
-- **Billboarded TextDisplay Holograms**: Multi-line floating text labels billboarded (`CENTER`) so names and server stats face players cleanly from every direction.
-- **Scoreboard Team Glowing**: Custom team glowing outline colors (`/vnavnpc glow <id> <on|off> [color]`).
-- **Packet-Level Netty Click Interception**: Direct Netty channel handler captures clicks on fake players with built-in interaction range validation.
+- **Billboarded TextDisplay Holograms**: Multi-line floating text labels billboarded (`CENTER`) so names and server stats face players cleanly from every direction without one-sided distortion.
+- **Scoreboard Team Glowing**: Custom team glowing outline colors (`/vnavnpc glow <id> <on|off> [color]`) configured without interfering with player scoreboard setups.
+- **Packet-Level Netty Click Interception**: Direct Netty channel handler captures clicks on fake players with built-in interaction range validation (6-block radius).
 - **Smart Click Actions & Conditional Routing**: Configure NPCs to route players to servers, open backend YAML menus, run commands, or execute conditional permission routing (`action:cond(perm=velocitynavigator.vip?server:vip-lobby|server:lobby)`).
-- **Dynamic Proximity Head Tracking**: NPCs rotate their heads toward the nearest player within 64 blocks.
+- **Dynamic Proximity Head Tracking**: NPCs rotate their heads toward the nearest player within 64 blocks smoothly on the player's scheduler.
 - **Paper 26.2 Mannequin & Folia Safety**: Built with native support for Paper mannequin entities and Folia's regionized schedulers.
 - **Automatic Fallback for Older Servers**: Automatically detects backends older than 1.20.5 and seamlessly uses an optimized armor-stand mannequin with Interaction hitboxes.
 - **Full In-Game Management (`/vnavnpc`)**: Comprehensive command tree with tab completion (`create`, `action`, `skin`, `glow`, `hand`, `offhand`, `status`, `respawn`, `tp`, `remove`, `list`, `reload`).
@@ -88,15 +97,6 @@ Fully customizable YAML-based menus on Paper/Spigot servers. Create your own ser
 - Default starter menus (main, games, lobbies) auto-generated on first run
 - `/vnavmenu` command with 7 subcommands (`open`, `add`, `remove`, `title`, `rows`, `list`, `reload`)
 
-### New — Folia Support
-
-Full compatibility with Folia's regionized multi-threaded architecture:
-
-- Runtime Folia detection via MethodHandle reflection
-- Backend task scheduling uses entity-owned region threads on Folia
-- Gracefully falls back to standard Bukkit schedulers on Paper/Spigot
-- `plugin.yml` declares native `folia-supported: true`
-
 ### New — Multi-Engine Database Storage (`storage.toml`)
 
 Choose where your player affinity, sessions, and credentials live:
@@ -106,6 +106,15 @@ Choose where your player affinity, sessions, and credentials live:
 - **PostgreSQL**: Enterprise SQL database storage for multi-proxy architectures
 - **Plain JSON Files**: Lightweight, zero-setup file storage for smaller communities
 - **Automatic Schema Migrations**: Tables and column upgrades applied automatically on boot
+
+### New — Folia Support
+
+Full compatibility with Folia's regionized multi-threaded architecture:
+
+- Runtime Folia detection via MethodHandle reflection
+- Backend task scheduling uses entity-owned region threads on Folia
+- Gracefully falls back to standard Bukkit schedulers on Paper/Spigot
+- `plugin.yml` declares native `folia-supported: true`
 
 ### New — Maintenance & Graceful Evacuation
 
@@ -145,7 +154,7 @@ Dedicated metrics telemetry for Paper/Spigot backends (plugin ID 32887):
 - **Automatic Backup Pruning**: Only the latest backup per file is retained — stale backups are cleaned automatically
 - **Backend Config Auto-Migration**: `config.yml` auto-migrated from v1 to v2 on first boot
 
-### New — Administrative Commands
+### New — Administrative & Diagnostic Commands
 
 | Command | Description |
 |---|---|
@@ -154,6 +163,7 @@ Dedicated metrics telemetry for Paper/Spigot backends (plugin ID 32887):
 | `/vn config validate` | Runtime validation of navigator.toml and server registry with typo suggestions |
 | `/vn server dry-run` | Validate a server add operation without writing to disk |
 | `/vn affinity clean` | Purge expired sticky-session entries |
+| `/vn debug player <player>` | Live trace explaining routing decisions for a specific player |
 
 ### Updated — Multi-Proxy Synchronization
 
