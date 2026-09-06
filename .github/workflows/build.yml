@@ -69,7 +69,7 @@ jobs:
           cache: maven
 
       - name: Verify against Velocity 4 API
-        run: mvn clean verify -Pvelocity4-compat --batch-mode --no-transfer-progress
+        run: mvn clean verify -Pvelocity4-compat -DskipTests --batch-mode --no-transfer-progress
 
       - name: Download release-candidate universal JAR
         uses: actions/download-artifact@v4

@@ -1,10 +1,10 @@
-# Prometheus & Grafana Integration Setup Guide
+# Prometheus & Grafana Setup
 
 ![Prometheus and Grafana setup](headers/prometheus-grafana-setup.png)
 
-Prometheus collects VelocityNavigator's metrics, and Grafana turns them into charts you can keep open during busy hours or maintenance. Both are optional; normal routing works without them.
+Prometheus collects VelocityNavigator's metrics. Grafana turns them into charts. Both are optional. Normal routing works without them.
 
-## Architecture Overview
+## Architecture overview
 
 ```mermaid
 flowchart LR
@@ -13,15 +13,15 @@ flowchart LR
     Admin["Admin Browser"] -- Views Panels --> Graf
 ```
 
-- **VelocityNavigator** exposes statistics (active players, server states, circuit breaker statuses, connection rates) in a format Prometheus understands.
-- **Prometheus** visits your proxy periodically to collect these statistics.
-- **Grafana** reads from Prometheus to render charts and timelines.
+- **VelocityNavigator** exposes statistics (active players, server states, circuit-breaker statuses, connection rates) for Prometheus.
+- **Prometheus** fetches these statistics periodically.
+- **Grafana** reads from Prometheus to render charts.
 
 ---
 
-## Step 1: Enable Metrics in VelocityNavigator
+## Step 1: Enable metrics in VelocityNavigator
 
-Open your `navigator.toml` file and look for the `[metrics]` block. Configure it as follows:
+Open `navigator.toml` and configure the `[metrics]` block:
 
 ```toml
 [metrics]
@@ -35,20 +35,20 @@ bearer_token = ""           # Set a strong token before binding beyond loopback
 ```
 
 > [!IMPORTANT]
-> **Pterodactyl & game panel users:**
-> Docker container environments block non-allocated ports. To use the Prometheus exporter, you **must**:
-> 1. Request an extra **Port Allocation** (e.g. `25582`) in your panel under the **Network** tab.
-> 2. Set `port = 25582` in your `navigator.toml` to match that exact allocated port.
+> **Pterodactyl and game panel users:**
+> Docker container environments block non-allocated ports. To use the Prometheus exporter, you must:
+> 1. Request an extra port allocation (e.g. `25582`) in your panel under the Network tab.
+> 2. Set `port = 25582` in `navigator.toml` to match that allocated port.
 
-After updating the config, restart your proxy or reload the config using `/vn reload`.
+Restart the proxy or reload the config using `/vn reload`.
 
-If Prometheus runs on another host, bind to a private interface where possible, set `bearer_token`, and restrict the port to the Prometheus source address. Avoid an unauthenticated `0.0.0.0` listener.
+If Prometheus runs on another host, bind to a private interface, set a `bearer_token`, and restrict the port to the Prometheus source address. Do not use an unauthenticated `0.0.0.0` listener.
 
 ---
 
 ## Step 2: Configure Prometheus
 
-If you run your own Prometheus instance (on the same VPS, Docker host, or a central metrics server), add your Velocity proxy as a scrape target in your `prometheus.yml` configuration:
+Add your Velocity proxy as a scrape target in your `prometheus.yml` configuration:
 
 ```yaml
 scrape_configs:
@@ -59,8 +59,9 @@ scrape_configs:
       - targets: ['<PROXY_IP>:<METRICS_PORT>'] # E.g., '13.126.225.90:9225'
 ```
 
-### Securing Your Metrics (Recommended)
-If you set a `bearer_token` in your `navigator.toml`, tell Prometheus to pass that token when scraping:
+### Securing your metrics
+
+If you use a `bearer_token` in `navigator.toml`, instruct Prometheus to pass that token:
 
 ```yaml
 scrape_configs:
@@ -77,63 +78,69 @@ Restart Prometheus to apply the configuration.
 
 ---
 
-## Step 3: Set Up Grafana
+## Step 3: Set up Grafana
 
-### 1. Add the Prometheus Data Source
-1. Open your Grafana dashboard in your browser (usually `http://<vps-ip>:3000`).
+### 1. Add the Prometheus data source
+
+1. Open the Grafana dashboard in your browser (usually `http://<vps-ip>:3000`).
 2. Navigate to **Connections** → **Data Sources** → **Add data source**.
 3. Select **Prometheus**.
-4. In the **Connection** settings, enter your Prometheus server URL (e.g. `http://localhost:9090`).
-5. Scroll to the bottom and click **Save & test**.
+4. Enter your Prometheus server URL (e.g. `http://localhost:9090`).
+5. Click **Save & test**.
 
-### 2. Generate and Import the Dashboard
-Run this command on your Velocity proxy console to generate the pre-built dashboard JSON configuration file:
+### 2. Generate and import the dashboard
+
+Run this command on the Velocity proxy console to generate the dashboard JSON file:
 
 ```
 vn setup grafana
 ```
 
-This writes a file named `grafana-dashboard.json` into your `plugins/VelocityNavigator` folder.
+This writes `grafana-dashboard.json` into the `plugins/VelocityNavigator` folder.
 
 **Importing the JSON**:
-1. Download `grafana-dashboard.json` from your proxy server files to your computer.
+
+1. Download `grafana-dashboard.json` to your computer.
 2. In the Grafana web panel, click **Dashboards** in the left menu.
 3. Click the **New** dropdown button in the top right and select **Import**.
-4. Click **Upload JSON file** and select the generated `grafana-dashboard.json` file.
-5. Select your Prometheus data source at the bottom and click **Import**.
+4. Click **Upload JSON file** and select `grafana-dashboard.json`.
+5. Select the Prometheus data source at the bottom and click **Import**.
 
 ---
 
-## Key Metrics Exposed
+## Key metrics exposed
 
-The key metrics you can use to build custom charts:
+The exporter exposes these metrics when the relevant subsystems are active:
 
 | Metric Name | Type | Description |
 |:---|:---|:---|
-| `velocitynavigator_player_joins_total` | Counter | Total player connection attempts to the proxy. |
-| `velocitynavigator_player_leaves_total` | Counter | Total player disconnects. |
-| `velocitynavigator_server_online` | Gauge | Online state of tracked backend servers (`1` = Online, `0` = Offline). |
-| `velocitynavigator_server_players` | Gauge | Player count currently connected to each backend server. |
-| `velocitynavigator_server_latency_ms` | Gauge | Latency/ping of health checks to backend servers (ms). |
-| `velocitynavigator_server_circuit_breaker` | Gauge | State of each circuit breaker (`0`=CLOSED, `1`=HALF_OPEN, `2`=OPEN). |
-| `velocitynavigator_server_drained` | Gauge | Drained state of backend servers (`1`=Drained, `0`=Active). |
-| `velocitynavigator_routed_connections_total` | Counter | Total successful connections routed to each server. |
-| `velocitynavigator_redirects_total` | Counter | Total count of redirects grouped by reason. |
-| `velocitynavigator_routing_retries_total` | Counter | Connection retries attempted by the routing workflow. |
-| `velocitynavigator_fallback_events_total` | Counter | Routing fallback events grouped by reason. |
-| `velocitynavigator_circuit_breaker_trips_total` | Counter | Circuit-breaker trip count. |
-| `velocitynavigator_party_count` | Gauge | Number of active local parties. |
-| `velocitynavigator_queue_size` | Gauge | Number of players in the local capacity queue. |
-| `velocitynavigator_redis_connected` | Gauge | Redis connection state (`1` = connected, `0` = disconnected). |
-| `velocitynavigator_redis_reconnects_total` | Counter | Redis reconnect attempts. |
-| `velocitynavigator_redis_rejected_registrations_total` | Counter | Dynamic registration events rejected by validation. |
+| `velocitynavigator_player_joins_total` | Counter | Total player connection attempts to the proxy |
+| `velocitynavigator_player_leaves_total` | Counter | Total player disconnects |
+| `velocitynavigator_server_online` | Gauge | Online state of backend servers (`1` = Online, `0` = Offline) |
+| `velocitynavigator_server_players` | Gauge | Player count connected to each backend server |
+| `velocitynavigator_server_latency_ms` | Gauge | Latency/ping of health checks to backend servers (ms) |
+| `velocitynavigator_server_circuit_breaker` | Gauge | State of each circuit breaker (`0` = CLOSED, `1` = HALF_OPEN, `2` = OPEN) |
+| `velocitynavigator_server_drained` | Gauge | Drained state of backend servers (`1` = Drained, `0` = Active) |
+| `velocitynavigator_routed_connections_total` | Counter | Total connections routed to each server |
+| `velocitynavigator_routed_connections_total` | Counter | Total connections routed to each server |
+| `velocitynavigator_redirects_total` | Counter | Count of redirects grouped by reason |
+| `velocitynavigator_routing_retries_total` | Counter | Connection retries attempted |
+| `velocitynavigator_fallback_events_total` | Counter | Routing fallback events grouped by reason |
+| `velocitynavigator_circuit_breaker_trips_total` | Counter | Circuit-breaker trip count |
+| `velocitynavigator_party_count` | Gauge | Number of active local parties |
+| `velocitynavigator_queue_size` | Gauge | Number of players in the local capacity queue |
+| `velocitynavigator_redis_connected` | Gauge | Redis connection state (`1` = connected, `0` = disconnected) |
+| `velocitynavigator_redis_reconnects_total` | Counter | Redis reconnect attempts |
+| `velocitynavigator_redis_rejected_registrations_total` | Counter | Dynamic registration events rejected by validation |
 
 ---
 
-## Troubleshooting Setup Issues
+## Troubleshooting setup issues
 
-- **Failed to bind to port:** check if another service is using the port, or change it in `navigator.toml`.
-- **Cannot assign requested address:** if you are hosted on Pterodactyl or container networks, set `bind_host` to `0.0.0.0` instead of a public IP.
-- **Connection timed out:** make sure you have opened your metrics port (e.g. `9225` or `30042`) in your cloud provider's firewall (AWS Lightsail, DigitalOcean, panel firewall, etc.).
+- **Failed to bind to port:** Verify the port is unused, or change it in `navigator.toml`.
+- **Cannot assign requested address:** If hosted on Pterodactyl or container networks, set `bind_host` to `0.0.0.0`.
+- **Connection timed out:** Open the metrics port (e.g. `9225` or `30042`) in the server firewall.
+- **Storage counters stay at zero:** Set `[storage type]` to a SQL backend. The file backend lacks a connection pool.
+- **Authenticated players gauge is absent:** Set `[auth] enabled = true`. The proxy registers the gauge when the auth subsystem starts.
 
-For detailed steps, see the [Troubleshooting Guide](Troubleshooting-Guide).
+Read the [Troubleshooting Guide](Troubleshooting-Guide) for further diagnostics.

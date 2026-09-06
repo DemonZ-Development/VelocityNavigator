@@ -2,7 +2,7 @@
 
 ![VelocityNavigator frequently asked questions](headers/faq.png)
 
-Here are the answers server owners usually need while setting up or running VelocityNavigator. For a problem that is happening right now, the [Troubleshooting Guide](Troubleshooting-Guide) is usually faster.
+Here are the answers server owners need while setting up or running VelocityNavigator. For a current problem, the [Troubleshooting Guide](Troubleshooting-Guide) is faster.
 
 ## General
 
@@ -16,7 +16,7 @@ Here are the answers server owners usually need while setting up or running Velo
 - **Need sticky sessions**: `consistent_hash`.
 - **Bursty traffic**: `least_connections`.
 - **Prefer the lowest measured backend ping**: `latency`.
-- **Just testing**: `round_robin`.
+- **Testing**: `round_robin`.
 
 See [Routing Algorithms](Routing-Algorithms) for the full comparison.
 
@@ -26,15 +26,13 @@ See [Routing Algorithms](Routing-Algorithms) for the full comparison.
 
 **No database is required.** A single-proxy installation stores runtime state locally, and player affinity is also persisted to disk so it can survive proxy restarts.
 
-Redis is optional. Enable it only when multiple Velocity nodes need to synchronize circuit, health, backend-state, or affinity data, or when backends should register dynamically. MySQL and PostgreSQL are not used.
+Redis is optional. Enable it only when multiple Velocity nodes need to synchronize circuit, health, backend-state, or affinity data, or when backends should register dynamically. MySQL, MariaDB, and PostgreSQL are optional persistence providers for affinity, authentication, routing statistics, and connection history.
 
 ---
 
 ### Do I need GeoIP?
 
-No. GeoIP/MaxMind routing is intentionally deferred and is not implemented in 4.4.0. The compatibility keys remain accepted, but enabling them does not change route selection.
-
-Do not purchase or configure a GeoLite2 database for this release. Contextual groups are the closest alternative when different game modes or regions already use separate entry points.
+Only if you want player routing that prefers geographically close lobbies. GeoIP routing is available as of v4.5.0 through `GeoRoutingService`. GeoRestrict is used automatically when installed; otherwise configure a MaxMind GeoLite2 database or enable the IP-API fallback.
 
 ---
 
@@ -84,13 +82,15 @@ This prevents any new players from being routed to `lobby-2`. Existing players a
 
 See [Operations Runbook](Operations-Runbook) for the full procedure.
 
+If you want a visible reason instead, use `/vn maintenance lobby-2 on Updating plugins`, then clear it with `/vn maintenance lobby-2 off`. Use `/vn maintenance on <reason>` only when the whole network should reject new joins.
+
 ---
 
 ### Which Velocity versions are supported?
 
 VelocityNavigator supports Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with the same JAR. The release stays on Java 17 bytecode and the Velocity 3.4 API baseline, while CI also compiles against the Velocity 4.0.0 API and Adventure 5 and boots that JAR on Velocity 4.0.0.
 
-Use Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0. The optional backend bridge requires Java 17 or newer independently of the proxy runtime.
+Use Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0. Backends using NPCs, YAML menus, Java inventory, PlaceholderAPI bridge values, or backend registration need the same JAR and Java 17 or newer.
 
 It does **not** work with BungeeCord, Waterfall, or other proxy software.
 
@@ -107,14 +107,14 @@ For most networks, `least_players` or `power_of_two` is sufficient. Use `least_c
 
 ### How do I make players always return to the same lobby?
 
-Use `consistent_hash` mode — it hashes the player's UUID to deterministically assign them to a server:
+Use `consistent_hash` mode; it hashes the player's UUID to deterministically assign them to a server:
 
 ```toml
 [routing]
 selection_mode = "consistent_hash"
 ```
 
-Or combine it with **player affinity** for stronger stickiness. In v4.1.0, player affinity is fully configurable and enabled by default with a `0.7` stickiness factor — meaning there is a 70% chance players return to their previous lobby. This works alongside any selection mode and can be tuned or disabled in your config:
+Or combine it with **player affinity** for stronger stickiness. In v4.1.0, player affinity is fully configurable and enabled by default with a `0.7` stickiness factor, meaning there is a 70% chance players return to their previous lobby. This works alongside any selection mode and can be tuned or disabled in your config:
 
 ```toml
 [routing]
@@ -163,15 +163,15 @@ default_lobbies = [
 
 In v4.1.0, the update checker features a **periodic scheduled task** with exponential backoff:
 
-1. A **startup check** — runs 5 seconds after the proxy starts.
-2. A **recurring scheduled check** — repeats at the configured `check_interval` (minimum 30 minutes).
+1. A **startup check**: runs 5 seconds after the proxy starts.
+2. A **recurring scheduled check**: repeats at the configured `check_interval` (minimum 30 minutes).
 3. A **manual check command**: `/vn updatecheck`.
-4. An **admin join notification** — when a player with `velocitynavigator.admin` permission joins, if an update is available, they receive a chat message.
-5. **HTTP 429 backoff** — if Modrinth returns rate-limit errors, the checker backs off exponentially up to 4 hours.
+4. An **admin join notification**: when a player with `velocitynavigator.admin` permission joins, if an update is available, they receive a chat message.
+5. **HTTP 429 backoff**: if Modrinth returns rate-limit errors, the checker backs off exponentially up to 4 hours.
 
 To suppress the startup notification, set `notify_on_startup = false`. To suppress the admin join notification, set `notify_admins_on_join = false`.
 
-> **v4.3 change**: update checks are silent by default — no startup log line, no periodic console message. Set `update_checker.silent = false` to restore the previous behavior.
+> **v4.3 change**: update checks are silent by default: no startup log line, no periodic console message. Set `update_checker.silent = false` to restore the previous behavior.
 
 ---
 
@@ -180,7 +180,7 @@ To suppress the startup notification, set `notify_on_startup = false`. To suppre
 | v3 | v4 | Status |
 |----|----|--------|
 | `velocitynavigator.bypasscooldown` | `velocitynavigator.bypass.cooldown` | **Both work.** The v3 name is checked as a fallback. |
-| `velocitynavigator.use` | `"none"` (default) | **Changed in v4.1.0.** Default set to `"none"` — works out of the box without permission plugins. Custom values are preserved on migration. |
+| `velocitynavigator.use` | `"none"` (default) | **Changed in v4.1.0.** Default set to `"none"`, which works without permission plugins. Custom values are preserved on migration. |
 
 Update your permission plugin when convenient, but nothing will break.
 
@@ -231,7 +231,7 @@ Use `/vn server dry-run ...` first. Managed writes create backups, validate conf
 
 ### Is Redis required for parties or queues?
 
-No. Parties and queues run locally on Velocity and do not require Redis. Redis does not make those two systems global in 4.4.0.
+No. Parties and queues run locally on Velocity and do not require Redis. Redis does not make those two systems global.
 
 ---
 
@@ -243,13 +243,15 @@ The dashboard is disabled by default. Its API accepts a bearer token through the
 
 ### Does the backend bridge use the Velocity bStats project?
 
-No. Proxy telemetry uses the Velocity bStats project. Backend telemetry uses Bukkit bStats wiring and requires a separate Bukkit/Spigot project ID. A backend ID of `0` safely disables backend reporting.
+No. Proxy telemetry uses the Velocity bStats project, while the backend bridge uses its own Bukkit bStats project ID. Disable backend telemetry with `bstats_enabled: false` in the backend `config.yml`.
 
 ---
 
 ### How do I change language without automatic locale detection?
 
-Change `language` at the top of `messages.toml`. Built-ins are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn`. Restart or run `/vn reload`; the selected pack replaces the active values. Any other code is treated as a custom translation. Leave `active_language` unchanged because VelocityNavigator updates it for you. Native speakers who want to improve or add a translation are warmly invited to follow the [Language Packs](Language-Packs) contribution guide.
+Change `language` at the top of `messages.toml`. Built-ins are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, `zh_cn`, `ja`, `it`, `ko`, `nl`, `pl`, `tr`, `ar`, and `hi`. Run `/vn reload`; the selected built-in replaces the active values.
+
+For a custom pack, create `plugins/velocitynavigator/languages/<code>.properties`, use the same code in `messages.toml`, and reload. Leave `active_language` unchanged because VelocityNavigator manages it. The [Language Packs](Language-Packs) page has a working file example.
 
 ---
 
@@ -273,13 +275,13 @@ No. It only removes the entry from the Java inventory, Java chat, and Bedrock se
 
 ### Why is my Java state style not being used?
 
-A nonblank per-server `name` or nonempty `lore` is intentionally final. Clear it to inherit `[states.full]`, `[states.draining]`, `[states.offline]`, or `[states.in_game]`; if no state template applies, the localized inventory default is used. Compare `/vn servers` health, drain, circuit, and capacity signals, verify the backend lifecycle marker separately for `IN_GAME`, and run `/vn menu validate` to check the GUI configuration.
+A nonblank per-server `name` or nonempty `lore` is final. Clear it to inherit `[states.full]`, `[states.draining]`, `[states.offline]`, or `[states.in_game]`; if no state template applies, the localized inventory default is used. Compare `/vn servers` health, drain, circuit, and capacity signals, verify the backend lifecycle marker for `IN_GAME`, and run `/vn menu validate` to check the GUI configuration.
 
 ---
 
 ### Can display names be different for each language?
 
-Not in v4.4.0. Each server has one `display_name` and one `description` for all players. Language packs still translate the surrounding selector templates, controls, and status text.
+Not yet. Each server has one `display_name` and one `description` for all players. Language packs still translate the surrounding selector templates, controls, and status text.
 
 ---
 

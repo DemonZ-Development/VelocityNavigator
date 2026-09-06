@@ -1,37 +1,6 @@
-# Build output
-target/
-*.jar
-!.github/**
-
-# IDE
+﻿target/
 .idea/
 *.iml
-.vscode/
-.settings/
-.project
 .classpath
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Maven wrapper (not needed for CI)
-.mvn/
-mvnw
-mvnw.cmd
-
-# Test environment
-test_env/
-velocity.jar
-apache-maven-*.zip
-
-# Old repo comparisons
-old_repo/
-
-# Plugin data generated during testing
-plugins/velocitynavigator/
-
-# Node modules (if any bot tests were run)
-node_modules/
-package-lock.json
+.project
+.settings/

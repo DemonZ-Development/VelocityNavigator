@@ -1,3 +1,4 @@
+config_version: 2
 enabled: true
 inventory_menu_enabled: true
 handshake_enabled: true
@@ -5,8 +6,12 @@ refresh_enabled: true
 handshake_delay_ticks: 20
 max_title_length: 32
 fallback_material: COMPASS
+menus_enabled: true
+npcs_enabled: true
+npc_look_interval_ticks: 20
 bstats_enabled: true
-bstats_plugin_id: 0
+update_check_enabled: true
+update_check_interval_minutes: 120
 redis:
   enabled: false
   host: 127.0.0.1

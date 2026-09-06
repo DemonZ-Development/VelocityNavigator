@@ -2,7 +2,7 @@
 
 ![Backend lifecycle states](headers/backend-lifecycle-states.png)
 
-A server can be online without being ready for new players. Lifecycle states let a backend advertise whether it is waiting, in a lobby, starting a match, or already in game, and the router can accept only the states you choose.
+You use backend lifecycle states to advertise whether a server is waiting, in a lobby, starting a match, or in game. You configure the router to accept only chosen states.
 
 ## Configure allowed states
 
@@ -13,30 +13,34 @@ allowed = ["LOBBY", "WAITING", "AVAILABLE"]
 allow_unknown = true
 ```
 
-State names are case-insensitive. You may use your own names as long as the backend and the `allowed` list agree.
+You use case-insensitive state names. You configure custom names by matching the backend and the `allowed` list.
 
 ## Advertise a state
 
-Add a marker to the backend's MOTD:
+Add a marker to the backend's server-list MOTD:
 
 ```text
 [STATE:LOBBY]
 ```
 
-VelocityNavigator reads the marker during its normal backend ping. For example, a minigame server could switch between these MOTDs:
+You configure the proxy to read the marker during the backend ping. You rotate a minigame server between MOTDs:
 
 ```text
 [STATE:WAITING] Bed Wars
 [STATE:IN_GAME] Bed Wars
 ```
 
-With only `WAITING` allowed, the server stops receiving routed players as soon as its MOTD changes to `IN_GAME`.
+You stop the server from receiving routed players when its MOTD changes to `IN_GAME` if you only allow `WAITING`.
 
 ## Unknown states
 
-`allow_unknown = true` keeps servers with no state marker eligible. This is the easiest choice while introducing markers gradually.
+You keep servers with no state marker eligible using `allow_unknown = true`.
 
-Set it to `false` only after every routed backend reliably publishes a marker. A server with no marker will then be excluded even if its ping succeeds.
+You set it to `false` after every routed backend publishes a marker. You exclude servers without a marker even if they ping successfully.
+
+## Maintenance state interaction
+
+You exclude a server in maintenance from routing before the lifecycle state check runs. You show the maintenance reason to players. You configure lifecycle state and maintenance state as independent flags.
 
 ## Checking the result
 
@@ -45,6 +49,6 @@ Use `/vn health` to review backend health and detected states. If a state does n
 - confirm the marker is in the server-list MOTD, not a join message;
 - keep the exact `[STATE:name]` format;
 - wait for the next health check or reload the plugin;
-- make sure the state is present in `allowed`.
+- confirm the state is present in `allowed`.
 
 When Redis is enabled, detected backend states are shared with the other Velocity proxies.

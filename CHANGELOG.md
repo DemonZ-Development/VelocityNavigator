@@ -1,16 +1,247 @@
 # Changelog
 
-All notable changes to VelocityNavigator are documented in this file.
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+This file documents all notable changes to VelocityNavigator.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
----
+## [4.5.0] - 2026-09-06
+
+### Fixed — MOTD File Layout and Maintenance Reliability
+
+- MOTD entries are wrapped into readable multiline TOML strings. Startup/reload reformats legacy long entries without changing their displayed text, preserves comments and custom settings, and backs up the original file.
+- The MOTD-only parser handles escaped backslashes, quotes, Unicode, and multiline continuation correctly. Atomic saves are verified before publishing the new in-memory configuration; failed saves/reloads are reported instead of claiming success or silently replacing custom settings with defaults.
+- MOTD mode, interval, and message lists are validated. The last remaining MOTD cannot be removed. `/vn reload` reloads `motd.toml`, and an explicitly enabled maintenance override works when normal MOTD replacement is disabled.
+- `/vn help` and `/vn version` pass Velocity's outer permission gate without granting admin operations. Maintenance target/state completion and MOTD command/mode/index completion are available.
+- Maintenance blocks direct backend transfers as well as Navigator routing. Per-server evacuation checks destinations again between bounded retries, waits for transfer results, and cancels if the player moves or maintenance is cleared. Unknown maintenance targets are rejected.
+
+### Changed — NPC Engine Overhaul (Player-Model NPCs)
+
+- **Real Player-Model NPCs on 1.20.5+**: On Paper/Spigot/Folia 1.20.5 and newer, NPCs now render as genuine player models via packet spawning — real Mojang skins (signed textures applied instantly), held items, full-size hitbox, smooth head rotation, no armor stand. Zero external dependencies; the packet layer is built in.
+- **Automatic Fallback Renderer**: Servers older than 1.20.5 keep the improved armor stand renderer (arms-free mannequin with resolved player head + Interaction hitbox). The active mode is logged at startup.
+- **Packet-Level Click Interception**: Left- and right-clicks on packet NPCs are captured through the built-in Netty pipeline handler, limited to NPCs currently visible to that player, and revalidated against a six-block interaction range on the player's scheduler.
+- **Glow Colors Now Work**: `glow_color` is applied through scoreboard teams (with collision and name tags disabled for NPCs); new `/vnavnpc glow <id> <on|off> [color]` command. The never-implemented `pose` option was removed from the config surface.
+- **Hologram Fix**: `TextDisplay` holograms are billboarded (`CENTER`) so lines face players from every direction instead of rendering one-sided.
+- **Skin Pipeline Hardening**: Skins resolve fully async (no main-thread blocking), apply through Paper player profiles where available, and failed lookups are negatively cached for 5 minutes to avoid hammering the Mojang API.
+- **Persistence Fixes**: Each NPC saves back to the exact YAML file it was loaded from, including the legacy root `npcs.yml`; removed definitions and cleared optional fields are deleted from disk instead of returning after reload. Duplicate IDs are rejected deterministically. NPC IDs are validated (`[a-z0-9_-]`, max 32 chars).
+- **Deferred World Spawning**: NPCs retain their configured world name when that world is unavailable at startup and spawn automatically when it loads.
+- **Packet Lifecycle**: Fake-player profiles are registered as unlisted, retained while their bodies exist, and removed during despawn. Skin refreshes use a delayed destroy/recreate sequence so clients cannot discard an immediate same-ID respawn.
+- **Folia Safety**: Viewer reconciliation runs on each player's entity scheduler and proximity scans run on the NPC location's region scheduler.
+- **Command Polish**: `/vnavnpc create <id> [display name...]` now creates the visual NPC first, while `/vnavnpc action <id> <server|menu|command|none> [value...]` configures click behavior separately. Legacy prefixed targets remain loadable without cluttering normal completion. Invalid item names and glow colors are rejected instead of reporting false success, and `none` clears held items.
+- **Protocol Diagnostics**: Spawn delivery, metadata, equipment, skin-profile, rotation, and click-interceptor failures are logged once with actionable detail instead of silently marking an invisible NPC as rendered.
+- **Lifecycle Recovery**: Packet NPC visibility is rebuilt after player respawns and world changes. `/vnavnpc status <id>` reports renderer, spawn state, viewer count, target, skin, glow, and location; `/vnavnpc respawn <id>` rebuilds one NPC without a full reload.
+- **Command Reliability**: `/vnavnpc` provides the complete NPC tab-completion tree. Boolean, skin, item, and glow inputs are validated, sneak targets can be cleared with `none`, multiword command targets are preserved, unloaded-world teleports fail safely, and Folia teleports use the asynchronous cross-region API.
+- **Renderer Detection**: Versioned CraftBukkit package names no longer force the armor-stand renderer. Every server is probed for the built-in player packet layout first, and fallback occurs only after a real compatibility failure.
+- **Paper 26.2 Native NPCs**: Paper's native mannequin entity is used before packet probing, providing a real player-shaped, skinnable, clickable, immovable NPC without relying on the changed 26.2 packet layout. Online player profiles are reused first so proxy-forwarded skins work even when Mojang username lookup is unavailable.
+- **Offline-Mode Skin Support**: Native NPCs copy the live Paper profile and, when installed, the player's current SkinsRestorer texture property. Paper 26.2 profile construction now supports both builder and direct factory API layouts.
+- **NPC Restart Recovery**: Enabled native NPCs are recreated when their chunk is loaded or a nearby player joins, preventing non-persistent NPC entities from remaining absent after restart or chunk unload.
+- **Sky-Blue Command Theme**: Proxy, backend, NPC, menu, setup, authentication, and usage help now consistently use VelocityNavigator's aqua command color with gray descriptions.
+- **Command Ownership**: Velocity exclusively owns `/vn` and `/velocitynavigator`; backends use `/vnav`, `/vnavnpc`, and `/vnavmenu`, preventing backend command trees from shadowing proxy administration.
+- **Party Discovery and Placeholders**: `/party help` documents the full party surface, `/party create [name]` supports solo party creation, canonical proxy commands cannot be removed by stale configuration, backend handshakes refresh party state, and direct Bedrock GUI changes immediately update PlaceholderAPI values.
+- **Maintenance Execution**: The documented `maintenance global on|off` syntax now controls real global state instead of a backend named `global`. Global mode reloads and overrides the MOTD, rejects new joins, and disconnects existing players; per-server maintenance removes the backend from routing and evacuates its players to healthy eligible destinations.
+- **Shutdown Safety**: NPC shutdown no longer registers scheduler work after the plugin has been disabled, and late asynchronous skin callbacks are ignored.
+- **Interaction Feel**: Click cooldowns are now per-player-per-NPC and silent; clicks cancel underlying item use.
+
+### New — Dynamic MOTD Subsystem & Configuration (`motd.toml`)
+
+- **Dynamic Server List MOTD Rotation**: Support for auto-rotating (`ROTATING`), `RANDOM`, and `SEQUENTIAL` server list ping MOTDs via `motd.toml`
+- **Maintenance MOTD Overrides**: Automatically overrides server list MOTD with custom maintenance text when global maintenance is enabled (`override_motd_on_maintenance = true`)
+- **Rich Text & Color Formatting**: Full support for legacy color codes (`&a`, `&b`) and Adventure MiniMessage gradients and tags
+- **Placeholder Engine**: Supported placeholders `{online}`, `{max}`, `{maintenance_reason}`, and `{version}`
+- **MOTD Admin Commands**: Added `/vn motd reload`, `/vn motd list`, `/vn motd add <text>`, `/vn motd remove <index>`, and `/vn motd setmode <mode>`
+
+### New — External `.properties` Language Pack Overrides & Built-In Selection
+
+- **External Property File Overrides**: Support for dropping custom `.properties` language files into `plugins/velocitynavigator/languages/` (e.g. `custom_test.properties` or `hi.properties`)
+- **15+ Built-in Language Selection**: Instant language switching across 15+ built-in language packs (`en`, `es`, `fr`, `de`, `zh`, `ja`, `hi`, `ar`, `ko`, `pt`, `ru`, `tr`, `it`, `nl`, `pl`) via `navigator.toml` / `messages.toml`
+
+### New — Full-Fledged Party Engine & Dual GUI
+
+- **Custom Party Names & Color Codes**: Parties can be renamed (`/party rename <name>`) with full color code translation (`&a`, `&b`, MiniMessage formatting)
+- **Officer & Leader Roles**: Added `LEADER`, `OFFICER`, and `MEMBER` party hierarchy (`/party promote officer/leader`, `/party demote <player>`)
+- **Open / Private Parties**: Toggle public vs invite-only joining (`/party open`, `/party close`, `/party join <leader>`)
+- **Editable Dual Menus**: Added `/party menu` supporting customizable Bedrock Cumulus form GUIs and Java Edition chest menus for member management, role promotion/demotion, settings toggles, and warping
+- **PlaceholderAPI Expansion**: Registered `%velocitynavigator_*%` placeholders on backend Spigot/Paper servers, exposing party name, leader, role, size, open status, members, ping, lobby, and server status
+
+### New — NPC System & Smart Conditional Routing
+
+- **Smart Conditional Action Targets**: NPCs support conditional action strings (e.g. `action:cond(perm=velocitynavigator.vip?server:vip-lobby|server:lobby)`)
+- **NPC Glowing & Pose Customization**: Support glowing outline team colors (`glowing`, `glowColor`) and pose animations (`SNEAKING`, `SWIMMING`, `SITTING`)
+- **Player-Head Skins**: Resolved from Mojang API with persistent file cache
+- **Multi-Line Hologram Text**: Dynamic holograms above NPCs supporting PlaceholderAPI placeholders
+- **Proximity Head Tracking**: NPCs rotate to look at nearest players within 64 blocks
+- `/vnavnpc` command with 13 subcommands: `create`, `remove`, `rename`, `skin`, `target`, `sneak`, `lookatplayer`, `hand`, `offhand`, `tp`, `list`, `reload`
+
+### New — Custom Menu System (Backend)
+
+Fully customizable YAML-based menus on Paper/Spigot servers. Create your own server selectors, minigame menus, or any interactive GUI.
+
+- Create unlimited custom menus in `menus/*.yml` files
+- Items with slots, materials, names, lore, and targets
+- Nested menus — link to another menu (`menu:games`)
+- Command execution — run any server command on click (`cmd:/command`)
+- Server routing — send players to a specific lobby
+- Live refresh (`@refresh:N`) — items update automatically
+- Pagination (`@page:N`) — handle large server lists
+- Disabled items (`@disabled`) — greyed-out placeholder items
+- Menu validation rejects out-of-range slots, missing fields, reserved prefixes, excessive lore
+- Default starter menus (main, games, lobbies) auto-generated on first run
+- `/vnavmenu` command with 7 subcommands: `open`, `add`, `remove`, `title`, `rows`, `list`, `reload`
+
+### New — Authentication & Security
+
+Proxy-side authentication engine with password hashing, holding-server enforcement, and client-specific login interfaces.
+
+- Argon2id password hashing (via BouncyCastle) — configurable as primary or fallback algorithm
+- SHA-256 fallback for existing password databases
+- Configurable minimum password length (`auth.min_password_length`, default 8)
+- Native Floodgate registration and login forms for Bedrock players, with command fallback
+- Configurable `auth.bedrock_form_enabled` switch; Bedrock form inputs visibly warn that passwords are not masked
+- TOTP fields are reserved for a future release and runtime validation rejects `enable_2fa = true`
+- Expiring sessions
+- Holding-lobby route enforcement
+- Java-compatible login, registration, and logout commands
+
+### New — Folia Support
+
+Full compatibility with Folia's regionized threading model.
+
+- Runtime Folia detection via MethodHandle reflection
+- Backend scheduling uses entity-owned region threads on Folia
+- Falls back to `Bukkit.getScheduler()` on standard servers
+- `plugin.yml` declares `folia-supported: true`
+
+### New — GeoIP Distance Routing
+
+Route players to the nearest lobby based on real-world location.
+
+- `geo_distance` selection mode — picks the lobby closest to the player's real-world location
+- MaxMind GeoLite2 reader for country and continent lookups
+- ip-api.com HTTP fallback when MaxMind is unavailable
+- GeoRestrict integration as primary source (VPN detection, ASN lookup, ISP lookup)
+- Configurable geo provider (`geo_routing.provider`: `maxmind`, `georestrict`, `ip_api`)
+- Fallback mode toggle (`geo_routing.fallback_enabled`, `geo_routing.fallback_mode`)
+- Country affinity overrides (`geo_routing.affinity_countries`) — map countries to preferred lobbies
+- Thread-safe IP lookup cache
+- Subnet matching for accurate results
+- Configurable via `geo.toml` or `navigator.toml`
+
+### New — Database Storage Backends
+
+Choose where your data lives.
+
+- File JSON, SQLite, MySQL, MariaDB, PostgreSQL
+- HikariCP connection pooling
+- Automated schema migration on upgrade
+- Configurable via `storage.toml` / `db.toml`
+
+### New — Maintenance Mode
+
+Take lobbies or the entire network offline.
+
+- Network-wide or per-server maintenance states
+- Custom reason messages
+- Players see a clear message instead of connection errors
+
+### New — Backend Update Checker
+
+Independent update checker for Paper/Spigot servers.
+
+- Checks Modrinth API periodically
+- Exponential backoff on HTTP 429
+- Configurable interval via `update_check_interval_minutes`
+
+### New — Version Mismatch Detection
+
+Proxy warns when backends are out of date.
+
+- Compares backend version to proxy version on HELLO handshake
+- `/vn bridge` shows `✓ (up to date)`, `⚠ (outdated)`, or `✗ (not detected)` per server
+
+### New — Backend bStats
+
+Dedicated telemetry for Paper/Spigot servers (plugin ID 32887).
+
+- Custom charts: `folia_enabled`, `server_software`, `inventory_menu_enabled`, `handshake_enabled`, `refresh_enabled`, `redis_registration_enabled`
+
+### New — Configuration
+
+- **Modular Config Files**: Separate `storage.toml`, `geo.toml`, and `auth.toml` for cleaner organization
+- **Config version 9**: Auto-migration from v8 with holding-server key added
+- **Organized Backup System**: All backups now stored in a dedicated `backups/` subfolder
+- **Legacy Backup Cleanup**: Old `.bak` files in the plugin root are automatically moved to `backups/`
+- **Automatic Backup Pruning**: Only the most recent backup per config file is kept — old version backups are deleted
+- **Backend Config Auto-Migration**: Old `config.yml` files auto-migrated from v1 to v2 with backup before migration
+
+### New — Admin Commands
+
+| Command | Description |
+|---------|-------------|
+| `/vnavnpc` | NPC management (13 subcommands) |
+| `/vnavmenu` | Menu management (7 subcommands) |
+| `/vn config validate` | Runtime validation of navigator.toml and server registry |
+| `/vn server dry-run` | Validate a server add operation without writing |
+| `/vn affinity clean` | Purge expired sticky-session entries |
+
+### Updated — Multi-Proxy Synchronization
+
+Extended from v4.3. Now includes:
+
+- HMAC-SHA256 signature verification on registration payloads
+- Timestamp freshness validation to prevent replay attacks
+- Signature deduplication within the freshness window
+- Host allowlisting with wildcard support
+
+### Updated — NavigatorAPI
+
+Expanded from v4.0. External plugins can now access:
+
+- `pluginVersion()`, `server()`, `logger()`, `dataDirectory()`, `config()`, `bedrockHandler()`
+- No need to cast `NavigatorAPIProvider.get()` to `VelocityNavigator`
+
+### Updated — Language Packs
+
+Expanded from 7 to 15 languages.
+
+| Code | Language | Status |
+|------|----------|--------|
+| `en` | English | Updated |
+| `ru` | Russian | Updated |
+| `es` | Spanish | Updated |
+| `fr` | French | Updated |
+| `de` | German | Updated |
+| `pt_br` | Brazilian Portuguese | Updated |
+| `zh_cn` | Simplified Chinese | Updated |
+| `ja` | Japanese | **New** |
+| `it` | Italian | **New** |
+| `ko` | Korean | **New** |
+| `nl` | Dutch | **New** |
+| `pl` | Polish | **New** |
+| `tr` | Turkish | **New** |
+| `ar` | Arabic | **New** |
+| `hi` | Hindi | **New** |
+
+### Fixed
+
+- **Sign Board GUI authentication**: Password entries are now forwarded to the proxy over the backend bridge channel, where rate limiting, validation, and session handling apply. Previously the backend tried to execute `register`/`login` commands that only exist on the proxy, so sign submissions never authenticated anyone.
+- **Brute-force protection**: Registration and login attempts are rate limited per account and globally; repeated failures lock the account for five minutes. Lockouts are communicated to players instead of silent failures.
+- **`/vn connect` token bypass**: Connecting to a server manually no longer bypasses menu-token validation; backend menu selections use a dedicated authenticated selection token.
+- **Geo routing for contextual groups**: `geo_distance` groups now receive country affinity on the initial join, matching `/lobby` behavior. Previously affinity only applied when the global selection mode was `geo_distance`.
+- **Party ghost invites**: Invites sent by players who leave, are kicked, or whose party is disbanded are invalidated, so accepting them can no longer resurrect a disbanded party.
+- **Circuit breaker half-open recovery**: If half-open probe requests never complete, the breaker now trips back open after the cooldown instead of remaining stuck in half-open limbo.
+- **Server health cache invalidation**: `clearCache()` during `/vn reload` no longer reports servers as nonexistent or leaks raw `CancellationException` to callers; the next ping still completes normally.
+- **Fail-closed dynamic registration**: A blank `registration_secret` now rejects all incoming backend registrations instead of trusting unsigned announcements.
+- **Redis subscriber timeouts**: The registration subscriber applies the configured `subscriber_timeout_ms` so a stalled connection can recover.
+- **Auth sessions across reload**: In-memory authentication sessions survive `/vn reload` instead of forcing players to log in again.
+- **`{version}` MOTD placeholder**: Uses the plugin version instead of a hardcoded string.
+- **Robustness**: Version parts that overflow an `int` no longer crash `SemanticVersion`; the cooldown map purges expired entries; the connections log is capped to keep runtime files bounded; the backend skin cache deduplicates in-flight lookups and always closes HTTP connections.
+
+### Improved
+
+- **Uptime in `/vn status`**: Shows how long the proxy has been running
+- **Menu Validation**: Invalid menu files are skipped with a warning instead of causing errors
+- **Configurable Menu Token Timeout**: Adjust session timeout (5–3600 seconds, default 60)
+
 
 ## [4.4.0] - 2026-07-20
-
-### Added
-
-- Added verified Velocity 4.0.0 support while retaining the Java 17 bytecode and Velocity 3.4 API baseline used by Velocity 3.4.x and 3.5.x installations. A Java 25/API 4/Adventure 5 compatibility build and a Velocity 4.0.0 startup smoke test now guard the same JAR in CI.
-- Added optional per-server `display_name` values in `gui.toml`. A name such as `lobby1` in `velocity.toml` can now appear as `Main Lobby 1` in the Java inventory, Java chat selector, and Bedrock form.
 - Added optional per-server `description`, `menu_order`, and `show_in_menu` values. Descriptions are available through `{description}`, explicit menu order is shared by all selectors, and hidden entries remain eligible for automatic routing.
 - Added selector placeholders for presentation and diagnostics: `{server}` and `{display_name}` resolve to the configured alias, `{server_id}` exposes the raw Velocity server ID, and `{description}` resolves to the shared menu description.
 - Added `/vn menu validate` to audit selector server IDs, duplicate display names, slots, material-identifier syntax, and curly-brace placeholders before players open a menu.
@@ -18,7 +249,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Inventory navigation controls are now kept in the reserved bottom row for every supported `layout.rows` value. This prevents an automatic server item from occupying a custom control slot and silently hiding that control.
+- Inventory navigation controls are now kept in the reserved bottom row for each supported `layout.rows` value. This prevents an automatic server item from occupying a custom control slot and silently hiding that control.
 - Bedrock `sort_mode = "name"` now sorts by the displayed alias instead of the raw server ID.
 - Explicit nonnegative `menu_order` values are the primary order in Java inventory, Java chat, and Bedrock selectors. Unset values keep the existing candidate order; Bedrock uses its configured `sort_mode` to resolve equal ordering values.
 - `show_in_menu = false` removes a server from all three selectors without draining it or removing it from automatic routing.
@@ -49,17 +280,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Configurable language packs** — explicit `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn` selection plus arbitrary custom codes. Built-in changes rewrite active text; player locale is never auto-detected.
-- **Separate `gui.toml`** — rows, materials, fillers, refresh interval, navigation slots, and per-server fixed slot/material/name/lore overrides.
-- **Universal Java inventory selector** — the same 4.3.0 JAR runs in Velocity proxy or Paper/Spigot bridge mode and announces its mode at startup.
+- **Configurable language packs**: explicit `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn` selection plus arbitrary custom codes. Built-in changes rewrite active text; the plugin does not auto-detect player locale.
+- **Separate `gui.toml`**: rows, materials, fillers, refresh interval, navigation slots, and per-server fixed slot/material/name/lore overrides.
+- **Universal Java inventory selector**: the same 4.3.0 JAR runs in Velocity proxy or Paper/Spigot bridge mode and announces its mode at startup.
 - **Pagination, live refresh, and unavailable indicators** for Java inventory menus.
 - `/vn bridge status` reports detected backend bridge versions and last-seen times.
 - Universal bridge integration tests cover proxy-open, backend-click, navigation, handshake, and proxy-selection flows.
-- Exponential backoff with jitter for connection retries — each retry waits progressively longer with a small random jitter to avoid thundering-herd reconnects.
-- Player affinity persistence — unexpired sticky-session mappings are now saved to disk and restored across proxy restarts.
-- `/vn health` command — consolidated one-shot diagnostics: routing mode, lobby count, circuit-breaker states, drained servers, cache sizes, and affinity entry count in a single screen.
-- **HTML operations dashboard** — a separate HTTP server on its own port serving a live lobby table, routing distribution chart, affinity map, config summary, recent routing events, and joins/leaves-since-start counters. Disabled by default and authenticated via a bearer-token login flow.
-- `velocity-plugin.json` descriptor — modern Velocity plugin metadata alongside the existing `@Plugin` annotation.
+- Exponential backoff with jitter for connection retries: each retry waits progressively longer with a small random jitter to avoid thundering-herd reconnects.
+- Player affinity persistence: unexpired sticky-session mappings are now saved to disk and restored across proxy restarts.
+- `/vn health` command: consolidated one-shot diagnostics: routing mode, lobby count, circuit-breaker states, drained servers, cache sizes, and affinity entry count in a single screen.
+- **HTML operations dashboard**: a separate HTTP server on its own port serving a live lobby table, routing distribution chart, affinity map, config summary, recent routing events, and joins/leaves-since-start counters. Disabled by default and authenticated via a bearer-token login flow.
+- `velocity-plugin.json` descriptor: modern Velocity plugin metadata alongside the existing `@Plugin` annotation.
 - New reproducible marketplace brand system with a plugin icon, hero banner, social card, nine feature panels, platform-specific listing copy, meaningful alt text, and a visual feature overview in the wiki.
 - Built the backend bridge against the Spigot API 1.16.5 baseline without version-specific NMS.
 
@@ -76,7 +307,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `RoutePlanner` now builds a `Map<String, LobbyEntry>` once per planning call instead of scanning the lobby list linearly per candidate.
 - Config reload now uses a dedicated `ReentrantLock` instead of `synchronized(this)`. Admin commands and event subscribers no longer contend on the same monitor during a reload.
 - Bedrock form text stripping now matches legacy color codes case-insensitively. `&C` and `&L` are now stripped alongside `&c` and `&l`.
-- Update checks are now silent by default — no startup log line, no periodic console message. `/vn updatecheck` still works for manual checks. Set `update_checker.silent = false` in `navigator.toml` to restore the old behavior.
+- Update checks are now silent by default: no startup log line, no periodic console message. `/vn updatecheck` still works for manual checks. Set `update_checker.silent = false` in `navigator.toml` to restore the old behavior.
 - **Config version bumped to 8.** Adds the final 4.3.0 advanced-system, managed-server, selector, dashboard, and Redis settings. Older configs are auto-migrated and backed up; network-facing systems remain disabled by default.
 
 ### Fixed
@@ -86,12 +317,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dashboard API version data now comes from the plugin metadata instead of a hardcoded prerelease string.
 - Redis RESP parsing on the Velocity proxy now enforces line, bulk, array, total-frame, and nesting limits before allocation or recursion.
 - Backend Redis lifecycle registration now rejects oversized response lines instead of allowing peer-controlled heap growth.
-- Dashboard bearer credentials are accepted only through the `Authorization` header. The browser login keeps the token in memory and never places it in URLs or persistent browser storage.
+- Dashboard bearer credentials are accepted only through the `Authorization` header. The browser login keeps the token in memory and does not place it in URLs or persistent browser storage.
 - `MetricsService.active()` and `statusLine()` are now `volatile`. Reader threads (Prometheus exporter, `/vn status`) no longer risk seeing stale values after a config reload.
 - `PrometheusExporter.start()` now clears the `server` reference if `start()` throws. Previously the next `stop()` call would operate on an unstarted server.
 - `UpdateChecker` now uses the non-deprecated `JsonParser.parseString(...)` and the `nextAllowedCheck` read-modify-write is guarded by a `synchronized` block to prevent duplicate 429 retries under concurrency.
 - `ConfigManager`'s generated `navigator.toml` header box no longer overflows on the bStats URL line.
-- Empty `if` branch in `applyLoadedConfiguration` removed — round-robin reset logic is now a single positive check.
+- Empty `if` branch in `applyLoadedConfiguration` removed: round-robin reset logic is now a single positive check.
 
 ### Internal
 
@@ -105,10 +336,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Embedded Prometheus exporter & admin panel** — built-in HTTP server exposing real-time metrics (`/metrics`) on routing distributions, pings, circuit breaker statuses, and connection events.
-- **Grafana dashboard setup command** — `/vn setup grafana` generates a pre-configured Grafana telemetry dashboard JSON file.
-- **Interactive selector menus** — native Bedrock Form GUI (via Geyser/Floodgate integration) and a clickable Java chat selector menu with hover tooltips showing health and latencies.
-- **Ping-based routing strategy (`latency`)** — selects the server with the lowest ping latency.
+- **Embedded Prometheus exporter & admin panel**: built-in HTTP server exposing real-time metrics (`/metrics`) on routing distributions, pings, circuit breaker statuses, and connection events.
+- **Grafana dashboard setup command**: `/vn setup grafana` generates a pre-configured Grafana telemetry dashboard JSON file.
+- **Interactive selector menus**: native Bedrock Form GUI (via Geyser/Floodgate integration) and a clickable Java chat selector menu with hover tooltips showing health and latencies.
+- **Ping-based routing strategy (`latency`)**: selects the server with the lowest ping latency.
 
 ### Fixed
 
@@ -130,16 +361,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Bedrock/Geyser player support** — soft-dependency integration with Geyser and Floodgate. Strips advanced Kyori Component formatting (gradients, hover, click actions) so messages render on Bedrock clients, and maps Java UUIDs for player affinity tracking.
-- **First-run experience** — console welcome dashboard on fresh installs. On plugin upgrades, a release notes digest is printed.
-- **`/vn servers` diagnostics command** — paginated status dashboard for all configured lobbies, showing player count and capacity, circuit breaker state, and drain status.
-- **Configurable dashboard colors** — customizable status tags and colors for `/vn servers`, supporting hex, RGB, and MiniMessage styling in `navigator.toml`.
-- **Typo auto-correction and Levenshtein validation** — typo detection on config load and reload using Levenshtein distance (e.g. suggesting `"least_players"` for `"leadt_players"`).
-- **Self-documenting configuration keys** — `navigator.toml` comments are populated on generation or migration, linking to the relevant section anchor on the wiki.
-- **Automatic legacy color code converter** — matches and converts the standard `&` and `§` legacy formatting codes to MiniMessage on load. Supports `"auto"` (with one-time warnings), `"minimessage"`, and `"legacy"` modes.
-- **Periodic update checker with backoff** — recurring scheduled update checks with exponential backoff on HTTP 429 errors (scaling up to 4 hours).
-- **Empty lobby routing fallbacks** — configurable degradation strategies (`"disconnect"` or `"fallback_server"`) when all primary lobby options are offline or circuit-broken.
-- **Permission default change** — the `/lobby` command default permission is now `"none"`, so it works without explicit configuration. Existing configs are preserved on migration.
+- **Bedrock/Geyser player support**: soft-dependency integration with Geyser and Floodgate. Strips advanced Kyori Component formatting (gradients, hover, click actions) so messages render on Bedrock clients, and maps Java UUIDs for player affinity tracking.
+- **First-run experience**: console welcome dashboard on fresh installs. On plugin upgrades, a release notes digest is printed.
+- **`/vn servers` diagnostics command**: paginated status dashboard for all configured lobbies, showing player count and capacity, circuit breaker state, and drain status.
+- **Configurable dashboard colors**: customizable status tags and colors for `/vn servers`, supporting hex, RGB, and MiniMessage styling in `navigator.toml`.
+- **Typo auto-correction and Levenshtein validation**: typo detection on config load and reload using Levenshtein distance (e.g. suggesting `"least_players"` for `"leadt_players"`).
+- **Self-documenting configuration keys**: `navigator.toml` comments are populated on generation or migration, linking to the relevant section anchor on the wiki.
+- **Automatic legacy color code converter**: matches and converts the standard `&` and `§` legacy formatting codes to MiniMessage on load. Supports `"auto"` (with one-time warnings), `"minimessage"`, and `"legacy"` modes.
+- **Periodic update checker with backoff**: recurring scheduled update checks with exponential backoff on HTTP 429 errors (scaling up to 4 hours).
+- **Empty lobby routing fallbacks**: configurable degradation strategies (`"disconnect"` or `"fallback_server"`) when all primary lobby options are offline or circuit-broken.
+- **Permission default change**: the `/lobby` command default permission is now `"none"`, so it works without explicit configuration. Existing configs are preserved on migration.
 
 ---
 
@@ -147,115 +378,115 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Power of Two selection algorithm** (`power_of_two`) — picks two random candidates and selects the one with fewer players. Near-optimal distribution at O(1) cost.
-- **Weighted Round Robin selection algorithm** (`weighted_round_robin`) — interleaved WRR that distributes traffic proportionally to server weights.
-- **Least Connections selection algorithm** (`least_connections`) — selects the server with the lowest exponential moving average (EMA) of connection load and rate.
-- **Consistent Hash selection algorithm** (`consistent_hash`) — deterministic player-to-server mapping using a consistent hash ring with 150 virtual nodes and SHA-256 hashing. Provides session affinity.
-- **LobbyEntry format** — servers can be configured as plain strings or inline tables with `max_players` and `weight` fields. Backward compatible with plain strings.
-- **Per-lobby max-player cap** — servers at their `max_players` capacity are excluded from routing.
-- **Circuit Breaker** — automatic server failure detection with a CLOSED → OPEN → HALF_OPEN state machine. Unhealthy servers are excluded from routing until they recover.
-- **Server Drain Mode** — `/vn drain <server>`, `/vn undrain <server>`, `/vn drain status` commands for graceful server maintenance.
-- **Connection Retry with Fallback** — automatic retry on connection failure with configurable `max_retries`. Shows a retry message with `<attempt>/<max>` placeholders.
-- **Per-Group Selection Mode Override** — contextual routing groups can specify their own `mode`, overriding the global `selection_mode`.
-- **Fallback Priority Chain** — ordered fallback groups when a contextual group's servers are all unavailable.
-- **Player Affinity Routing** — sticky sessions with configurable `stickiness` probability (0.0–1.0). Players tend to return to their previous lobby.
-- **Graceful Degradation** — when all health checks fail, falls back to a configured degradation mode (default: `random`) instead of showing "No lobby found".
-- **Geo-Based Routing (experimental)** — stub implementation for geo-based lobby routing using MaxMind GeoLite2 Country database.
-- **Routing Metrics API** — new `NavigatorAPI` methods: `getRoutingDistribution()`, `getHealthCheckLatencies()`, `getCircuitBreakerStatuses()`.
-- **Connection Rate Tracking** — sliding window (60-second) connection rate tracker used by `least_connections` mode.
-- **Server Load Tracking** — EMA-based server load tracker used by `least_connections` mode.
-- **Routing Stats** — per-server connection counts with 60-second reset, shown in `/vn status`.
-- **Enhanced `/vn status` dashboard** — now shows circuit breaker status, drained servers, and routing distribution.
-- **`/vn updatecheck` command** — manually check for updates (replaces the recurring auto-update check).
-- **Startup update notification** — one-time update check 5 seconds after proxy start.
-- **Admin join update notification** — players with `velocitynavigator.admin` permission are notified in-game when they join if an update is available. Controlled by `notify_admins_on_join` config.
-- **`<player>` placeholder** — new placeholder available in all message templates.
-- **`<attempt>` and `<max>` placeholders** — available in `messages.retrying`.
-- **`messages.retrying` config** — new message template for connection retry notifications.
-- **`notify_on_startup` config** — suppress startup update notification.
-- **`notify_admins_on_join` config** — enable/disable in-game admin update notification on join.
-- **Health check cache purge** — expired cache entries are purged every 60 seconds.
-- **`getCachedOnlineServers()` method** — synchronous cached player count access for initial join balancing (replaces blocking `.join()` call).
-- **Config version field** — `CURRENT_VERSION` set to 4. Auto-migration from v3 configs with `.bak` backup.
+- **Power of Two selection algorithm** (`power_of_two`): picks two random candidates and selects the one with fewer players. Near-optimal distribution at O(1) cost.
+- **Weighted Round Robin selection algorithm** (`weighted_round_robin`): interleaved WRR that distributes traffic proportionally to server weights.
+- **Least Connections selection algorithm** (`least_connections`): selects the server with the lowest exponential moving average (EMA) of connection load and rate.
+- **Consistent Hash selection algorithm** (`consistent_hash`): deterministic player-to-server mapping using a consistent hash ring with 150 virtual nodes and SHA-256 hashing. Provides session affinity.
+- **LobbyEntry format**: servers can be configured as plain strings or inline tables with `max_players` and `weight` fields. Backward compatible with plain strings.
+- **Per-lobby max-player cap**: servers at their `max_players` capacity are excluded from routing.
+- **Circuit Breaker**: automatic server failure detection with a CLOSED → OPEN → HALF_OPEN state machine. Unhealthy servers are excluded from routing until they recover.
+- **Server Drain Mode**: `/vn drain <server>`, `/vn undrain <server>`, `/vn drain status` commands for graceful server maintenance.
+- **Connection Retry with Fallback**: automatic retry on connection failure with configurable `max_retries`. Shows a retry message with `<attempt>/<max>` placeholders.
+- **Per-Group Selection Mode Override**: contextual routing groups can specify their own `mode`, overriding the global `selection_mode`.
+- **Fallback Priority Chain**: ordered fallback groups when a contextual group's servers are all unavailable.
+- **Player Affinity Routing**: sticky sessions with configurable `stickiness` probability (0.0–1.0). Players tend to return to their previous lobby.
+- **Graceful Degradation**: when all health checks fail, falls back to a configured degradation mode (default: `random`) instead of showing "No lobby found".
+- **Geo-Based Routing (experimental)**: stub implementation for geo-based lobby routing using MaxMind GeoLite2 Country database.
+- **Routing Metrics API**: new `NavigatorAPI` methods: `getRoutingDistribution()`, `getHealthCheckLatencies()`, `getCircuitBreakerStatuses()`.
+- **Connection Rate Tracking**: sliding window (60-second) connection rate tracker used by `least_connections` mode.
+- **Server Load Tracking**: EMA-based server load tracker used by `least_connections` mode.
+- **Routing Stats**: per-server connection counts with 60-second reset, shown in `/vn status`.
+- **Enhanced `/vn status` dashboard**: now shows circuit breaker status, drained servers, and routing distribution.
+- **`/vn updatecheck` command**: manually check for updates (replaces the recurring auto-update check).
+- **Startup update notification**: one-time update check 5 seconds after proxy start.
+- **Admin join update notification**: players with `velocitynavigator.admin` permission are notified in-game when they join if an update is available. Controlled by `notify_admins_on_join` config.
+- **`<player>` placeholder**: new placeholder available in all message templates.
+- **`<attempt>` and `<max>` placeholders**: available in `messages.retrying`.
+- **`messages.retrying` config**: new message template for connection retry notifications.
+- **`notify_on_startup` config**: suppress startup update notification.
+- **`notify_admins_on_join` config**: enable/disable in-game admin update notification on join.
+- **Health check cache purge**: expired cache entries are purged each 60 seconds.
+- **`getCachedOnlineServers()` method**: synchronous cached player count access for initial join balancing (replaces blocking `.join()` call).
+- **Config version field**: `CURRENT_VERSION` set to 4. Auto-migration from v3 configs with `.bak` backup.
 
 ### Changed
 
-- **Removed `.join()` blocking call** in `onPlayerChooseInitialServer` — replaced with synchronous cache lookup. Falls through to Velocity's built-in try list on cold start.
-- **Round-robin state only resets when lobby topology changes** — `applyLoadedConfiguration()` compares the previous and current lobby lists before resetting.
-- **Contextual groups** — changed from `Map<String, List<LobbyEntry>>` to `Map<String, GroupConfig>` where `GroupConfig` contains `servers` and optional `mode`.
-- **UpdateChecker** — removed recurring schedule; now runs a single check on startup. Removed `enabled`, `notifyConsole`, `startupDelaySeconds` fields.
-- **ConfigManager** — reads both plain strings and inline tables for lobby entries (backward compatible). Writes inline tables when `max_players` or `weight` is non-default.
-- **MessageFormatter** — added `player`, `attempt`, `max` to allowed placeholders.
-- **`noLobbyFound` message** — now includes the `(<reason>)` placeholder by default.
-- **`ServerCandidate` record** — now includes `effectiveWeight` and `emaLoad` fields.
-- **`RouteDecision`** — provides an ordered candidate list for retry fallback.
+- **Removed `.join()` blocking call** in `onPlayerChooseInitialServer`: replaced with synchronous cache lookup. Falls through to Velocity's built-in try list on cold start.
+- **Round-robin state only resets when lobby topology changes**: `applyLoadedConfiguration()` compares the previous and current lobby lists before resetting.
+- **Contextual groups**: changed from `Map<String, List<LobbyEntry>>` to `Map<String, GroupConfig>` where `GroupConfig` contains `servers` and optional `mode`.
+- **UpdateChecker**: removed recurring schedule; now runs a single check on startup. Removed `enabled`, `notifyConsole`, `startupDelaySeconds` fields.
+- **ConfigManager**: reads both plain strings and inline tables for lobby entries (backward compatible). Writes inline tables when `max_players` or `weight` is non-default.
+- **MessageFormatter**: added `player`, `attempt`, `max` to allowed placeholders.
+- **`noLobbyFound` message**: now includes the `(<reason>)` placeholder by default.
+- **`ServerCandidate` record**: now includes `effectiveWeight` and `emaLoad` fields.
+- **`RouteDecision`**: provides an ordered candidate list for retry fallback.
 
 ### Fixed
 
-- **Blocking `.join()` in event handler** — `onPlayerChooseInitialServer` no longer blocks the event loop with `.join()` calls. Uses cached data synchronously instead.
-- **Round-robin reset on every reload** — the round-robin counter is now only reset when the lobby topology actually changes, preventing unnecessary redistribution on config reload.
-- **Health check cache memory leak** — expired cache entries are now purged every 60 seconds.
-- **Permission node inconsistency** — `velocitynavigator.bypasscooldown` now also checks `velocitynavigator.bypass.cooldown` for consistency.
+- **Blocking `.join()` in event handler**: `onPlayerChooseInitialServer` no longer blocks the event loop with `.join()` calls. Uses cached data synchronously instead.
+- **Round-robin reset on each reload**: the round-robin counter is now only reset when the lobby topology changes, preventing unnecessary redistribution on config reload.
+- **Health check cache memory leak**: expired cache entries are now purged each 60 seconds.
+- **Permission node inconsistency**: `velocitynavigator.bypasscooldown` now also checks `velocitynavigator.bypass.cooldown` for consistency.
 
 ### Deprecated
 
-- **`velocitynavigator.bypasscooldown` permission** — use `velocitynavigator.bypass.cooldown` instead. The legacy name still works as a fallback.
+- **`velocitynavigator.bypasscooldown` permission**: use `velocitynavigator.bypass.cooldown` instead. The legacy name still works as a fallback.
 
 ### Removed
 
-- **`update_checker.enabled` config field** — the update checker now always runs on startup.
-- **`update_checker.notifyConsole` config field** — update notifications are always logged to console.
-- **`update_checker.startupDelaySeconds` config field** — startup delay is fixed at 5 seconds.
-- **Recurring update check schedule** — replaced by a one-time startup check and `/vn updatecheck`.
+- **`update_checker.enabled` config field**: the update checker runs on startup.
+- **`update_checker.notifyConsole` config field**: update notifications are logged to console.
+- **`update_checker.startupDelaySeconds` config field**: startup delay is fixed at 5 seconds.
+- **Recurring update check schedule**: replaced by a one-time startup check and `/vn updatecheck`.
 
 ---
 
-## [3.0.0] — 2026-04-10
+## [3.0.0]: 2026-04-10
 
 ### Added
 
-- **Initial Join Balancing** — Players are load-balanced the moment they connect to the proxy via `PlayerChooseInitialServerEvent`.
-- **Developer API** — `NavigatorAPI` and `NavigatorAPIProvider` for third-party plugin integration.
-- **Three Routing Modes** — `least_players`, `round_robin`, and `random` selection algorithms.
-- **Contextual Routing** — Route players to game-specific lobbies based on which server they are leaving.
-- **Self-Documenting Config** — `navigator.toml` generates with inline comments explaining every setting.
+- **Initial Join Balancing**: Players are load-balanced the moment they connect to the proxy via `PlayerChooseInitialServerEvent`.
+- **Developer API**: `NavigatorAPI` and `NavigatorAPIProvider` for third-party plugin integration.
+- **Three Routing Modes**: `least_players`, `round_robin`, and `random` selection algorithms.
+- **Contextual Routing**: Route players to game-specific lobbies based on which server they are leaving.
+- **Self-Documenting Config**: `navigator.toml` generates with inline comments explaining each setting.
 
 ### Changed
 
-- **Async Health Checks** — Ping candidate lobbies before routing with configurable timeout and caching.
-- **Ping Coalescing** — Multiple simultaneous `/lobby` requests share the same `CompletableFuture` ping.
-- **Pre-Execution Cooldown Locking** — Cooldown is applied before command execution to prevent macro abuse.
-- **Graceful Failover** — Falls back to default lobby pool when all contextual lobbies are offline.
+- **Async Health Checks**: Ping candidate lobbies before routing with configurable timeout and caching.
+- **Ping Coalescing**: Multiple simultaneous `/lobby` requests share the same `CompletableFuture` ping.
+- **Pre-Execution Cooldown Locking**: Cooldown is applied before command execution to prevent macro abuse.
+- **Graceful Failover**: Falls back to default lobby pool when all contextual lobbies are offline.
 
 ### Added (Telemetry & Updates)
 
-- **bStats Integration** — Anonymous usage telemetry (plugin ID: 28341).
-- **Modrinth Update Checker** — Automatic version checking with configurable release channel.
+- **bStats Integration**: Anonymous usage telemetry (plugin ID: 28341).
+- **Modrinth Update Checker**: Automatic version checking with configurable release channel.
 
 ### Added (Admin Tools)
 
-- `/vn reload` — Hot-reload `navigator.toml`.
-- `/vn status` — View runtime status.
-- `/vn version` — Check installed vs. latest version.
-- `/vn debug player <name>` — Preview routing decision.
-- `/vn debug server <name>` — Inspect server health.
+- `/vn reload`: Hot-reload `navigator.toml`.
+- `/vn status`: View runtime status.
+- `/vn version`: Check installed vs. latest version.
+- `/vn debug player <name>`: Preview routing decision.
+- `/vn debug server <name>`: Inspect server health.
 - Full tab-completion for all admin commands.
 
 ### Added (Configuration)
 
-- **Automatic Migration** — Migration from v1/v2 configs with backup generation.
-- **Field-Level Validation** — Invalid config values are corrected with warnings.
-- **MiniMessage Support** — All player-facing messages support MiniMessage rich text formatting.
+- **Automatic Migration**: Migration from v1/v2 configs with backup generation.
+- **Field-Level Validation**: Invalid config values are corrected with warnings.
+- **MiniMessage Support**: All player-facing messages support MiniMessage rich text formatting.
 
 ---
 
-## [2.0.0] — Legacy
+## [2.0.0]: Legacy
 
 Previous version with basic lobby routing. Superseded by v3.0.0.
 
 ---
 
-## [1.0.0] — Legacy
+## [1.0.0]: Legacy
 
 Initial release with single-server lobby navigation.
 

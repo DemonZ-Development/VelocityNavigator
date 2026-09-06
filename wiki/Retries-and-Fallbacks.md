@@ -2,7 +2,7 @@
 
 ![Retries and fallbacks](headers/retries-and-fallbacks.png)
 
-VelocityNavigator has several recovery layers, and each solves a different problem. Retries handle a connection that fails after a lobby was selected. Contextual fallbacks change lobby groups. Degradation can make a best-effort `/lobby` choice when health checks reject the whole pool. The empty-lobby strategy decides what happens when no normal lobby can be selected.
+You configure several recovery layers to solve different problems. You use retries to handle connections failing after selection. You use contextual fallbacks to change lobby groups. You use degradation to make a `/lobby` choice when health checks reject the pool. You configure the empty-lobby strategy for when you cannot select a normal lobby.
 
 ## Connection retries
 
@@ -11,11 +11,11 @@ VelocityNavigator has several recovery layers, and each solves a different probl
 max_retries = 2
 ```
 
-When a `/lobby` connection fails, the plugin tries another eligible candidate from the same routing decision. It does not retry the same server. The default allows two retries after the first attempt.
+You retry another eligible candidate from the same routing decision when a `/lobby` connection fails. You do not retry the same server. You configure two retries by default.
 
-Retries use a short increasing delay with jitter, starting around 200 ms and capped around two seconds. This avoids sending several immediate connection attempts during a backend or network failure.
+You configure retries with a short increasing delay with jitter, starting near 200 ms and capped near two seconds. You avoid sending immediate connection attempts during failures.
 
-The retry message is customizable in `messages.toml`:
+You customize the retry message in `messages.toml`:
 
 ```toml
 retrying = "<yellow>Retrying connection... (<attempt>/<max>)</yellow>"
@@ -23,7 +23,7 @@ retrying = "<yellow>Retrying connection... (<attempt>/<max>)</yellow>"
 
 ## Contextual fallback groups
 
-Contextual routing first checks the group mapped from the player's current server. A fallback chain can try other lobby groups in order:
+You configure contextual routing to check the group mapped from the player's current server. You set a fallback chain to try other lobby groups in order:
 
 ```toml
 [routing.contextual]
@@ -34,7 +34,7 @@ fallback_to_default = true
 bedwars_lobbies = ["main_hubs", "survival_lobbies"]
 ```
 
-If the chain has no available lobby, `fallback_to_default = true` allows the default pool as the last group. See [Contextual Routing Guide](Contextual-Routing-Guide) for the complete mapping setup.
+You allow the default pool as the last group when the chain has no available lobby and you set `fallback_to_default = true`. You review [Contextual Routing Guide](Contextual-Routing-Guide) for setup.
 
 ## Graceful degradation
 
@@ -44,9 +44,9 @@ enabled = true
 mode = "random"
 ```
 
-Degradation is a best-effort path for the player lobby command when configured candidates exist but all of their health results have failed. It chooses from the configured pool without trusting those failed health results.
+You use degradation as a best-effort path when candidates exist but fail health results. You choose from the configured pool without trusting those failed results.
 
-Available modes are `random`, `round_robin`, and `least_players`. Use this only when attempting a possibly stale backend is better than immediately returning a no-lobby message.
+You configure modes like `random`, `round_robin`, or `least_players`. You use this when attempting a possibly stale backend beats returning a no-lobby message.
 
 ## Empty-lobby strategy
 
@@ -56,9 +56,9 @@ no_server_strategy = "disconnect"
 fallback_server = ""
 ```
 
-`disconnect` shows `lobby.no_server_message` when an initial join has nowhere safe to go. For `/lobby` requests from an already connected player, the same text is shown without disconnecting that current session.
+You configure `disconnect` to show `lobby.no_server_message` when an initial join fails to find a safe server. You show the same text for `/lobby` requests without disconnecting the session.
 
-To use one registered backend as the last resort:
+You configure one registered backend as the last resort:
 
 ```toml
 [lobby]
@@ -66,19 +66,22 @@ no_server_strategy = "fallback_server"
 fallback_server = "maintenance"
 ```
 
-The fallback backend must exist in Velocity. It is still rejected when offline, drained, or blocked by its circuit breaker. Do not include it in a normal lobby pool unless you want it considered during regular routing too.
+You must register the fallback backend in Velocity. You reject it when offline, drained, or blocked. You avoid including it in a normal lobby pool unless you want it in regular routing.
+
+You replace the normal fallback message with the global reason text when you enable [Maintenance Mode](Maintenance-Mode). You can direct players to a designated fallback backend for maintenance.
 
 ## Capacity queue
 
-When every eligible lobby is online but full, the [Capacity Queue](Capacity-Queue) can wait for space instead of using degradation. A holding server can accept brand-new proxy connections while they wait.
+You configure the [Capacity Queue](Capacity-Queue) to wait for space when eligible lobbies fill up. You configure a holding server to accept new proxy connections during the wait.
 
 ## Recommended order
 
-For a normal network:
+You configure a normal network:
 
-1. Keep health checks and circuit breakers enabled.
-2. Use contextual fallback groups when game modes have separate pools.
-3. Keep two connection retries for short-lived failures.
-4. Configure a capacity queue when full lobbies are expected.
-5. Use a fallback server for a deliberate maintenance destination.
-6. Enable degradation only when best-effort routing matches your operational policy.
+1. You enable health checks and circuit breakers.
+2. You configure contextual fallback groups for separate pools.
+3. You retain two connection retries for short-lived failures.
+4. You set a capacity queue when expecting full lobbies.
+5. You designate a fallback server for maintenance.
+6. You use [Maintenance Mode](Maintenance-Mode) for whole-network outages.
+7. You enable degradation only when best-effort routing matches your policy.

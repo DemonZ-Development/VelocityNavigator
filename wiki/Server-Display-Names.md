@@ -1,8 +1,8 @@
 # Selector Customization
 
-VelocityNavigator 4.4.0 lets each backend keep a stable technical ID while its Java inventory, Java chat, and Bedrock entries use player-friendly metadata. You can add a display name and description, choose menu order, hide internal servers from selectors, and style Java inventory items by backend state.
+You configure each backend to keep a stable technical ID while using player-friendly metadata for Java inventory, Java chat, and Bedrock entries. You add a display name and description, choose menu order, hide internal servers from selectors, and style Java inventory items by backend state.
 
-These settings change menus only. Routing, health checks, secure inventory tokens, callbacks, and connection requests always use the raw server ID.
+You change menus only with these settings. You configure routing, health checks, secure inventory tokens, callbacks, and connection requests to use the raw server ID.
 
 ## Complete example
 
@@ -46,7 +46,7 @@ name = "<gold><bold>{server}</bold></gold>"
 lore = ["<gray>{description}</gray>", "<gold>A game is already in progress.</gold>"]
 ```
 
-The state values above are examples; use materials supported by the Minecraft version running the backend bridge.
+You configure state values with materials supported by the Minecraft version running the backend bridge.
 
 After saving, run:
 
@@ -55,11 +55,11 @@ After saving, run:
 /vn menu validate
 ```
 
-`navigator.toml` remains at config version 8. The menu-only `gui.toml` schema is version 2 in v4.4.0.
+`navigator.toml` uses config version 9. The menu-only `gui.toml` schema is version 2.
 
 ## Per-server fields
 
-Each key under `[servers]` must match a server registered in `velocity.toml`.
+You match each key under `[servers]` to a registered server in `velocity.toml`.
 
 | Field | Default | Applies to | Purpose |
 |---|---:|---|---|
@@ -73,21 +73,21 @@ Each key under `[servers]` must match a server registered in `velocity.toml`.
 | `name` | Empty | Java inventory | Final per-server item-name template |
 | `lore` | Empty list | Java inventory | Final per-server lore template |
 
-A missing or blank `display_name` falls back to the raw ID. Leading and trailing whitespace is removed, but spaces inside the label are kept. A missing description resolves to an empty value.
+You fall back to the raw ID for missing or blank `display_name`s. You remove leading and trailing whitespace while retaining spaces inside the label. You resolve missing descriptions to an empty value.
 
 ## Menu order and fixed slots
 
-An explicit nonnegative `menu_order` is the primary order in all three selectors. Lower values appear first. Values left at `-1` keep the existing routing/candidate order after explicitly ordered entries.
+You set the primary order with nonnegative `menu_order`. You display lower values first. You keep existing candidate order with `-1`.
 
-For Java inventories, `slot` still controls the physical cell when it is nonnegative. Use `menu_order` for automatic placement, pagination, chat lines, and cross-selector consistency; use `slot` only when a Java item must occupy a particular cell.
+You control the physical cell in Java inventories with nonnegative `slot`s. You use `menu_order` for automatic placement, pagination, and consistency. You use `slot` when an item must occupy a specific cell.
 
-When Bedrock entries have equal or unset `menu_order`, the configured `bedrock.sort_mode` (`routing`, `name`, or `players`) resolves their relative order. Java and chat retain their configured candidate order for ties.
+You resolve equal or unset `menu_order`s in Bedrock using `bedrock.sort_mode`. You retain candidate order for ties in Java and chat.
 
 ## Hiding an entry from menus
 
-Set `show_in_menu = false` for staff hubs, holding servers, transition backends, or any server that players should reach automatically but should not choose directly.
+You set `show_in_menu = false` for servers that players reach automatically but should not choose directly.
 
-This flag does not drain, unregister, disable, or remove the server from a routing pool. Initial-join balancing, `/lobby` automatic selection, health checks, parties, queues, and direct routing behavior remain unchanged. Use drain mode or routing configuration when the server itself must stop receiving automatic traffic.
+You do not drain, unregister, disable, or remove the server from a routing pool with this flag. You use drain mode or routing configuration to stop the server from receiving automatic traffic.
 
 ## Placeholders
 
@@ -105,13 +105,13 @@ Selector templates accept both `{placeholder}` and `<placeholder>` forms:
 | `{status_color}` | Configured status color |
 | `{ping}` | Cached latency |
 
-Descriptions can appear in Java item lore, Java chat hover text, and Bedrock button templates. A placeholder contained inside a display name or description is treated as ordinary text and is not expanded recursively.
+You include descriptions in Java item lore, Java hover text, and Bedrock button templates. You treat placeholders in display names or descriptions as ordinary text without expanding them recursively.
 
 ## State-aware Java inventory items
 
-The optional `[states.full]`, `[states.draining]`, `[states.offline]`, and `[states.in_game]` tables each accept `material`, `name`, and `lore`. They centralize unavailable and lifecycle presentation instead of requiring the same overrides on every server.
+You configure optional state tables that accept `material`, `name`, and `lore`. You use them to centralize unavailable and lifecycle presentation.
 
-If several conditions overlap, VelocityNavigator chooses one effective menu state in this order: offline/unhealthy circuit, draining, `IN_GAME`, full, then healthy. This keeps a disconnected or deliberately drained backend from looking merely full, while an `IN_GAME` marker remains visible before capacity styling.
+You configure the proxy to choose one effective menu state in this order: offline, draining, `IN_GAME`, full, then healthy.
 
 Template precedence is:
 
@@ -141,25 +141,25 @@ The command does not change configuration. Correct reported issues, run `/vn rel
 
 ## Java item-name precedence
 
-`display_name` and Java's per-server `name` have different jobs. `display_name` is reusable metadata; `name` is a complete final item-name template. Leave `name = ""` to let the state or localized default template render the alias, or include `{server}`/`{display_name}` inside a custom `name`.
+You assign different jobs to `display_name` and Java's per-server `name`. You use `display_name` as reusable metadata and `name` as a complete item-name template. You leave `name = ""` to let the default template render the alias.
 
 The same rule applies to lore: a nonempty per-server `lore` intentionally overrides state and localized lore. Include `{description}` wherever the shared description should appear.
 
 ## Migration and reload behavior
 
-Existing v4.3 `gui.toml` files remain usable. In v4.4.0, `gui.toml` uses `config_version = 2`, while `navigator.toml` stays at version 8. Loading a v1 GUI file saves `gui.toml.v1.bak` and rewrites the normalized file as v2. Existing entries receive backward-compatible behavior:
+You retain usability of existing v4.3 `gui.toml` files. You migrate a v1 GUI file to v2 and save `gui.toml.v1.bak`. You provide backward-compatible behavior for existing entries:
 
 - no `display_name`: show the raw ID
 - no `description`: use an empty description
 - no `menu_order`: preserve existing ordering
 - no `show_in_menu`: show the server
-- no state tables: migration writes the v4.4 state defaults; existing per-server `name`, `lore`, and material overrides remain authoritative
+- no state tables: migration writes the state defaults; existing per-server `name`, `lore`, and material overrides remain authoritative
 
 Run `/vn reload` after editing. No proxy restart and no routing-ID rename are required.
 
 ## What is not included
 
-Version 4.4.0 does not add localized per-language display names or descriptions. The selected language pack still controls shared selector templates, controls, and status wording, while each server has one configured display name and description for all players.
+You omit localized per-language display names in this release. You use the selected language pack for shared templates while maintaining one display name and description for all players.
 
 ## Troubleshooting
 
@@ -184,7 +184,7 @@ Give each server a distinct `display_name`. Selection remains safe because the h
 
 ### A server stopped routing after I renamed it
 
-Restore the original ID in `velocity.toml`, `navigator.toml`, and the left side of the `gui.toml` entry. Change only `display_name`; never rename a route target just to add spaces to its label.
+Restore the original ID in `velocity.toml`, `navigator.toml`, and the left side of the `gui.toml` entry. Change only `display_name`; never rename a route target to add spaces to its label.
 
 ## Related guides
 

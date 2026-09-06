@@ -2,7 +2,7 @@
 
 ![VelocityNavigator v3 to v4 migration](headers/migration-guide.png)
 
-The upgrade is straightforward, but keep a copy of the old plugin folder until you have tried the new JAR on one proxy. This guide walks through the files and settings worth checking.
+The upgrade is straightforward, but keep a copy of the old plugin folder until you have tried the new JAR on one proxy. Check these files and settings during the upgrade:
 
 ## Before You Begin
 
@@ -18,13 +18,13 @@ Also back up your entire `plugins/velocitynavigator/` directory if you want to b
 
 ## Step 1: Replace the JAR
 
-1. Download `VelocityNavigator-4.4.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
+1. Download `VelocityNavigator-4.5.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
 2. Remove the old JAR from `plugins/`.
 3. Place the new JAR in `plugins/`.
 
 ```
 plugins/
-├── VelocityNavigator-4.4.0.jar   ← new
+├── VelocityNavigator-4.5.0.jar   ← new
 └── velocitynavigator/
     ├── navigator.toml              ← will be auto-migrated
     └── ...
@@ -37,7 +37,7 @@ plugins/
 Start (or restart) your Velocity proxy. VelocityNavigator v4 will:
 
 1. Detect the v3 config format.
-2. Automatically migrate it to v4 format.
+2. Migrate it to v4 format.
 3. Create a backup at `navigator.toml.bak`.
 4. Log any migration warnings to the console.
 
@@ -117,8 +117,8 @@ If you have any scripts or external tools that depend on v3 config fields, updat
 
 | Field | v3 | v4 | Migration |
 |-------|----|----|-----------|
-| `routing.default_lobbies` | `["lobby-1", "lobby-2"]` | Same format + inline tables | Backward compatible — plain strings still work |
-| `routing.selection_mode` | 3 modes | 7 modes | Old modes still work; new: `power_of_two`, `weighted_round_robin`, `least_connections`, `consistent_hash` |
+| `routing.default_lobbies` | `["lobby-1", "lobby-2"]` | Same format + inline tables | Backward compatible, plain strings still work |
+| `routing.selection_mode` | 3 modes | 7 modes + `latency` and `geo_distance` | Old modes still work; new: `power_of_two`, `weighted_round_robin`, `least_connections`, `consistent_hash`, `latency`, `geo_distance` |
 | `routing.contextual.groups` | `Map<String, List<LobbyEntry>>` | `Map<String, GroupConfig>` | Auto-migrated; GroupConfig adds optional `mode` field |
 
 ---
@@ -170,11 +170,11 @@ If upgrading from v4.0.0 to v4.1.0, the config auto-migrates from version 4 to v
 
 ### New v4.1 Config Keys
 
-- `messages.formatting` — legacy color conversion mode (`auto`, `minimessage`, `legacy`)
-- `messages.dashboard_healthy` / `dashboard_draining` / `dashboard_open` / `dashboard_offline` — customizable `/vn servers` status colors
-- `startup.welcome_enabled` — first-run experience. The old `startup.wiki_url` key is removed automatically because documentation links now always use the official wiki.
-- `lobby.no_server_strategy` / `lobby.no_server_message` / `lobby.fallback_server` — empty lobby fallbacks
-- `bedrock.*` — full Bedrock/Geyser configuration block
+- `messages.formatting`: legacy color conversion mode (`auto`, `minimessage`, `legacy`)
+- `messages.dashboard_healthy` / `dashboard_draining` / `dashboard_open` / `dashboard_offline`: customizable `/vn servers` status colors
+- `startup.welcome_enabled`: first-run experience. The old `startup.wiki_url` key is removed because documentation links now always use the official wiki.
+- `lobby.no_server_strategy` / `lobby.no_server_message` / `lobby.fallback_server`: empty lobby fallbacks
+- `bedrock.*`: full Bedrock/Geyser configuration block
 
 ### Permission Default Changed
 
@@ -195,7 +195,7 @@ If upgrading to v4.2.0, the config auto-migrates to version 6.
 ### New v4.2 features and configurations
 
 1. **Interactive selector menus**:
-   - **Bedrock Form GUI**: automatically displays a native Cumulus SimpleForm lobby selector to Geyser players (customizable titles/content/buttons under `[bedrock]`).
+   - **Bedrock Form GUI**: displays a native Cumulus SimpleForm lobby selector to Geyser players (customizable titles/content/buttons under `[bedrock]`).
    - **Java chat selector**: Adventure-formatted click-to-connect chat menu for Java players (customizable headers/formats/tooltips under `[routing]`).
 2. **Ping-based routing (`latency`)**:
    - New `latency` routing strategy selects the server with the lowest measured ping.
@@ -206,16 +206,16 @@ If upgrading to v4.2.0, the config auto-migrates to version 6.
 
 ### New v4.2 Config keys
 
-- `routing.use_menu_for_lobby` — toggle the configured Java selector. The old `use_chat_menu_for_lobby` key remains readable.
-- `bedrock.use_gui_for_lobby` — toggle native Form selector for Bedrock players.
+- `routing.use_menu_for_lobby`: toggle the configured Java selector. The old `use_chat_menu_for_lobby` key remains readable.
+- `bedrock.use_gui_for_lobby`: toggle native Form selector for Bedrock players.
 - Bedrock Form title/content/button text moved to `[menus.bedrock]` in `messages.toml`.
-- `metrics.prometheus.enabled` / `port` / `bind_host` — embedded Prometheus server configuration.
+- `metrics.prometheus.enabled` / `port` / `bind_host`: embedded Prometheus server configuration.
 
 ---
 
 ## v4.3.0 Update: Config Version v8
 
-VelocityNavigator 4.3.0 writes `config_version = 8`. Any older `navigator.toml` is backed up as `navigator.toml.v<old-version>.bak` before the normalized v8 file is written.
+VelocityNavigator 4.3.0 writes `config_version = 8`. Any older `navigator.toml` is backed up as `navigator.toml.v<old-version>.bak` before it writes the normalized v8 file.
 
 The migration also separates presentation and managed-server data:
 
@@ -227,7 +227,7 @@ The migration also separates presentation and managed-server data:
 ### New v4.3 systems
 
 1. **Universal proxy/backend JAR** with a paginated Java inventory selector and `/vn bridge status`.
-2. **Seven built-in language packs plus custom codes** without automatic player-locale detection.
+2. **Fifteen built-in language packs plus custom codes** without automatic player-locale detection.
 3. **Persistent affinity** with a ten-minute TTL, periodic disk saves, and restart restore.
 4. **Retry backoff with jitter**, `/vn health`, and silent update checks.
 5. **Optional parties and capacity queues** with independently configurable commands and permissions.
@@ -268,7 +268,7 @@ After migration, run `/vn config validate`, restart every bridged backend, and u
 
 ## v4.4.0 Update: Selector Customization
 
-VelocityNavigator 4.4.0 keeps `navigator.toml` at config version 8 and advances the menu-only `gui.toml` schema to `config_version = 2`. On first load, a v1 GUI file is copied to `gui.toml.v1.bak` and normalized as v2. Existing server IDs and routing configuration continue to work unchanged. Old GUI entries remain compatible: missing names fall back to raw IDs, descriptions are empty, ordering stays unchanged, and servers remain visible. Existing explicit item-name, lore, material, and unavailable-material overrides are preserved; entries without an explicit override inherit the new v4.4 state defaults.
+VelocityNavigator 4.4.0 keeps `navigator.toml` at config version 8 and advances the menu-only `gui.toml` schema to `config_version = 2`. On first load, a v1 GUI file is copied to `gui.toml.v1.bak` and normalized as v2. Existing server IDs and routing configuration continue to work unchanged. Old GUI entries remain compatible: missing names fall back to raw IDs, descriptions are empty, ordering stays unchanged, and servers remain visible. Existing explicit item-name, lore, material, and unavailable-material overrides are preserved; entries without an explicit override inherit the new state defaults.
 
 ```toml
 config_version = 2
@@ -288,7 +288,7 @@ Bedrock `sort_mode = "name"` now sorts the displayed aliases. Duplicate aliases 
 
 After upgrading, run `/vn reload`, `/vn menu validate`, and `/vn config validate`. The menu validator checks unknown server IDs, duplicate labels, slots, material-identifier syntax, and curly-brace placeholders. No routing-ID rename or proxy restart is required.
 
-Localized per-language display names are not included in v4.4.0. Language packs continue to control shared selector templates and status text.
+Localized per-language display names are not included. Language packs continue to control shared selector templates and status text.
 
 ---
 

@@ -2,24 +2,24 @@
 
 ![Initial join balancing](headers/initial-join-balancing.png)
 
-Velocity's `try` list is designed for fallback, so it sends everyone to the first online server. Initial-join balancing lets VelocityNavigator choose a healthy lobby as soon as a player logs in.
+You configure Velocity's `try` list for fallback to route players to the first online server. You configure Initial-join balancing to select a healthy lobby at login.
 
-## The Vanilla Velocity Behavior
+## Vanilla Velocity behavior
 
-By default, Velocity uses a static `try` list in `velocity.toml` to decide which server a new player joins:
+You configure a static `try` list in `velocity.toml` to route new players:
 
 ```toml
 [servers]
 try = ["lobby-1", "lobby-2"]
 ```
 
-Velocity always tries the **first server** in the list. If `lobby-1` is online, every player joins `lobby-1`. The second server is only used if the first one crashes or shuts down. The second lobby stays empty while the first one absorbs the entire player load.
+Velocity routes players to the first server in the list. Players join `lobby-1` when it is online. You use the second server when the first crashes. You leave the second lobby empty while the first absorbs the load.
 
 ---
 
-## How VelocityNavigator Handles It
+## How VelocityNavigator handles it
 
-VelocityNavigator intercepts the `PlayerChooseInitialServerEvent` and applies its routing logic **before** the player's client lands on any server.
+You intercept the `PlayerChooseInitialServerEvent` and apply routing logic before players land on a backend.
 
 ```mermaid
 sequenceDiagram
@@ -29,21 +29,22 @@ sequenceDiagram
     participant L1 as Lobby-1 (80 Players)
     participant L2 as Lobby-2 (0 Players)
 
-    Player->>Proxy: Join Network
+    Player->>Proxy: Join network
     Proxy->>VN: PlayerChooseInitialServerEvent
-    Note over VN: Runs Async Health Checks<br/>Finds Lobby-1 has 80 players<br/>Finds Lobby-2 is empty
-    VN->>Proxy: Override Default -> Send to Lobby-2
-    Proxy->>L2: Connect Player
-    L2-->>Player: Successfully Connected!
+    Note over VN: Runs async health checks.<br/>Finds Lobby-1 has 80 players.<br/>Finds Lobby-2 is empty.
+    VN->>Proxy: Override default -> send to Lobby-2
+    Proxy->>L2: Connect player
+    L2-->>Player: Successfully connected
 ```
 
-- **`least_players` mode**: the server with the fewest players is selected.
-- **`power_of_two` mode**: two random candidates are picked; the emptier one wins.
-- **`round_robin` mode**: players alternate between lobbies in strict rotation.
-- **`random` mode**: each player gets a random lobby assignment.
-- **`weighted_round_robin` mode**: servers with higher weight receive proportionally more players.
-- **`least_connections` mode**: uses EMA of connection rates and load for bursty traffic.
-- **`consistent_hash` mode**: player UUID deterministically maps to a specific server.
+- **`least_players`**: You select the server with the fewest players.
+- **`power_of_two`**: You pick two random candidates and select the emptier one.
+- **`round_robin`**: You alternate players between lobbies in rotation.
+- **`random`**: You assign players a random lobby.
+- **`weighted_round_robin`**: You route more players to servers with higher weights.
+- **`least_connections`**: You use EMA of connection rates to handle burst traffic.
+- **`consistent_hash`**: You map player UUIDs to specific servers.
+- **`latency`**: You select the candidate with the lowest proxy-to-backend ping.
 
 ---
 
@@ -58,18 +59,19 @@ balance_initial_join = true
 
 | Value | Behavior |
 |-------|----------|
-| `true` | Players are load-balanced immediately upon initial join. |
-| `false` | Velocity's native `try` list is used (default Velocity fallback). |
+| `true` | You load-balance players immediately on initial join |
+| `false` | You use Velocity's native `try` list |
 
 ---
 
 > [!WARNING]
-> Set `balance_initial_join = false` if you have a dedicated "Welcome/Auth" server that all unverified players must join first.
+> You set `balance_initial_join = false` when your network has a dedicated welcome server. You route players past the welcome server when you enable balance. You short-circuit the initial route when you enable the auth holding lobby.
 
 ---
 
 ## How initial routing works
 
-- Subscribes to `PlayerChooseInitialServerEvent` (fires immediately after `PostLoginEvent`).
-- Routing ping-health tests run concurrently to avoid adding sign-in latency.
-- When `verbose_logging = true`, every balanced initial join is debug-logged.
+- You subscribe to `PlayerChooseInitialServerEvent`.
+- You run routing ping-health tests concurrently to avoid sign-in latency.
+- You debug-log balanced initial joins when you set `verbose_logging = true`.
+- You choose the holding lobby over the routing decision when you enable the auth subsystem for unverified players.

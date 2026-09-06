@@ -2,11 +2,11 @@
 
 ![HTML operations dashboard](headers/html-dashboard.png)
 
-The optional dashboard gives operators a live browser view of lobby health, player counts, routing activity, affinity, and the active configuration summary. It uses its own port and can be changed in `navigator.toml`.
+The optional dashboard provides operators a live browser view of lobby health, player counts, routing activity, affinity, and the active configuration summary. It uses a dedicated port configured in `navigator.toml`.
 
-![Live VelocityNavigator 4.4.0 dashboard](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/dashboard-preview.png)
+![Live VelocityNavigator dashboard](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/dashboard-preview.png)
 
-This capture comes from a running proxy with one configured lobby and one Redis-discovered lobby. Dynamic servers appear alongside configured servers and keep their advertised capacity.
+This capture shows a running proxy with one configured lobby and one Redis-discovered lobby. Dynamic servers appear alongside configured servers and show their advertised capacity.
 
 ## Enable it
 
@@ -19,7 +19,7 @@ bearer_token = "choose-a-long-random-token"
 refresh_seconds = 5
 ```
 
-`127.0.0.1` is the universal loopback address, not anybody's public or personal IP. The values above are safe examples. Choose a port assigned by your hosting provider, and choose a bind address that exists inside your server or container.
+`127.0.0.1` represents the local loopback address, not a public IP. The values above serve as examples. Assign a port provided by your hosting provider and select a bind address valid within your server or container.
 
 | Where Velocity runs | `bind_host` | `port` | Address you open |
 |---|---|---|---|
@@ -27,55 +27,56 @@ refresh_seconds = 5
 | Pterodactyl or another container panel | Usually `0.0.0.0` | A separate port allocated by the provider | Your provider's node address or assigned domain plus that port |
 | Behind a reverse proxy | `127.0.0.1` or a private interface | Any private unused port | Your HTTPS dashboard domain |
 
-Do not copy a provider's public IP into `bind_host` unless its documentation specifically tells you to. `bind_host` is the local interface the plugin listens on; it is not necessarily the hostname or IP that you type into a browser. When a token is configured, the page asks for it before loading live data.
+Avoid copying a provider's public IP into `bind_host` unless explicitly documented. `bind_host` defines the local interface the plugin listens on. It is not the browser address. A configured token prompts for authentication before data loads.
 
 ## What the page shows
 
-- current lobby health, state, latency, and player count;
-- routing distribution and live counters since the proxy started;
-- the current number of saved affinity records;
-- routing mode and important feature settings;
+- current lobby health, state, latency, and player count
+- routing distribution and live counters since the proxy started
+- current number of saved affinity records
+- routing mode and important feature settings
 
-The dashboard reads live proxy data. It is an operations view, not a historical analytics database, so counters reset when the proxy restarts.
+The dashboard displays live proxy data. It functions as an operations view, not a historical database. Counters reset on proxy restart.
 
 ### Reading the summary cards
 
 | Field | Meaning |
 |---|---|
-| Player joins / leaves | Connections and disconnections observed since this proxy started; these are not the current online-player count. |
-| Online lobbies | Tracked lobbies with a current online health sample. |
+| Player joins / leaves | Connections and disconnections observed since the proxy started. They do not equal current online players. |
+| Online lobbies | Tracked lobbies holding a current online health sample. |
 | Drained | Lobbies intentionally excluded from new routing. |
-| Cache size | Health records currently held by the proxy. |
-| Affinity entries | Players with a remembered lobby assignment. |
+| Cache size | Health records held by the proxy. |
+| Affinity entries | Players assigned to specific lobbies. |
+| Active pings | Health-check ping requests currently in flight. |
 
 ### Reading a lobby row
 
 | Field | Meaning |
 |---|---|
 | Players | Player count from the latest health sample. |
-| Capacity | The lobby's configured or dynamically advertised `max_players`; uncapped servers show no fixed limit. |
-| Latency | Latest measured backend ping time; an unavailable value means no usable sample has been recorded yet. |
-| Routed | Successful routing decisions sent to that lobby since the proxy started. |
-| Drained | Whether operators have paused new routing to the lobby. |
-| Circuit | `CLOSED` is normal, `OPEN` blocks routing after repeated failures, and `HALF_OPEN` is a recovery probe. |
+| Capacity | Configured or dynamically advertised `max_players`. Uncapped servers lack limits. |
+| Latency | Measured backend ping time. An unavailable value indicates a missing sample. |
+| Routed | Successful routing decisions assigned to that lobby since the proxy started. |
+| Drained | Denotes paused routing. |
+| Circuit | `CLOSED` permits routing. `OPEN` blocks routing after failures. `HALF_OPEN` performs a recovery probe. |
 
-The routing distribution counts decisions made by VelocityNavigator. It is not a billing or long-term traffic report and should not be treated as one.
+The routing distribution logs decisions made by VelocityNavigator. It is not a billing or long-term traffic report.
 
 ## Port and network access
 
-Both the port and bind address are configurable. `127.0.0.1` is the safest default because only the proxy machine can connect. Hosting-panel users must allocate a separate dashboard port in their provider panel and put that exact number in `port`. Use `0.0.0.0` only when the container or network requires it, and protect it with a strong `bearer_token` plus the provider firewall or allocation rules.
+The port and bind address are configurable. `127.0.0.1` secures the listener, restricting connections to the proxy machine. Hosting-panel users must secure a separate dashboard port and define it under `port`. Use `0.0.0.0` for container requirements, securing it with a strong `bearer_token` and provider firewall rules.
 
-The built-in listener serves HTTP. For a public hostname or HTTPS, keep it on a private address and place a trusted reverse proxy in front of it.
+The internal listener handles HTTP. Place a trusted reverse proxy in front for HTTPS access over a private address.
 
 ## Troubleshooting
 
 | Problem | Check |
 |---|---|
-| Page does not open | Confirm `enabled`, the port, bind address, and firewall rule |
-| Address already in use | Choose another unused or provider-allocated `port` and reload |
-| Cannot assign requested address | The configured `bind_host` does not exist inside the machine or container; panel users usually need `0.0.0.0` |
-| Token is rejected | Copy the value exactly; tokens are case-sensitive |
-| Another computer cannot connect | Do not use `127.0.0.1` for remote access; bind to a private interface and add a firewall rule |
-| Values look empty | Join through the proxy and wait for a health-check cycle |
+| Page does not open | Verify `enabled`, port, bind address, and firewall settings. |
+| Address already in use | Select another unused or allocated `port` and reload. |
+| Cannot assign requested address | The `bind_host` is invalid on the machine. Panel users often require `0.0.0.0`. |
+| Token is rejected | Enter the case-sensitive value precisely. |
+| Another computer cannot connect | Avoid `127.0.0.1` for remote access. Bind to a private interface and configure a firewall rule. |
+| Values look empty | Join through the proxy and await a health-check cycle. |
 
-After a change, run `/vn reload` and check the proxy log for the dashboard address.
+After changes, execute `/vn reload` and verify the dashboard address in the proxy log.

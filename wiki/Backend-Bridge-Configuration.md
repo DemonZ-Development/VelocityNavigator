@@ -2,18 +2,25 @@
 
 ![Backend bridge setup](headers/backend-bridge-configuration.png)
 
-The backend bridge is optional. Install it when you want a Java inventory selector or when a backend should announce itself through Redis. Velocity still makes every routing decision.
+The backend bridge is the backend half of the same VelocityNavigator JAR. Install it when you want Java inventory selectors, backend YAML menus, NPCs, PlaceholderAPI values, or Redis server registration. Routing decisions still happen on Velocity.
 
-## Install and verify
+You do not need the bridge for a proxy-only setup or for the clickable chat selector.
 
-1. Put the same `VelocityNavigator-4.4.0.jar` on the Velocity proxy and the backend's `plugins/` directory.
-2. Start the backend once to create `plugins/VelocityNavigator/config.yml`.
-3. Join that backend through the proxy once.
-4. On the proxy, run `/vn bridge status` and confirm the backend is listed.
+## Install it
 
-The backend must run Java 17 or newer. The bridge is built against the Spigot 1.16.5 API and uses no version-specific NMS.
+1. Stop the proxy and backend.
+2. Put the same VelocityNavigator JAR in the proxy's `plugins/` folder and the backend's `plugins/` folder.
+3. Start the backend, then start Velocity.
+4. Join the backend through Velocity.
+5. Run `/vn bridge status` on the proxy.
 
-## Core settings
+The backend should appear as available after a player joins it. If it does not, check both consoles for plugin-channel or startup errors.
+
+The bridge supports Paper, Spigot, and Folia 1.16.5 or newer and requires Java 17 or newer. It does not use version-specific NMS.
+
+## Default backend config
+
+The backend creates `plugins/VelocityNavigator/config.yml`:
 
 ```yaml
 enabled: true
@@ -23,41 +30,53 @@ refresh_enabled: true
 handshake_delay_ticks: 20
 max_title_length: 32
 fallback_material: COMPASS
+menus_enabled: true
+npcs_enabled: true
+npc_look_interval_ticks: 20
+bstats_enabled: true
+update_check_enabled: true
+update_check_interval_minutes: 120
 ```
 
-| Key | Default | Meaning |
-|---|---:|---|
-| `enabled` | `true` | Enables the backend bridge. Disable it when this backend never renders the Java selector. |
-| `inventory_menu_enabled` | `true` | Allows the proxy to open inventory menus on this backend. |
-| `handshake_enabled` | `true` | Reports bridge availability to the proxy; leave enabled for `/vn bridge status`. |
-| `refresh_enabled` | `true` | Accepts menu refresh and page-navigation messages. |
-| `handshake_delay_ticks` | `20` | Delay before the bridge announces itself after a player joins. |
-| `max_title_length` | `32` | Maximum inventory title length accepted by the bridge. |
-| `fallback_material` | `COMPASS` | Material used when a requested menu material is unavailable. |
+| Key | What it controls |
+|---|---|
+| `enabled` | Enables the backend plugin |
+| `inventory_menu_enabled` | Allows the proxy to open its Java inventory selector |
+| `handshake_enabled` | Reports bridge availability to `/vn bridge status` |
+| `refresh_enabled` | Accepts selector refresh and page actions |
+| `handshake_delay_ticks` | Delay before the bridge announces itself after join |
+| `max_title_length` | Safe maximum for inventory titles |
+| `fallback_material` | Item used when a configured material is unavailable |
+| `menus_enabled` | Enables backend YAML menus in `menus/*.yml` |
+| `npcs_enabled` | Enables NPC files in `npcs/*.yml` |
+| `npc_look_interval_ticks` | Delay between NPC head-tracking checks |
+| `update_check_enabled` | Enables the backend Modrinth update check |
+| `update_check_interval_minutes` | Delay between update checks, with a minimum of 30 |
 
-The Velocity-side `routing.use_menu_for_lobby`, `routing.java_menu.type`, and `routing.java_menu.fallback_to_chat` settings decide whether a player is offered the inventory selector. `gui.toml` on the proxy controls layout, slot overrides, icons, and refresh timing.
+The proxy's `navigator.toml` decides whether players use an inventory or chat selector. Its `gui.toml` controls that selector's layout, slots, icons, and refresh timing.
 
-## Which files belong on which server
-
-The universal JAR runs in two modes, but its configuration is not shared automatically:
+## Keep the files in the right place
 
 | Location | Files to edit |
 |---|---|
 | Velocity proxy | `plugins/velocitynavigator/navigator.toml`, `messages.toml`, `gui.toml`, and `servers.toml` |
-| Paper or Spigot backend | `plugins/VelocityNavigator/config.yml` |
+| Paper, Spigot, or Folia backend | `plugins/VelocityNavigator/config.yml`, `menus/*.yml`, and `npcs/*.yml` |
 
-Keep menu text, colors, rows, icons, and per-server slot overrides on the proxy. The backend's `config.yml` only controls bridge safety limits, the handshake, backend telemetry, and optional Redis registration. Do not copy `navigator.toml` or `gui.toml` into a backend plugin folder; the bridge does not read them.
+Do not copy `navigator.toml`, `messages.toml`, or `gui.toml` into the backend plugin folder. Backend YAML menus and NPCs have their own formats; see [Backend Menus](Backend-Menus) and [Backend NPCs](Backend-NPCs).
 
-## Backend telemetry
+## Backend bStats
 
 ```yaml
 bstats_enabled: true
-bstats_plugin_id: 0
 ```
 
-Backend telemetry is independent from the Velocity bStats project. Set `bstats_plugin_id` to the official Bukkit/Spigot project ID only after it is assigned. Leave it at `0`, or set `bstats_enabled: false`, to disable backend telemetry.
+The backend bridge and proxy have separate anonymous bStats reports. The Bukkit project ID is built into the plugin. Set `bstats_enabled: false` here if you do not want the backend report.
+
+Do not add `bstats_plugin_id`. Old copies of that setting are removed during migration.
 
 ## Optional Redis registration
+
+Most networks can leave this disabled. It is for backends that announce themselves dynamically to Redis:
 
 ```yaml
 redis:
@@ -80,13 +99,15 @@ redis:
   unregister_on_shutdown: true
 ```
 
-Set `enabled: true` only when the Velocity proxy also enables Redis. `registration_secret` must exactly match the proxy’s secret. `server_name` must be unique; `advertised_host` must be reachable by every proxy and permitted by each proxy’s `allowed_registration_hosts`. An `advertised_port` of `0` uses the Bukkit server port.
+Only enable this when proxy-side Redis registration is also enabled. Match `registration_secret` exactly, give every backend a unique `server_name`, and use an `advertised_host` the proxy can reach. `advertised_port: 0` uses the backend's normal server port.
 
-Keep Redis private, use TLS outside trusted networks, and configure both a secret and allowlist on every proxy. Redis registration is runtime-only; use `/vn server add lobby` when the server must also be written to `velocity.toml` and `servers.toml`.
+Keep Redis private. Use TLS when traffic leaves a trusted network, and configure the proxy's registration secret and host allowlist before accepting backend announcements.
 
 ## Troubleshooting
 
-- **Chat fallback opens:** confirm this backend has the JAR, a player has visited it, and `/vn bridge status` sees it.
-- **Menu opens but clicks do nothing:** allow the `velocitynavigator:menu` plugin channel and keep the player on the backend that opened the menu.
-- **Redis registration is rejected:** compare secret, timestamp, host allowlist, advertised host/port, and server name; run `/vn redis status` and `/vn redis test` on the proxy.
-- **Material/title problems:** use the proxy’s `gui.toml`; the bridge applies `fallback_material` and `max_title_length` only as safe backend limits.
+- **The selector falls back to chat:** Confirm the backend has the JAR, a player joined it through Velocity, and `/vn bridge status` sees it.
+- **Menu opens but clicks do nothing:** Keep the player on the backend that opened the menu and check the `velocitynavigator:menu` plugin channel.
+- **NPCs do not appear:** Check `npcs_enabled`, then inspect the backend log for a rejected NPC file.
+- **Placeholder returns nothing:** Install PlaceholderAPI on that backend and reconnect through the proxy.
+- **Redis registration is rejected:** Compare the secret, host allowlist, advertised address, port, and server name. Run `/vn redis status` and `/vn redis test` on the proxy.
+- **Material or title problems:** Edit the proxy's `gui.toml`. The bridge settings are only backend safety limits.

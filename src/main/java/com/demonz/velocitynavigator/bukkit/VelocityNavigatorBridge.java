@@ -3,17 +3,28 @@
  * Licensed under the Apache License, Version 2.0.
  */
 package com.demonz.velocitynavigator.bukkit;
-
-import com.demonz.velocitynavigator.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.bukkit.menu.BackendMenuCommand;
+import com.demonz.velocitynavigator.bukkit.menu.BackendMenuListener;
+import com.demonz.velocitynavigator.bukkit.menu.BackendMenuManager;
+import com.demonz.velocitynavigator.bukkit.menu.ProxyMenuHolder;
+import com.demonz.velocitynavigator.bukkit.npc.BackendNPCCommand;
+import com.demonz.velocitynavigator.bukkit.npc.BackendNPCListener;
+import com.demonz.velocitynavigator.bukkit.npc.BackendNPCManager;
+import com.demonz.velocitynavigator.bukkit.npc.NPCProximityLookTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.command.CommandExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -22,15 +33,19 @@ import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public final class VelocityNavigatorBridge extends JavaPlugin implements PluginMessageListener, Listener {
+
+    private static final int BACKEND_BSTATS_ID = 32887;
+
     private boolean active;
     private boolean inventoryMenuEnabled;
     private boolean handshakeEnabled;
@@ -42,9 +57,19 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
     private BackendRedisRegistration.Settings redisSettings;
     private boolean redisUnregisterOnShutdown;
     private boolean redisRegistrationEnabled;
+    private BackendUpdateChecker updateChecker;
+    private final Map<UUID, MenuBridgeProtocol.PartyState> partyStates = new ConcurrentHashMap<>();
+    private final BackendAuthRestrictionListener authRestrictionListener = new BackendAuthRestrictionListener();
+    private final BackendAuthSignGuiListener authSignGuiListener = new BackendAuthSignGuiListener(this);
+
+    private BackendMenuManager menuManager;
+    private BackendNPCManager npcManager;
+    private Object proximityTaskHandle;
+    private Object viewerTaskHandle;
 
     @Override
     public void onEnable() {
+        BackendConfigMigrator.migrate(this);
         saveDefaultConfig();
         if (!getConfig().getBoolean("enabled", true)) {
             getLogger().info("VelocityNavigator backend bridge is disabled in config.yml.");
@@ -58,17 +83,52 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         maxTitleLength = Math.max(1, Math.min(32, getConfig().getInt("max_title_length", 32)));
         fallbackMaterial = Material.matchMaterial(getConfig().getString("fallback_material", "COMPASS"));
         if (fallbackMaterial == null || !fallbackMaterial.isItem()) fallbackMaterial = Material.COMPASS;
-        if (inventoryMenuEnabled) getServer().getMessenger().registerIncomingPluginChannel(this, MenuBridgeProtocol.CHANNEL, this);
-        if (handshakeEnabled) getServer().getMessenger().registerOutgoingPluginChannel(this, MenuBridgeProtocol.CHANNEL);
+        getServer().getMessenger().registerIncomingPluginChannel(this, MenuBridgeProtocol.CHANNEL, this);
+        if (handshakeEnabled || getConfig().getBoolean("menus_enabled", true) || getConfig().getBoolean("npcs_enabled", true)) {
+            getServer().getMessenger().registerOutgoingPluginChannel(this, MenuBridgeProtocol.CHANNEL);
+        }
         getServer().getPluginManager().registerEvents(this, this);
+        getServer().getPluginManager().registerEvents(authRestrictionListener, this);
+        getServer().getPluginManager().registerEvents(authSignGuiListener, this);
+        configureBackendMenusAndNpcs();
         configureRedisRegistration();
         configureBStats();
+        configureUpdateChecker();
+        registerPlaceholderAPI();
+        if (FoliaSchedulerCompat.isFolia()) {
+            getLogger().info("[Folia] Folia detected — using region scheduler for all tasks.");
+        }
         getLogger().info("VelocityNavigator universal JAR is running in BACKEND GUI BRIDGE mode.");
+    }
+
+    private void registerPlaceholderAPI() {
+        if (getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            try {
+                new com.demonz.velocitynavigator.bukkit.placeholder.VelocityNavigatorExpansion(this).register();
+                getLogger().info("PlaceholderAPI expansion successfully registered!");
+            } catch (Exception e) {
+                getLogger().warning("Failed to register PlaceholderAPI expansion: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void onDisable() {
         if (!active) return;
+        if (updateChecker != null) {
+            updateChecker.shutdown();
+        }
+        if (proximityTaskHandle != null) {
+            FoliaSchedulerCompat.cancelTask(this, proximityTaskHandle);
+            proximityTaskHandle = null;
+        }
+        if (viewerTaskHandle != null) {
+            FoliaSchedulerCompat.cancelTask(this, viewerTaskHandle);
+            viewerTaskHandle = null;
+        }
+        if (npcManager != null) {
+            npcManager.shutdown();
+        }
         closeRedisRegistration();
         getServer().getMessenger().unregisterIncomingPluginChannel(this, MenuBridgeProtocol.CHANNEL, this);
         getServer().getMessenger().unregisterOutgoingPluginChannel(this, MenuBridgeProtocol.CHANNEL);
@@ -76,41 +136,114 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!active || !inventoryMenuEnabled || !MenuBridgeProtocol.CHANNEL.equals(channel)) {
+        if (!active || !MenuBridgeProtocol.CHANNEL.equals(channel)) {
             return;
         }
-        final MenuBridgeProtocol.OpenMenu open;
         try {
-            open = MenuBridgeProtocol.decodeOpen(message);
+            MenuBridgeProtocol.PacketType type = MenuBridgeProtocol.packetType(message);
+            if (type == MenuBridgeProtocol.PacketType.AUTH_STATUS) {
+                boolean auth = MenuBridgeProtocol.decodeAuthStatus(message);
+                authRestrictionListener.setRestricted(player, !auth);
+                if (!auth) {
+                    FoliaSchedulerCompat.runTaskLater(this, player, () -> authSignGuiListener.openAuthSign(player, false), 10L);
+                }
+                return;
+            }
+            if (type == MenuBridgeProtocol.PacketType.PARTY_STATE) {
+                partyStates.put(player.getUniqueId(), MenuBridgeProtocol.decodePartyState(message));
+                return;
+            }
+            if (type != MenuBridgeProtocol.PacketType.OPEN || !inventoryMenuEnabled) {
+                return;
+            }
+            MenuBridgeProtocol.OpenMenu open = MenuBridgeProtocol.decodeOpen(message);
+            FoliaSchedulerCompat.runTask(this, player, () -> openInventory(player, open));
         } catch (IOException exception) {
             return;
         }
-        Bukkit.getScheduler().runTask(this, () -> openInventory(player, open));
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        partyStates.remove(event.getPlayer().getUniqueId());
+        if (npcManager != null && npcManager.isPacketMode()) {
+            npcManager.packetRuntime().removeViewer(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
+        resetNpcViewer(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        resetNpcViewer(event.getPlayer());
+    }
+
+    private void resetNpcViewer(Player player) {
+        if (npcManager == null || !npcManager.isPacketMode()) {
+            return;
+        }
+        npcManager.packetRuntime().resetViewer(player);
+        FoliaSchedulerCompat.runTaskLater(this, player, () -> npcManager.packetRuntime().tickViewer(player), 2L);
+    }
+
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent event) {
+        if (npcManager != null) {
+            npcManager.spawnPendingInWorld(event.getWorld());
+        }
+    }
+
+    public String partyPlaceholder(Player player, String parameter) {
+        MenuBridgeProtocol.PartyState state = partyStates.get(player.getUniqueId());
+        if (state == null) {
+            return switch (parameter) {
+                case "in_party", "is_leader", "is_open" -> "false";
+                case "name", "leader", "role", "members" -> "None";
+                case "size" -> "0";
+                case "max_size" -> "20";
+                default -> null;
+            };
+        }
+        return switch (parameter) {
+            case "in_party" -> Boolean.toString(state.inParty());
+            case "name" -> state.name();
+            case "leader" -> state.leader();
+            case "size" -> Integer.toString(state.size());
+            case "max_size" -> Integer.toString(state.maxSize());
+            case "is_leader" -> Boolean.toString(state.isLeader());
+            case "role" -> state.role();
+            case "is_open" -> Boolean.toString(state.isOpen());
+            case "members" -> String.join(", ", state.members());
+            default -> null;
+        };
     }
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!active || !inventoryMenuEnabled) return;
         Inventory top = event.getView().getTopInventory();
-        if (!(top.getHolder() instanceof MenuHolder holder)) {
+        if (!(top.getHolder() instanceof ProxyMenuHolder holder)) {
             return;
         }
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
-        String target = holder.targetsBySlot.get(event.getRawSlot());
+        String target = holder.targetsBySlot().get(event.getRawSlot());
         if (target == null || "@disabled".equals(target)) {
             return;
         }
         player.closeInventory();
-        sendSelection(player, holder.token, target);
+        sendSelection(player, holder.token(), target);
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         if (!active || !handshakeEnabled) return;
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        FoliaSchedulerCompat.runTaskLater(this, event.getPlayer(), () -> {
             if (event.getPlayer().isOnline()) {
                 try {
                     event.getPlayer().sendPluginMessage(this, MenuBridgeProtocol.CHANNEL,
@@ -125,9 +258,9 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         if (!player.isOnline()) {
             return;
         }
-        MenuHolder holder = new MenuHolder(open.token(), open.page());
+        ProxyMenuHolder holder = new ProxyMenuHolder(open.token(), open.page());
         Inventory inventory = Bukkit.createInventory(holder, open.rows() * 9, safeTitle(open.title()));
-        holder.inventory = inventory;
+        holder.bindInventory(inventory);
         if (open.fillEmpty()) {
             ItemStack filler = createItem(new MenuBridgeProtocol.MenuItem(
                     0, "@disabled", open.fillerMaterial(), " ", List.of()));
@@ -137,11 +270,12 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         }
         for (MenuBridgeProtocol.MenuItem item : open.items()) {
             inventory.setItem(item.slot(), createItem(item));
-            holder.targetsBySlot.put(item.slot(), item.target());
+            holder.targetsBySlot().put(item.slot(), item.target());
         }
         player.openInventory(inventory);
         if (open.refreshSeconds() > 0) {
-            Bukkit.getScheduler().runTaskLater(this, () -> refreshIfStillOpen(player, holder), open.refreshSeconds() * 20L);
+            FoliaSchedulerCompat.runTaskLater(this, player,
+                    () -> refreshIfStillOpen(player, holder), open.refreshSeconds() * 20L);
         }
     }
 
@@ -166,16 +300,16 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
             return value;
         }
         String shortened = value.substring(0, maxTitleLength);
-        return shortened.endsWith("§") ? shortened.substring(0, Math.max(0, maxTitleLength - 1)) : shortened;
+        return shortened.endsWith("\u00a7") ? shortened.substring(0, Math.max(0, maxTitleLength - 1)) : shortened;
     }
 
-    private void refreshIfStillOpen(Player player, MenuHolder expected) {
+    private void refreshIfStillOpen(Player player, ProxyMenuHolder expected) {
         if (!player.isOnline()) {
             return;
         }
         Inventory top = player.getOpenInventory().getTopInventory();
         if (refreshEnabled && top.getHolder() == expected) {
-            sendSelection(player, expected.token, "@refresh:" + expected.page);
+            sendSelection(player, expected.token(), "@refresh:" + expected.page());
         }
     }
 
@@ -189,16 +323,66 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
 
     private void configureBStats() {
         if (!getConfig().getBoolean("bstats_enabled", true)) return;
-        int pluginId = getConfig().getInt("bstats_plugin_id", 0);
-        if (pluginId <= 0) {
-            getLogger().warning("Backend bStats is ready but disabled until a Bukkit/Spigot bStats project ID is set in config.yml. Backend installs are never reported to the Velocity project.");
-            return;
-        }
-        Metrics metrics = new Metrics(this, pluginId);
+        Metrics metrics = new Metrics(this, BACKEND_BSTATS_ID);
         metrics.addCustomChart(new SimplePie("inventory_menu_enabled", () -> Boolean.toString(inventoryMenuEnabled)));
         metrics.addCustomChart(new SimplePie("handshake_enabled", () -> Boolean.toString(handshakeEnabled)));
         metrics.addCustomChart(new SimplePie("refresh_enabled", () -> Boolean.toString(refreshEnabled)));
         metrics.addCustomChart(new SimplePie("redis_registration_enabled", () -> Boolean.toString(redisRegistrationEnabled)));
+        metrics.addCustomChart(new SimplePie("folia_enabled", () -> Boolean.toString(FoliaSchedulerCompat.isFolia())));
+        metrics.addCustomChart(new SimplePie("server_software", () -> Bukkit.getName()));
+    }
+
+    private void configureBackendMenusAndNpcs() {
+        boolean menusEnabled = getConfig().getBoolean("menus_enabled", true);
+        boolean npcsEnabled = getConfig().getBoolean("npcs_enabled", true);
+
+        BackendMenuCommand menuCmd = null;
+        BackendNPCCommand npcCmd = null;
+
+        if (menusEnabled) {
+            menuManager = new BackendMenuManager(this);
+            BackendMenuListener menuListener = new BackendMenuListener(this, menuManager);
+            getServer().getPluginManager().registerEvents(menuListener, this);
+            menuCmd = new BackendMenuCommand(menuManager);
+            registerBackendCommand("vnavmenu", menuCmd);
+        }
+
+        if (npcsEnabled) {
+            npcManager = new BackendNPCManager(this);
+            npcManager.loadAndSpawnAll();
+            BackendNPCListener npcListener = new BackendNPCListener(this, npcManager, menuManager);
+            getServer().getPluginManager().registerEvents(npcListener, this);
+            npcCmd = new BackendNPCCommand(npcManager);
+            registerBackendCommand("vnavnpc", npcCmd);
+
+            if (npcManager.isPacketMode()) {
+                npcManager.packetRuntime().setClickHandler(npcListener::routeClick);
+                viewerTaskHandle = FoliaSchedulerCompat.runGlobalTaskTimer(this,
+                        () -> npcManager.tickViewers(), 10L, 10L);
+            }
+
+            long lookIntervalTicks = Math.max(1L, getConfig().getLong("npc_look_interval_ticks", 20L));
+            NPCProximityLookTask lookTask = new NPCProximityLookTask(this, npcManager);
+            proximityTaskHandle = FoliaSchedulerCompat.runGlobalTaskTimer(this, lookTask, lookIntervalTicks, lookIntervalTicks);
+        }
+
+        BackendVNCommand vnCmd = new BackendVNCommand(this, npcCmd, menuCmd);
+        registerBackendCommand("vnav", vnCmd);
+    }
+
+    private void registerBackendCommand(String name, CommandExecutor executor) {
+        if (getCommand(name) != null) {
+            getCommand(name).setExecutor(executor);
+        } else {
+            getLogger().warning("[VelocityNavigator] Command /" + name + " is not declared in plugin.yml and was not registered.");
+        }
+    }
+
+    private void configureUpdateChecker() {
+        if (!getConfig().getBoolean("update_check_enabled", true)) return;
+        int intervalMinutes = Math.max(30, getConfig().getInt("update_check_interval_minutes", 120));
+        updateChecker = new BackendUpdateChecker(getLogger(), getDescription().getVersion());
+        updateChecker.schedulePeriodicCheck(intervalMinutes);
     }
 
     private void configureRedisRegistration() {
@@ -255,20 +439,4 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         else getLogger().warning("Backend Redis registration failed: " + result.message());
     }
 
-    private static final class MenuHolder implements InventoryHolder {
-        private final String token;
-        private final int page;
-        private final Map<Integer, String> targetsBySlot = new LinkedHashMap<>();
-        private Inventory inventory;
-
-        private MenuHolder(String token, int page) {
-            this.token = token;
-            this.page = page;
-        }
-
-        @Override
-        public Inventory getInventory() {
-            return inventory;
-        }
-    }
 }

@@ -2,28 +2,28 @@
 
 ![Contextual lobby routing](headers/contextual-routing-guide.png)
 
-Contextual routing keeps each game mode connected to its own lobby pool. A player leaving BedWars can return to a BedWars lobby, while a SkyWars player goes back to SkyWars, without needing separate lobby commands.
+You use contextual routing to keep each game mode connected to its lobby pool. Players leaving BedWars return to a BedWars lobby. Players leaving SkyWars return to SkyWars.
 
-## What Is Contextual Routing?
+## What contextual routing does
 
-By default, all players who type `/lobby` are routed from the same global pool (`default_lobbies`). On a network with multiple game modes, you often want players to return to a **game-specific lobby** rather than a generic hub.
+By default, players typing `/lobby` route from the global pool (`default_lobbies`). Players in multi-mode networks often belong to a game-mode-specific lobby.
 
-Contextual routing lets you define groups of lobbies and map **source servers** to those groups. When a player leaves `bedwars-1` and types `/lobby`, they are routed to the BedWars lobby pool instead of the generic one.
+You define groups of lobbies and map source servers to those groups. Players leaving `bedwars-1` and typing `/lobby` route to the BedWars lobby pool.
 
 ---
 
-## When to Use It
+## When to use it
 
-- You have game-mode-specific lobbies (BedWars hub, SkyWars hub, etc.).
-- You want players to stay in a game-mode ecosystem when they finish a match.
+- Game-mode-specific lobbies (BedWars hub, SkyWars hub, and so on).
+- Players should stay in a game-mode ecosystem when a match ends.
 - Different game modes need different routing algorithms.
-- You want fallback chains so players always have somewhere to go.
+- Fallback chains help when a whole group is offline.
 
 ---
 
-## Basic Setup
+## Basic setup
 
-### Step 1: Define Your Groups
+### Step 1: Define your groups
 
 Each group is a named collection of lobby servers:
 
@@ -38,9 +38,9 @@ servers = ["sw-hub-1", "sw-hub-2"]
 servers = ["hub-1", "hub-2", "hub-3"]
 ```
 
-### Step 2: Map Source Servers to Groups
+### Step 2: Map source servers to groups
 
-When a player leaves a source server and uses `/lobby`, they are routed to the mapped group:
+Players leaving a source server and using `/lobby` route to the mapped group:
 
 ```toml
 [routing.contextual.sources]
@@ -50,7 +50,7 @@ When a player leaves a source server and uses `/lobby`, they are routed to the m
 "skywars-2" = "skywars_lobbies"
 ```
 
-### Step 3: Enable It
+### Step 3: Enable it
 
 ```toml
 [routing.contextual]
@@ -58,13 +58,13 @@ enabled = true
 fallback_to_default = true
 ```
 
-That is the basics. Players leaving BedWars servers are now routed to BedWars lobbies.
+You route players leaving BedWars servers to BedWars lobbies.
 
 ---
 
-## Per-Group Selection Mode Override
+## Per-group selection mode override
 
-Each group can override the global `selection_mode`. For example, you might want BedWars lobbies to use `consistent_hash` (so players return to the same lobby they were on) while other groups use the global mode:
+You override the global `selection_mode` per group. You configure BedWars lobbies with `consistent_hash` so players return to their previous lobby. You configure other groups to use the global mode:
 
 ```toml
 [routing.contextual.groups.bedwars_lobbies]
@@ -74,20 +74,20 @@ mode = "consistent_hash"
 [routing.contextual.groups.skywars_lobbies]
 servers = ["sw-hub-1", "sw-hub-2"]
 mode = "power_of_two"
-# If mode is omitted, the global selection_mode is used
+# If mode is omitted, the global selection_mode is used.
 ```
 
-Useful pairings:
+Configuration pairings:
 
-- **`consistent_hash`** for groups where you want players to return to the same lobby (inventory cache, party reconnection).
-- **`power_of_two`** for high-traffic groups that need fast, even distribution.
-- **`weighted_round_robin`** for groups with servers of different capacities.
+- **`consistent_hash`**: You configure this to return players to the same lobby.
+- **`power_of_two`**: You configure this for high-traffic groups needing fast distribution.
+- **`weighted_round_robin`**: You configure this for groups with servers of different capacities.
 
 ---
 
-## Fallback Chain Configuration
+## Fallback chain configuration
 
-When all servers in a group are down, the fallback chain determines the ordered list of groups to try next:
+You configure a fallback chain to specify the list of groups to try when all servers in a group are offline:
 
 ```toml
 [routing.contextual.fallback_chain]
@@ -95,17 +95,17 @@ bedwars_lobbies = ["main_hubs", "skywars_lobbies"]
 skywars_lobbies = ["main_hubs"]
 ```
 
-**How it works**:
+Step by step:
 
-1. Player leaves `bedwars-1` → maps to `bedwars_lobbies`.
-2. All BedWars lobbies are down → check the fallback chain.
-3. Try `main_hubs` → `hub-2` is healthy → route there.
+1. Players leave `bedwars-1` and map to `bedwars_lobbies`.
+2. You check the fallback chain when all BedWars lobbies are offline.
+3. You route players to `hub-2` in `main_hubs`.
 
-If no fallback group has available servers and `fallback_to_default = true`, the default lobby pool is used as a last resort.
+You use the default lobby pool when no fallback group has available servers and you set `fallback_to_default = true`.
 
 ---
 
-## Using LobbyEntry with Groups
+## Using LobbyEntry with groups
 
 Groups support the same LobbyEntry format as `default_lobbies`:
 
@@ -118,17 +118,17 @@ servers = [
 mode = "weighted_round_robin"
 ```
 
-This lets you:
+You can:
 
-- Set **max_players** per server in a group (smaller servers receive fewer players).
-- Set **weight** for weighted round-robin distribution.
-- Mix plain strings and inline tables.
+- Set **`max_players`** per server in a group. You route fewer players to smaller servers.
+- Set **`weight`** for weighted round-robin distribution.
+- Mix strings and inline tables.
 
 ---
 
-## Real-World Examples
+## Real-world examples
 
-### Example 1: PvP Network
+### Example 1: PvP network
 
 A network with duels, FFA, and a main hub:
 
@@ -159,9 +159,9 @@ duel_lobbies = ["ffa_lobbies"]
 ffa_lobbies = ["duel_lobbies"]
 ```
 
-### Example 2: Event Network
+### Example 2: Event network
 
-A network that runs events with a special event lobby:
+A network that runs events with a dedicated event lobby:
 
 ```toml
 [routing.contextual]
@@ -184,7 +184,7 @@ mode = "least_players"
 event_lobbies = ["main_hubs"]
 ```
 
-### Example 3: Mixed Network with Weighted Servers
+### Example 3: Mixed network with weighted servers
 
 A network where some lobby servers are larger than others:
 
@@ -216,13 +216,27 @@ mode = "power_of_two"
 
 ---
 
-## Troubleshooting Contextual Routing
+## Geo-source mapping
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| Players always go to default lobbies | `enabled = false` | Set `enabled = true` in `[routing.contextual]` |
-| Player from game server goes to wrong lobby | Source server not in `sources` map | Add the source server name (must match `velocity.toml` exactly) |
-| "No lobby found" error | All group lobbies offline, `fallback_to_default = false` | Set `fallback_to_default = true` or add a fallback chain |
-| Fallback chain not working | Chain references group name that doesn't exist | Verify group names match exactly |
+You map a contextual source by ISO country code when you enable [Geo Routing](Geo-Routing). You use this when a proxy fronts many game servers and you use the geo service for player location:
+
+```toml
+[routing.contextual.sources]
+"US" = "main_hubs"
+"DE" = "eu_lobbies"
+```
+
+You fall back to the per-server source map when the country match fails.
+
+---
+
+## Troubleshooting contextual routing
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Players route to default lobbies | `enabled = false` | Set `enabled = true` in `[routing.contextual]` |
+| Players route to wrong lobby | Source server not in `sources` map | Add the source server name (must match `velocity.toml` exactly) |
+| "No lobby found" error | All group lobbies are offline and you set `fallback_to_default = false` | Set `fallback_to_default = true` or add a fallback chain |
+| Fallback chain not working | Chain references a group name that does not exist | Verify group names match exactly |
 
 See also: [Configuration Guide](Configuration-Guide) | [Routing Algorithms](Routing-Algorithms) | [Troubleshooting Guide](Troubleshooting-Guide)

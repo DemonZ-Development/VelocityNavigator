@@ -2,11 +2,11 @@
 
 ![Routing algorithm examples](headers/algorithm-visualizations.png)
 
-The examples below show the personality of each routing mode. They are not benchmarks; they are a quick way to see whether an algorithm behaves the way you expect.
+You view the behavior of each routing mode in the examples below. You confirm an algorithm behaves as expected.
 
 ## Legend
 
-Each bar represents the number of players on a server. The goal is to see how evenly (or intentionally unevenly) each algorithm spreads the load.
+You represent the number of players on a server with each bar. You observe how evenly each algorithm spreads load.
 
 ```
 █ = ~5 players
@@ -15,7 +15,7 @@ Each bar represents the number of players on a server. The goal is to see how ev
 
 ---
 
-## Low Load — 5 Players, 3 Servers
+## Low Load: 5 Players, 3 Servers
 
 ### `least_players`
 ```
@@ -44,7 +44,7 @@ lobby-1: ███  (3)
 lobby-2: █    (1)
 lobby-3: █    (1)
 ```
-* Higher variance at low counts — expected behavior.
+You observe higher variance at low counts.
 
 ### `weighted_round_robin` (weights: 3, 2, 1)
 ```
@@ -66,11 +66,11 @@ lobby-1: ██   (2)
 lobby-2: ██   (2)
 lobby-3: █    (1)
 ```
-* Depends on UUID hash; shown here as a typical distribution.
+You generate a typical distribution dependent on UUID hash.
 
 ---
 
-## Medium Load — 30 Players, 5 Servers
+## Medium Load: 30 Players, 5 Servers
 
 ### `least_players`
 ```
@@ -80,7 +80,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-* Near-perfect even distribution.
+You observe near-perfect even distribution.
 
 ### `power_of_two`
 ```
@@ -90,7 +90,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-* Very close to `least_players` — at this scale, practically identical.
+You observe performance close to `least_players` at this scale.
 
 ### `round_robin`
 ```
@@ -100,7 +100,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-* Strictly even by design.
+You observe strictly even distribution.
 
 ### `random`
 ```
@@ -110,7 +110,7 @@ lobby-3: ██████   (6)
 lobby-4: ████▌    (4)
 lobby-5: █████▌   (7)
 ```
-* Some variance — evens out further as the player count grows.
+You observe variance that evens out as player count grows.
 
 ### `weighted_round_robin` (weights: 5, 4, 3, 2, 1)
 ```
@@ -120,7 +120,7 @@ lobby-3: ██████       (6)
 lobby-4: ████         (4)
 lobby-5: ██           (2)
 ```
-* Proportional to weight.
+You observe distribution proportional to weight.
 
 ### `least_connections`
 ```
@@ -130,7 +130,7 @@ lobby-3: ██████   (6)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-* EMA smoothing produces an even distribution under steady load.
+You observe even distribution under steady load with EMA smoothing.
 
 ### `consistent_hash`
 ```
@@ -140,11 +140,11 @@ lobby-3: █████    (5)
 lobby-4: ██████   (6)
 lobby-5: ██████   (6)
 ```
-* Minor variance from hash ring distribution.
+You observe minor variance from hash ring distribution.
 
 ---
 
-## High Load — 100 Players, 10 Servers
+## High Load: 100 Players, 10 Servers
 
 ### `least_players`
 ```
@@ -173,7 +173,7 @@ srv-08: █████████  (9)
 srv-09: ██████████ (10)
 srv-10: ██████████ (10)
 ```
-* ±1 deviation — performs well at scale.
+You observe ±1 deviation at scale.
 
 ### `round_robin`
 ```
@@ -202,7 +202,7 @@ srv-08: ██████████  (10)
 srv-09: ███████████ (11)
 srv-10: ████████▌   (10)
 ```
-* Variance shrinks with scale — law of large numbers.
+You observe variance shrink with scale.
 
 ### `weighted_round_robin` (weights: 5, 5, 3, 3, 3, 2, 2, 2, 1, 1)
 ```
@@ -245,13 +245,13 @@ srv-08: ██████████ (10)
 srv-09: █████████▌ (10)
 srv-10: █████████  (10)
 ```
-* Hash ring produces ±1 deviation across 10 servers.
+You observe ±1 deviation across 10 servers with the hash ring.
 
 ---
 
-## Latency Mode — Proxy-to-Backend Measurement
+## Latency Mode: Proxy-to-Backend Measurement
 
-`latency` does not produce an even distribution chart. It ranks the healthy candidates by the ping measured from the Velocity proxy:
+You observe `latency` rank healthy candidates by ping rather than producing an even distribution chart:
 
 ```
 lobby-east:  25 ms  ← selected
@@ -259,7 +259,7 @@ lobby-west:  70 ms
 lobby-eu:   110 ms
 ```
 
-Every player routed by that proxy sees the same current ranking. This is useful when backend network delay differs, but it is not player-specific geographic routing. If the 25 ms server becomes full, drained, unhealthy, circuit-open, or lifecycle-disallowed, the next eligible candidate can be selected.
+You route players using the same current ranking. You use this when backend network delay differs. You select the next eligible candidate when the 25 ms server becomes full, drained, unhealthy, circuit-open, or lifecycle-disallowed.
 
 ---
 
@@ -273,7 +273,7 @@ Every player routed by that proxy sees the same current ranking. This is useful 
 | Need sticky sessions | `consistent_hash` |
 | Bursty traffic patterns | `least_connections` |
 | Prefer the lowest proxy-to-backend ping | `latency` |
-| Just testing / strict fairness | `round_robin` |
+| Testing or strict fairness | `round_robin` |
 | Very large server pool (50+) | `random` |
 
 See [Routing Algorithms](Routing-Algorithms) for detailed explanations of each mode.

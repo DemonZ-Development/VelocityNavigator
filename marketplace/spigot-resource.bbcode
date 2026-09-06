@@ -1,0 +1,200 @@
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/hero-banner.png[/IMG]
+
+[SIZE=6][B]VelocityNavigator[/B][/SIZE]
+[SIZE=4][B]High-performance lobby routing, native visual selectors, self-healing circuit breakers, zero-dependency NPCs, and practical proxy operations for Velocity.[/B][/SIZE][/CENTER]
+
+VelocityNavigator takes the guesswork out of proxy load balancing. Instead of blindly cycling connections, it continuously evaluates backend health, server capacity, maintenance windows, drain states, lifecycle status, and geographic latency before routing a single player.
+
+Whether running a two-lobby community or a multi-proxy enterprise network with dozens of regional backends, VelocityNavigator delivers resilient, explainable routing that scales effortlessly.
+
+[INDENT][B]Universal Single-JAR Architecture:[/B] Install the exact same JAR on your Velocity proxy and on any Paper, Spigot, or Folia backend where you want NPCs, YAML menus, Java inventory selectors, PlaceholderAPI values, or backend Redis registration. Zero separate bridge plugins required.[/INDENT]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/01-smart-routing.png[/IMG][/CENTER]
+
+[SIZE=5][B]1. Intelligent Lobby Routing & Balancing[/B][/SIZE]
+
+Simple round-robin routing breaks in production networks. Disconnections, player grouping, and varied server hardware create severe load imbalances. VelocityNavigator provides [B]nine specialized routing strategies[/B] designed for real-world proxy architectures:
+
+[LIST]
+[*][B]Power of Two Choices (power_of_two):[/B] The modern industry standard for distributed load balancing. Selects two candidate lobbies at random and routes to the one with lower load. Mathematically eliminates herd behavior and load skew without requiring global locks.
+[*][B]Least Players (least_players):[/B] Routes new connections directly to the lobby with the fewest online players. Ideal for ensuring new players land in active, populated environments.
+[*][B]Weighted Round Robin (weighted_round_robin):[/B] Distributes traffic proportionally across backends according to assigned server weights. Perfect for mixed hardware deployments (e.g. directing 3x more players to a 64GB dedicated node than an 8GB VPS).
+[*][B]Consistent Hashing (consistent_hash):[/B] Uses a Ketama hash ring with virtual nodes to consistently map player UUIDs to specific backends. Provides deterministic routing while smoothly re-distributing only a fraction of keys when servers are added or removed.
+[*][B]Latency-Aware Ping Routing (latency / ping):[/B] Actively evaluates round-trip ping to each backend and assigns incoming players to the lowest-latency responsive node.
+[*][B]Least Connections (least_connections):[/B] Tracks active concurrent connection workflows to prevent saturated servers from receiving connection spikes during peak join rushes.
+[*][B]Geo-Location Routing (geo):[/B] Automatically routes international players to regional backend clusters based on player country and continent codes. Supports MaxMind GeoLite2, IP-API, and native GeoRestrict integration.
+[*][B]Sequential Round Robin (round_robin):[/B] Strict cyclic distribution across all healthy candidate backends.
+[*][B]Uniform Random (random):[/B] Pure random distribution across available healthy lobbies.
+[/LIST]
+
+[B]Sticky Sessions & Player Affinity[/B]
+Returning players hate being thrown into a random lobby every time they switch worlds. VelocityNavigator provides configurable player affinity:
+[LIST]
+[*]Remembers a player's previous lobby within a configurable time window
+[*]Automatically routes players back to their familiar lobby upon reconnecting
+[*]Fully persistent across proxy restarts with atomic on-disk storage
+[*]Instant expiration bypass when the preferred lobby is full, draining, or undergoing maintenance
+[/LIST]
+
+[B]Live Route Explanations[/B]
+Need to diagnose why a player routed to a specific lobby? Run [B]/vn debug player <username>[/B] to view the real-time routing trace: candidate pool discovery, filter rules (health, capacity, drain, maintenance, affinity), scoring calculations, and the selected winner.
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/04-resilient-routing.png[/IMG][/CENTER]
+
+[SIZE=5][B]2. Resilient Self-Healing & Circuit Breakers[/B][/SIZE]
+
+When a backend crashes or suffers severe TPS drops, standard proxies leave players waiting on timeout screens. VelocityNavigator acts as a self-healing traffic manager with enterprise-grade defensive systems:
+
+[LIST]
+[*][B]Three-State Circuit Breaker (CLOSED -> OPEN -> HALF-OPEN):[/B] Each registered backend maintains an independent circuit breaker. When connection failures exceed your threshold, the circuit trips OPEN, instantly cutting off player routing to that server before players experience freezes. After a cool-down window, it enters HALF-OPEN to test server health with canary connections before resuming full traffic.
+[*][B]Exponential Backoff with Jitter:[/B] Reconnect attempts back off progressively with pseudo-random jitter, preventing the thundering herd effect where hundreds of players flood a recovering server simultaneously.
+[*][B]Continuous Multi-Vector Health Checks:[/B] Active ping checks, TCP socket verification, MOTD query checks, and backend bridge heartbeats keep proxy state continuously synchronized.
+[*][B]Zero-Downtime Drain System (/vn drain <server>):[/B] Safely take lobbies offline without kicking active players. Draining servers immediately stop receiving new joins while existing players finish their games.
+[*][B]Empty Lobby Fallbacks:[/B] If all lobbies become unreachable, gracefully directs players to a fallback server or provides a friendly disconnect notice.
+[/LIST]
+
+[SIZE=5][B]3. Unified Visual Selectors[/B][/SIZE]
+
+Deliver a consistent navigation experience across every Minecraft client platform:
+
+[CENTER][B]Java Chest Inventory GUI[/B]
+[IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png[/IMG]
+
+[B]Native Bedrock / Geyser Form[/B]
+[IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png[/IMG][/CENTER]
+
+[LIST]
+[*][B]Java Chest GUI:[/B] 1-6 rows pagination, state-aware item presentation (Open, Full, Draining, Maintenance, Offline), dynamic lore placeholders, auto-refresh intervals, and cryptographic token validation to prevent click spoofing.
+[*][B]Native Bedrock Form:[/B] Clean Floodgate/Geyser dialog forms designed specifically for touch and controller navigation, with live player counts and icon images.
+[*][B]Interactive Chat Selector:[/B] Lightweight MiniMessage text selector with hover tooltips and click-to-connect events.
+[*][B]Unified Configuration:[/B] Define display_name, description, menu_order, and show_in_menu once for all three selectors.
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/02-universal-jar.png[/IMG]
+[IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/npc.png[/IMG][/CENTER]
+
+[SIZE=5][B]4. Zero-Dependency Backend Bridge & NPCs[/B][/SIZE]
+
+Unlike other navigators requiring separate plugins or Citizens, VelocityNavigator is completely self-contained:
+
+[LIST]
+[*][B]Single Universal JAR:[/B] The exact same JAR file placed on Velocity runs on Paper, Spigot, and Folia backends.
+[*][B]Zero-NMS Packet NPCs:[/B] Spawn lightweight NPCs without version-locked NMS code. Compatible across Paper 1.16.5-1.21.x and Folia out of the box. Fetch player skins, configure click actions (server connect, open menu, dispatch commands), and manage in-game via /vn npc.
+[*][B]Backend YAML Menus (plugins/VelocityNavigator/menus/*.yml):[/B] Build custom inventory menus on backends without third-party GUI plugins. Supports custom model data, skull owners, sounds, and multi-actions.
+[*][B]PlaceholderAPI Bridge:[/B] Access proxy values (%velocitynavigator_lobby%, %velocitynavigator_party_leader%, %velocitynavigator_server_status_<server>%) on backends.
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/05-optional-systems.png[/IMG][/CENTER]
+
+[SIZE=5][B]5. Built-in Proxy Systems & Social Features[/B][/SIZE]
+
+[LIST]
+[*][B]Capacity Queue System:[/B] Never turn players away during surges. Hold incoming players in a holding server with actionbar and title countdowns. Priority bypass permissions for VIPs.
+[*][B]Cross-Server Party System:[/B] Full party management (/party create, invite, join, leave, kick, disband). Leader Follow transfers all party members automatically when the leader switches servers.
+[*][B]Network & Per-Server Maintenance:[/B] Lock individual servers or the entire network with custom kick reasons and dynamic MOTD badges.
+[/LIST]
+
+[SIZE=5][B]6. Multi-Proxy Clustering & Redis Sync[/B][/SIZE]
+
+Running multiple Velocity proxies behind BGP Anycast or DNS round-robin?
+[LIST]
+[*]Cross-proxy health and circuit state synchronization in milliseconds
+[*]Cluster-wide sticky sessions and player affinity across all proxies
+[*]Dynamic server auto-registration over Redis Pub/Sub
+[*]Authenticated, channel-isolated communication
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/08-defensive-design.png[/IMG][/CENTER]
+
+[SIZE=5][B]7. Enterprise Security & Authentication Engine[/B][/SIZE]
+
+[LIST]
+[*][B]Argon2id Password Hashing:[/B] State-of-the-art password security with configurable memory cost and backward-compatible SHA-256 verification.
+[*][B]Brute-Force Rate Limiting:[/B] Login attempt tracking and temporary IP lockouts stop password guessing attacks.
+[*][B]Holding Lobby Quarantine:[/B] Unauthenticated players are isolated in a holding lobby with movement, interaction, and chat restricted until login.
+[*][B]Native Bedrock Auth Forms:[/B] Bedrock players receive native modal dialogs instead of typing passwords in open chat.
+[*][B]Expiring Session Tokens:[/B] Secure session persistence remembers players across quick reconnects.
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/06-operations.png[/IMG]
+[IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/dashboard-preview.png[/IMG][/CENTER]
+
+[SIZE=5][B]8. Real-Time Operations & Observability[/B][/SIZE]
+
+[LIST]
+[*][B]HTML Operations Dashboard:[/B] Built-in web dashboard on a dedicated port with live lobby tables, latency charts, and bearer token authentication.
+[*][B]Prometheus & Grafana Metrics:[/B] Native /metrics endpoint exporting routing counts, circuit trips, health latency, and queue depths.
+[*][B]Dynamic MOTD Rotation:[/B] MiniMessage MOTD rotation (random, sequential, scheduled) with live player counts and maintenance indicators.
+[*][B]Configuration Validation:[/B] /vn config validate and /vn menu validate with Levenshtein typo suggestions.
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/07-localization.png[/IMG][/CENTER]
+
+[SIZE=5][B]9. Global Localization (15 Languages)[/B][/SIZE]
+
+Bundled translations for English, Spanish, German, French, Russian, Portuguese (Brazil), Chinese (Simplified), Japanese, Korean, Italian, Dutch, Polish, Turkish, Arabic, and Hindi. Reloadable custom .properties files supported.
+
+[SIZE=5][B]10. Multi-Engine Storage[/B][/SIZE]
+
+Supports JSON files, SQLite, MySQL, MariaDB, and PostgreSQL with HikariCP connection pooling and automatic schema migrations.
+
+[SIZE=5][B]11. Five-Minute Quick Start[/B][/SIZE]
+
+[LIST=1]
+[*]Put VelocityNavigator-4.5.0.jar in Velocity's plugins/ directory.
+[*]Start the proxy once to generate default configuration, then open plugins/velocitynavigator/navigator.toml.
+[*]Configure your lobby pool:
+[/LIST]
+
+[CODE=toml]
+[routing]
+selection_mode = "power_of_two"
+balance_initial_join = true
+default_lobbies = ["lobby-1", "lobby-2", "lobby-3"]
+[/CODE]
+
+[LIST=4]
+[*]Run /vn config validate, then start the proxy.
+[*]Join and test with /lobby!
+[/LIST]
+
+[SIZE=5][B]12. Command Reference[/B][/SIZE]
+
+[B]Admin Commands (permission: velocitynavigator.admin):[/B]
+[LIST]
+[*][B]/vn health[/B] - Consolidated proxy diagnostics and circuit health
+[*][B]/vn servers[/B] - Paginated table of server health, capacity, drain, circuits
+[*][B]/vn debug player <player>[/B] - Live trace explaining routing decision
+[*][B]/vn drain <server>[/B] - Toggle drain mode for zero-downtime maintenance
+[*][B]/vn maintenance [server] [on/off][/B] - Toggle network or per-server maintenance
+[*][B]/vn affinity clean[/B] - Purge expired player affinity sessions
+[*][B]/vn bridge status[/B] - Show detected backend bridge connections
+[*][B]/vn config validate[/B] - Audit configuration for errors or typos
+[*][B]/vn menu validate[/B] - Validate menu items, slots, and materials
+[*][B]/vn reload[/B] - Hot-reload all configs and language packs
+[/LIST]
+
+[CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/09-compatibility.png[/IMG][/CENTER]
+
+[SIZE=5][B]13. Compatibility[/B][/SIZE]
+[LIST]
+[*]Velocity 3.4.x (Java 17+), 3.5.x (Java 21+), 4.0.0 (Java 25)
+[*]Paper, Spigot, Folia 1.16.5-1.21.x+ (Optional Backend Bridge)
+[*]GeyserMC & Floodgate (Native Bedrock forms)
+[*]PlaceholderAPI, Prometheus & Grafana, MaxMind & GeoRestrict
+[/LIST]
+
+[SIZE=5][B]14. Links & Support[/B][/SIZE]
+[LIST]
+[*][B]Website:[/B] [URL=https://demonz.org]demonz.org[/URL]
+[*][B]Wiki & Guides:[/B] [URL=https://github.com/DemonZ-Development/VelocityNavigator/wiki]GitHub Wiki[/URL]
+[*][B]Discord Community:[/B] [URL=https://discord.com/invite/GYsTt96ypf]DemonZ Discord[/URL]
+[/LIST]
+
+[CENTER][URL=https://bstats.org/plugin/velocity/Velocity%20Navigator/28341][IMG]https://bstats.org/signatures/velocity/Velocity%20Navigator.svg[/IMG][/URL]
+
+[IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/marketplace-footer.png[/IMG][/CENTER]
+
+[CENTER][SIZE=4][B]Sponsored by Nexeu Hosting[/B][/SIZE]
+[URL=https://nexeu.zip/][IMG]https://whodoesntloveavatars.s3.fra.databucket.eu/assets/promo.png[/IMG][/URL]
+High-performance, affordable Minecraft hosting with premium NVMe hardware, DDoS protection, and 24/7 technical support.[/CENTER]

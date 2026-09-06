@@ -2,35 +2,51 @@
 
 ![VelocityNavigator quick start](headers/quick-start-guide.png)
 
-This setup uses two lobbies and `power_of_two`, a good default for most networks. Once it works, you can add menus, contextual groups, parties, queues, or Redis at your own pace.
+This guide gets two lobbies working first. Leave menus, authentication, Redis, and geo routing disabled until this basic route works.
+
+Before you start, have these ready:
+
+- one Velocity proxy;
+- two backend servers already added to Velocity's `velocity.toml`;
+- the exact Velocity server names for those backends;
+- console access, because `/vn` is an administrator command.
+
+This guide uses `lobby-1` and `lobby-2`. Replace those names everywhere if your servers are called something else.
 
 ## Step 1: Download and Install
 
-1. Download `VelocityNavigator-4.4.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
+1. Download `VelocityNavigator-4.5.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
 2. Place the JAR in your Velocity proxy's `plugins/` folder.
-3. Restart the proxy (or run `/vn reload` if you are already running an older version).
-4. Optional: place the same JAR in each backend Paper/Spigot 1.16.5+ `plugins/` folder for the Java inventory selector. Backends require Java 17+; use Java 17 for a Velocity 3.4.x proxy, Java 21 for Velocity 3.5.x, and Java 25 for Velocity 4.0.0.
+3. Start or restart the proxy. `/vn reload` reloads configuration; it cannot replace a running JAR.
+4. For now, install the JAR only on Velocity. Add it to Paper/Spigot/Folia later if you want inventory menus or NPCs.
 
 ```
 plugins/
-├── VelocityNavigator-4.4.0.jar
+├── VelocityNavigator-4.5.0.jar
 └── ...
 ```
 
-On first start, VelocityNavigator generates `navigator.toml` for systems, `messages.toml` for language, `gui.toml` for Java/Bedrock menus, and `servers.toml` for command-managed lobbies. The universal JAR logs whether it started in proxy or backend bridge mode.
+On first start, look for:
+
+```text
+VelocityNavigator universal JAR is running in VELOCITY PROXY mode.
+```
+
+The proxy creates `plugins/velocitynavigator/` with `navigator.toml`, `messages.toml`, `gui.toml`, and the optional feature files.
 
 ---
 
-## Step 2: Watch It Work with Defaults
+## Step 2: Match Your Velocity Server Names
 
-Out of the box, VelocityNavigator uses:
+Open Velocity's `velocity.toml` and find the `[servers]` table:
 
-- **Selection mode**: `least_players` (picks the server with the fewest players)
-- **Lobbies**: placeholder entries named `lobby-1` and `lobby-2`; edit `navigator.toml` to match registered Velocity servers
-- **Circuit breaker**: enabled (automatically skips unhealthy servers)
-- **Health checks**: enabled with a 60-second cache
+```toml
+[servers]
+lobby-1 = "127.0.0.1:25566"
+lobby-2 = "127.0.0.1:25567"
+```
 
-If `lobby-1` and `lobby-2` are registered in `velocity.toml`, players typing `/lobby` are routed to the emptier one. Otherwise replace the placeholder names before relying on routing.
+The names on the left—`lobby-1` and `lobby-2`—are the names VelocityNavigator needs. Do not put IP addresses in `default_lobbies`.
 
 ---
 
@@ -48,15 +64,24 @@ default_lobbies = ["lobby-1", "lobby-2", "lobby-3"]
 
 Save the file, then run `/vn reload` in the proxy console.
 
+Now run:
+
+```text
+/vn config validate
+/vn health
+```
+
+Fix validation errors before testing with players. Both lobby names should appear in the health output.
+
 To change the server-wide language, edit only the `language` line at the top of `messages.toml`:
 
 ```toml
 language = "ru"
 ```
 
-Built-ins: `en`, `ru`, `es`, `fr`, `de`, `pt_br`, `zh_cn`. Any other value creates a custom-language workflow and preserves text for manual editing. Locale detection is intentionally disabled.
+Built-ins: `en`, `ru`, `es`, `fr`, `de`, `pt_br`, `zh_cn`, `ja`, `it`, `ko`, `nl`, `pl`, `tr`, `ar`, `hi`. Any other value creates a custom-language workflow and preserves text for manual editing. Locale detection is disabled.
 
-To enable the inventory selector:
+Do not enable the inventory selector until normal `/lobby` routing works. When you are ready:
 
 ```toml
 [routing]
@@ -67,7 +92,7 @@ type = "inventory"
 fallback_to_chat = true
 ```
 
-Install the same universal JAR on each backend, restart it, let a player join, and verify with `/vn bridge status`. Customize rows, materials, fixed slots, pagination controls, and refresh timing in `gui.toml`.
+Install the same universal JAR on each lobby backend that should provide Java inventory, NPCs, YAML menus, or backend placeholders. Restart those backends, let a player visit each one, and check `/vn bridge status`. If a bridge is missing, the Java selector falls back to chat when `fallback_to_chat = true`; backend NPCs and YAML menus simply cannot run there.
 
 Before enabling advanced systems, run `/vn config validate`. For managed servers, use `/vn server dry-run game ...` or `/vn server dry-run lobby ...` before the real add command.
 
@@ -75,7 +100,7 @@ Before enabling advanced systems, run `/vn config validate`. For managed servers
 
 ## Step 4: Choose a Selection Mode
 
-Not sure which algorithm to use? Follow this decision tree:
+Follow this decision tree to choose an algorithm:
 
 ```
 How many lobby servers do you have?
@@ -110,11 +135,12 @@ See [Routing Algorithms](Routing-Algorithms) for the full reference.
 
 ---
 
-## Step 5: Confirm the setup
+## Step 5: Confirm the Setup
 
-1. Join your network.
+1. Join through Velocity, not directly through a backend port.
 2. Type `/lobby`.
-3. You should be connected to one of your lobby servers.
+3. Confirm that you reach one of the configured lobbies.
+4. Join with a second test player or switch loads, then run `/lobby` again.
 
 Check the routing decision:
 
@@ -128,18 +154,22 @@ Verify distribution across your servers:
 /vn status
 ```
 
+If it does not work, run `/vn config validate`, `/vn health`, and `/vn servers` in that order. The [Troubleshooting Guide](Troubleshooting-Guide) explains each failure state.
+
 ---
 
 ## Next Steps
 
-- [Configuration Guide](Configuration-Guide) — customize every setting
-- [Routing Algorithms](Routing-Algorithms) — how each algorithm works
-- [Operations Runbook](Operations-Runbook) — drain servers, check health, troubleshoot
+- [Configuration Guide](Configuration-Guide): customize every setting
+- [Routing Algorithms](Routing-Algorithms): how each algorithm works
+- [Operations Runbook](Operations-Runbook): drain servers, check health, troubleshoot
 
 ---
 
-Total time: about 5 minutes. You are now running VelocityNavigator v4.4.0.
+At this point the basic router is ready. Add one optional system at a time and validate after each change.
+
+> **v4.5 adds**: database storage backends, GeoIP-based routing, maintenance mode, and authentication integration.
 
 # Optional advanced systems
 
-VelocityNavigator 4.4.0 can also provide native parties, full-pool queues, Redis multi-proxy synchronization, dynamic backend registration, and MOTD lifecycle-state routing. Configure them in `navigator.toml` using the [Advanced Proxy Systems guide](Advanced-Proxy-Systems).
+VelocityNavigator 4.5.0 provides native parties, full-pool queues, Redis multi-proxy synchronization, dynamic backend registration, MOTD lifecycle-state routing, database storage backends, GeoIP-based routing, maintenance mode, and authentication integration. Configure them using the [Advanced Proxy Systems guide](Advanced-Proxy-Systems).

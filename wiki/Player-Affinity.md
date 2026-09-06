@@ -2,7 +2,7 @@
 
 ![Player affinity](headers/player-affinity.png)
 
-Player affinity makes lobby changes feel less random by preferring the healthy lobby a player used recently. It is useful when short-lived lobby state, friends, or cached data make returning to the same server desirable.
+You configure player affinity to prefer the healthy lobby a player used recently. You use it when returning to the same backend is desirable.
 
 ## Configuration
 
@@ -12,24 +12,28 @@ enabled = true
 stickiness = 0.7
 ```
 
-`stickiness` is a value from `0.0` to `1.0`:
+`stickiness` ranges from `0.0` to `1.0`:
 
 | Value | Behaviour |
 |---:|---|
-| `0.0` | Always use normal routing |
-| `0.7` | Prefer the recent lobby about 70% of the time |
-| `1.0` | Always return when that lobby is still eligible |
+| `0.0` | You always use normal routing |
+| `0.7` | You prefer the recent lobby 70% of the time |
+| `1.0` | You always return when the lobby remains eligible |
 
-The remembered lobby must still be registered, healthy, below capacity, and allowed by the current routing context. If it is unavailable, VelocityNavigator simply chooses another candidate.
+You require the remembered lobby to be registered, healthy, below capacity, allowed by routing context, and out of [maintenance mode](Maintenance-Mode) or drain. You choose another candidate and update the affinity record when any filter rejects the lobby.
 
 ## How long it lasts
 
-Affinity records expire after ten minutes. Unexpired records are saved in `plugins/velocitynavigator/affinity-store.json`, so a normal proxy restart does not immediately forget everyone.
+You expire affinity records after ten minutes. The configured [storage backend](Storage-and-Databases) persists unexpired records; file storage uses `player_affinity.json`.
 
-With Redis enabled, affinity updates are shared between Velocity proxies. See [Redis and Multi-Proxy](Redis-and-Multi-Proxy) for the network setup.
+You share affinity updates between Velocity proxies when you enable Redis. You review [Redis and Multi-Proxy](Redis-and-Multi-Proxy) for setup.
 
 ## Consistent hashing
 
-The `consistent_hash` routing mode already maps a player's UUID to a stable server, so the separate affinity preference is skipped in that mode.
+You map a player UUID to a stable backend with `consistent_hash`, skipping the affinity preference. You pair `consistent_hash` with `stickiness = 1.0` to use affinity as a backup when the hashed backend goes offline.
 
-For most networks, `power_of_two` with `stickiness = 0.7` is a good balance between familiar routing and even load.
+You balance familiar routing and load using `power_of_two` with `stickiness = 0.7`.
+
+## Privacy and storage
+
+You store only `UUID` and `lobbyId` in affinity records. You do not store IP addresses, session tokens, or chat history. You keep affinity in the `affinity` SQL table for other plugins to read.

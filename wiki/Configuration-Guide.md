@@ -6,34 +6,37 @@ VelocityNavigator splits its settings into a few focused files, so changing menu
 
 ## Overview
 
-VelocityNavigator generates four proxy-side configuration files when server management is enabled:
+VelocityNavigator generates multiple proxy-side configuration files when server management is enabled:
 
-- `navigator.toml` — routing, health, commands, integrations, and operational settings.
-- `messages.toml` — server-wide language, player messages, routing reasons, and Java/Bedrock menu text.
-- `gui.toml` — Java inventory layout, materials, refresh, controls, and per-server overrides.
-- `servers.toml` — lobby entries created by `/vn server add lobby`; game servers are intentionally absent.
+- `navigator.toml`: routing, health, commands, integrations, and operational settings.
+- `messages.toml`: server-wide language, player messages, routing reasons, and Java/Bedrock menu text.
+- `gui.toml`: Java inventory layout, materials, refresh, controls, and per-server overrides.
+- `servers.toml`: lobby entries created by `/vn server add lobby`; game servers are absent.
+- `storage.toml`: storage provider selection and database connection settings.
+- `auth.toml`: password authentication, holding-server routing, and session management. TOTP fields are reserved and must remain disabled in 4.5.0.
+- `geo.toml`: GeoIP routing provider and database configuration.
 
-All four files are reloaded by `/vn reload`. Legacy text and Java-menu layout settings are migrated with `navigator.toml.pre-messages.bak` and `navigator.toml.pre-gui.bak` backups.
+All files are reloaded by `/vn reload`. Legacy text and Java-menu layout settings migrate to `navigator.toml.pre-messages.bak` and `navigator.toml.pre-gui.bak` backups.
 
 When the universal JAR is installed on a Paper/Spigot backend, it creates a separate backend `config.yml`. See [Backend Bridge Configuration](Backend-Bridge-Configuration) for that file; it is not reloaded by `/vn reload` on the proxy.
 
 The operational file `navigator.toml` is organized into these sections:
 
-1. `[commands]` — Player commands, aliases, permissions, cooldown
-2. `[routing]` — Selection algorithm, lobby pool, and core routing behavior
-3. `[circuit_breaker]` — Automatic failure detection
-4. `[degradation]` — Fallback behavior when all health checks fail
-5. `[routing.affinity]` — Player Affinity (Sticky Sessions) configuration
-6. `[geo_routing]` — Deferred compatibility keys (no routing effect in 4.4.0)
-7. `[routing.contextual]` — Context-aware routing groups
-8. `[health_checks]` — Server monitoring configuration
-9. `[update_checker]` — Update check settings
-10. `[startup]` — First-run welcome and upgrades digest
-11. `[bedrock]` — Bedrock/Geyser player support
-12. `[lobby]` — Empty lobby fallback strategy
-13. `[metrics]` — bStats integration
-14. `[dashboard]` — Optional HTML operations dashboard
-15. `[debug]` — Verbose logging
+1. `[commands]`: Player commands, aliases, permissions, cooldown
+2. `[routing]`: Selection algorithm, lobby pool, and core routing behavior
+3. `[circuit_breaker]`: Automatic failure detection
+4. `[degradation]`: Fallback behavior when all health checks fail
+5. `[routing.affinity]`: Player Affinity (Sticky Sessions) configuration
+6. `[geo_routing]`: GeoIP routing with MaxMind GeoLite2 and IP-API fallback (new in v4.5.0)
+7. `[routing.contextual]`: Context-aware routing groups
+8. `[health_checks]`: Server monitoring configuration
+9. `[update_checker]`: Update check settings
+10. `[startup]`: First-run welcome and upgrades digest
+11. `[bedrock]`: Bedrock/Geyser player support
+12. `[lobby]`: Empty lobby fallback strategy
+13. `[metrics]`: bStats integration
+14. `[dashboard]`: Optional HTML operations dashboard
+15. `[debug]`: Verbose logging
 
 Top-level: `notify_on_startup`, `notify_admins_on_join`
 
@@ -47,7 +50,7 @@ Controls what players type and what permissions are required.
 [commands]
 primary = "lobby"
 aliases = ["hub", "spawn"]
-permission = "velocitynavigator.use"
+permission = "none"
 admin_aliases = ["velocitynavigator", "vn"]
 cooldown_seconds = 3
 reconnect_if_same_server = false
@@ -78,7 +81,7 @@ already_connected = "<yellow>You are already connected to <server>.</yellow>"
 no_lobby_found = "<red>No available lobby could be found. (<reason>)</red>"
 player_only = "<gray>This command can only be used by a player.</gray>"
 cooldown = "<yellow>Please wait <time> more second(s).</yellow>"
-reload_success = "<green>VelocityNavigator, messages.toml, and gui.toml reloaded.</green>"
+reload_success = "<green>VelocityNavigator, messages.toml, gui.toml, and servers.toml reloaded.</green>"
 reload_failed = "<red>Reload failed. Check console for details.</red>"
 retrying = "<yellow>Retrying connection... (<attempt>/<max>)</yellow>"
 formatting = "auto"
@@ -88,7 +91,9 @@ dashboard_open = "<red>"
 dashboard_offline = "<gray>"
 ```
 
-Built-in values are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, and `zh_cn`. Change only `language`; when it differs from `active_language`, the selected built-in replaces the complete file on restart or `/vn reload`. Any unsupported code is treated as custom, preserves current values, and updates `active_language` so administrators can translate in place. No player-locale detection is performed.
+Built-in values are `en`, `ru`, `es`, `fr`, `de`, `pt_br`, `zh_cn`, `ja`, `it`, `ko`, `nl`, `pl`, `tr`, `ar`, and `hi`. Change only `language`; when it differs from `active_language`, the selected built-in replaces the complete file on restart or `/vn reload`.
+
+For a maintainable custom translation, create `plugins/velocitynavigator/languages/<code>.properties`, set `language = "<code>"`, and run `/vn reload`. External values override recognized keys and missing keys fall back to English. See [Language Packs](Language-Packs) for a copy-paste example and numbered menu-lore keys. No player-locale detection is performed.
 
 MiniMessage, classic `&` and `§` colors, `&#RRGGBB`, and Bungee-style `&x&R&R&G&G&B&B`/`§x` hex forms are accepted wherever configurable text is rendered.
 
@@ -99,17 +104,17 @@ MiniMessage, classic `&` and `§` colors, `&#RRGGBB`, and Bungee-style `&x&R&R&G
 | `already_connected` | string | `"<yellow>You are already connected to <server>.</yellow>"` | `<server>`, `<player>` | Shown when the player is already on the selected lobby. |
 | `connecting` | string | `"<aqua>Sending you to <server>...</aqua>"` | `<player>`, `<server>` | Shown while connecting. |
 | `retrying` | string | `"<yellow>Retrying connection... (<attempt>/<max>)</yellow>"` | `<attempt>`, `<max>`, `<player>`, `<server>` | Shown on each retry attempt. **New in v4.** |
-| `formatting` | string | `"auto"` | — | Color format mode: `"auto"` (detect + one-time warning), `"minimessage"` (passthrough), `"legacy"` (always convert). **New in v4.1.** |
-| `dashboard_healthy` | string | `"<green>"` | — | MiniMessage tag for HEALTHY status in `/vn servers`. Supports hex/RGB. **New in v4.1.** |
-| `dashboard_draining` | string | `"<yellow>"` | — | MiniMessage tag for DRAINED status in `/vn servers`. **New in v4.1.** |
-| `dashboard_open` | string | `"<red>"` | — | MiniMessage tag for CB_OPEN status in `/vn servers`. **New in v4.1.** |
-| `dashboard_offline` | string | `"<gray>"` | — | MiniMessage tag for OFFLINE status in `/vn servers`. **New in v4.1.** |
+| `formatting` | string | `"auto"` | - | Color format mode: `"auto"` (detect + one-time warning), `"minimessage"` (passthrough), `"legacy"` (always convert). **New in v4.1.** |
+| `dashboard_healthy` | string | `"<green>"` | - | MiniMessage tag for HEALTHY status in `/vn servers`. Supports hex/RGB. **New in v4.1.** |
+| `dashboard_draining` | string | `"<yellow>"` | - | MiniMessage tag for DRAINED status in `/vn servers`. **New in v4.1.** |
+| `dashboard_open` | string | `"<red>"` | - | MiniMessage tag for CB_OPEN status in `/vn servers`. **New in v4.1.** |
+| `dashboard_offline` | string | `"<gray>"` | - | MiniMessage tag for OFFLINE status in `/vn servers`. **New in v4.1.** |
 
 Available placeholders include `<server>`, `<time>`, `<reason>`, `<mode>`, `<player>`, `<attempt>`, `<max>`, `<max_players>`, `<status>`, `<status_color>`, `<ping>`, `<command>`, `<attempts>`, `<page>`, and `<pages>`.
 
 ---
 
-## `[routing]` — Core
+## `[routing]`: Core
 
 Controls the selection algorithm and lobby pool.
 
@@ -124,31 +129,32 @@ max_retries = 2
 
 | Setting | Type | Default | Accepted Values | Description |
 |---------|------|---------|----------------|-------------|
-| `selection_mode` | string | `"least_players"` | `least_players`, `round_robin`, `random`, `power_of_two`, `weighted_round_robin`, `least_connections`, `consistent_hash`, `latency` | The algorithm used to select a lobby. See [Routing Algorithms](Routing-Algorithms). |
-| `cycle_when_possible` | boolean | `true` | — | Prevents routing a player to the same server they are already on. |
-| `balance_initial_join` | boolean | `true` | — | Applies routing when players first connect to the proxy. |
+| `selection_mode` | string | `"least_players"` | `least_players`, `round_robin`, `random`, `power_of_two`, `weighted_round_robin`, `least_connections`, `consistent_hash`, `latency`, `geo_distance` | The algorithm used to select a lobby. See [Routing Algorithms](Routing-Algorithms). |
+| `cycle_when_possible` | boolean | `true` | - | Prevents routing a player to the same server they are already on. |
+| `balance_initial_join` | boolean | `true` | - | Applies routing when players first connect to the proxy. |
 | `default_lobbies` | LobbyEntry[] | `["lobby-1", "lobby-2"]` | See below | The pool of lobby servers. |
 | `max_retries` | int | `2` | `0`–`10` | Number of retry attempts on connection failure. **New in v4.** |
-| `use_menu_for_lobby` | boolean | `false` | — | Show the configured Java selector instead of immediately routing. Legacy `use_chat_menu_for_lobby` remains accepted. |
+| `use_menu_for_lobby` | boolean | `false` | - | Show the configured Java selector instead of immediately routing. Legacy `use_chat_menu_for_lobby` remains accepted. |
 | `routing.java_menu.type` | string | `"inventory"` | `inventory`, `chat` | Java selector presentation. Inventory mode requires the backend bridge. |
-| `routing.java_menu.fallback_to_chat` | boolean | `true` | — | Show the clickable chat selector if the current backend does not have the bridge installed. |
+| `routing.java_menu.fallback_to_chat` | boolean | `true` | - | Show the clickable chat selector if the current backend does not have the bridge installed. |
+| Menu selection token lifetime | int | `60` seconds | Internal safety limit for one-time inventory selections; it is not currently a user-configurable TOML setting. |
 
 Chat selector header, entry, and tooltip text now live under `[menus.chat]` in `messages.toml`. Inventory title, item name, and lore live under `[menus.inventory]`; Bedrock form text lives under `[menus.bedrock]`.
 
 ### Java inventory selector setup
 
-1. Put `VelocityNavigator-4.4.0.jar` in the Velocity proxy's `plugins/` directory.
+1. Put `VelocityNavigator-4.5.0.jar` in the Velocity proxy's `plugins/` directory.
 2. Put the same JAR in every backend Paper/Spigot server's `plugins/` directory.
 3. Set `routing.use_menu_for_lobby = true`.
 4. Set `routing.java_menu.type = "inventory"` and run `/vn reload`.
 
-Velocity remains responsible for routing validation. The backend bridge only renders the inventory; every click carries a one-time token that expires after 60 seconds.
+Velocity remains responsible for routing validation. The backend bridge only renders the inventory; every click carries a one-time token that expires after 60 seconds (hardcoded, clamped to 5–3600).
 
 Use `/vn bridge status` after a player has joined each backend to confirm its bridge version and last-seen time. The universal JAR identifies itself as `VELOCITY PROXY mode` or `BACKEND GUI BRIDGE mode` in startup logs.
 
 ## `gui.toml`
 
-VelocityNavigator 4.4.0 uses `config_version = 2` for this menu-only file. The main `navigator.toml` schema remains version 8.
+VelocityNavigator 4.5.0 uses `config_version = 2` for this menu-only file. The main `navigator.toml` schema is version 9.
 
 ```toml
 config_version = 2
@@ -192,6 +198,15 @@ lore = ["<gray>{description}</gray>", "<red>This lobby is offline.</red>"]
 material = "CLOCK"
 name = "<gold><bold>{server}</bold></gold>"
 lore = ["<gray>{description}</gray>", "<gold>A game is in progress.</gold>"]
+
+[bedrock]
+show_players = true
+show_max_players = true
+show_ping = false
+show_status = true
+title = "Server Selector"
+content = "Select a destination server to connect:"
+button_format = "{display_name}\n§7{players}/{max_players}"
 ```
 
 `layout.rows` is customizable from `2` to `6`. Java chest menus always use nine columns, so this produces 18–54 total slots. The bottom row is reserved for controls by default, leaving `(rows - 1) × 9` automatic server slots per page; a six-row menu therefore displays 45 servers before adding another page. `refresh_seconds = 0` disables automatic refresh; otherwise the proxy re-evaluates availability while the GUI remains open. Offline configured candidates use `unavailable_material`, localized unavailable lore, and cannot be clicked.
@@ -233,18 +248,18 @@ Each lobby entry can be a **plain string** or an **inline table**:
 default_lobbies = ["lobby-1", "lobby-2"]
 ```
 
-**Inline table** (v4 — adds max_players and weight):
+**Inline table** (v4, adds max_players and weight):
 ```toml
 default_lobbies = [
   { server = "lobby-1", max_players = 100, weight = 3 },
   { server = "lobby-2", max_players = 50, weight = 1 },
-  "lobby-3",  # mixing is fine — this uses defaults
+  "lobby-3",  # mixing is fine; this uses defaults
 ]
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `server` | string | (required) | Server name — must match `velocity.toml`. |
+| `server` | string | (required) | Server name: must match `velocity.toml`. |
 | `max_players` | int | `-1` (uncapped) | Maximum players before the server is considered "full" and skipped. `-1` = no limit. |
 | `weight` | int | `1` | Relative weight for `weighted_round_robin`. Higher means more traffic. Only used by WRR. |
 
@@ -304,7 +319,7 @@ mode = "random"
 
 | Setting | Type | Default | Accepted Values | Description |
 |---------|------|---------|----------------|-------------|
-| `enabled` | boolean | `true` | — | Whether degradation mode is active. |
+| `enabled` | boolean | `true` | - | Whether degradation mode is active. |
 | `mode` | string | `"random"` | `random`, `round_robin`, `least_players` | Algorithm used when degrading. `random` is a simple default. |
 
 > **When this triggers**: only when all candidate servers fail health checks. If even one server is healthy, normal routing continues.
@@ -315,7 +330,7 @@ See [Retries and Fallbacks](Retries-and-Fallbacks) for how degradation differs f
 
 ## `[routing.affinity]`
 
-Player affinity (sticky sessions) makes players preferentially return to the lobby they were last connected to during their proxy session. In v4.1.0, this is fully configurable under the `[routing.affinity]` TOML section.
+Player affinity (sticky sessions) makes players preferentially return to the lobby they were last connected to during their proxy session. In v4.1.0, this is configurable under the `[routing.affinity]` TOML section.
 
 ```toml
 [routing.affinity]
@@ -325,7 +340,7 @@ stickiness = 0.7
 
 | Setting | Type | Default | Accepted Values | Description |
 |---------|------|---------|----------------|-------------|
-| `enabled` | boolean | `true` | — | Whether player affinity is active. |
+| `enabled` | boolean | `true` | - | Whether player affinity is active. |
 | `stickiness` | double | `0.7` | `0.0`–`1.0` | Probability factor for session stickiness. `0.7` means a 70% chance of returning to the previous lobby and a 30% chance of running normal routing. |
 
 > **How it works**: when a player runs the lobby command, VelocityNavigator checks whether they have a saved session affinity record. With `stickiness = 0.7`, there is a 70% chance they are immediately routed to their previous lobby (provided it is online and healthy), and a 30% chance the global selection algorithm is run.
@@ -339,20 +354,31 @@ stickiness = 0.7
 
 ## `[geo_routing]`
 
-These old compatibility keys are still accepted so an existing config can load, but GeoIP routing is not available in 4.4.0. Leave the section disabled; no GeoLite2 database is needed.
+Country-affinity routing using GeoRestrict when installed, then MaxMind GeoLite2 and IP-API fallbacks. New in v4.5.0.
 
 ```toml
 [geo_routing]
 enabled = false
-database_path = ""
+provider = "maxmind"
+database_path = "GeoLite2-City.mmdb"
+fallback_enabled = true
+fallback_mode = "ip_api"
+
+[geo_routing.affinity_countries]
+"lobby-eu" = ["DE", "FR", "NL"]
+"lobby-us" = ["US", "CA", "MX"]
 ```
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `enabled` | boolean | `false` | Compatibility switch only. Enabling it logs a warning and does not change routing in 4.4.0. |
-| `database_path` | string | `""` | Compatibility value only. No GeoLite2 database is loaded in 4.4.0. |
+| `enabled` | boolean | `false` | Enable GeoIP-based routing. |
+| `provider` | string | `"maxmind"` | Primary lookup: `maxmind`, `georestrict`, `ip_api`, or `auto`. `auto` tries GeoRestrict first, then MaxMind, then IP-API. |
+| `database_path` | string | `""` | Path to a MaxMind GeoLite2 Country or City database. Relative paths use the plugin data directory. |
+| `fallback_enabled` | boolean | `true` | Whether to use the fallback provider if the primary fails. |
+| `fallback_mode` | string | `"ip_api"` | Fallback provider when the primary has no result: `ip_api`, or a routing mode like `least_players` for country-affinity fallback. |
+| `affinity_countries.<server>` | string[] | `[]` | ISO country codes preferred by the named lobby. |
 
-The section name is `[geo_routing]` (with an underscore), not `[routing.geo]`.
+Only `[geo_routing]` is accepted; the legacy `[routing.geo]` form is not supported.
 
 ---
 
@@ -388,9 +414,9 @@ bedwars_lobbies = ["survival_lobbies"]
 |---------|------|---------|-------------|
 | `enabled` | boolean | `false` | Whether contextual routing is active. |
 | `fallback_to_default` | boolean | `true` | Fall back to `default_lobbies` when no contextual group matches. |
-| `groups` | map | — | Named groups of lobby servers. Each group can have `servers` (LobbyEntry[]) and optional `mode`. |
-| `sources` | map | — | Maps source server names to group names. |
-| `fallback_chain` | map | — | Maps group names to ordered lists of fallback group names. |
+| `groups` | map | - | Named groups of lobby servers. Each group can have `servers` (LobbyEntry[]) and optional `mode`. |
+| `sources` | map | - | Maps source server names to group names. |
+| `fallback_chain` | map | - | Maps group names to ordered lists of fallback group names. |
 
 ### Per-Group Selection Mode Override
 
@@ -455,24 +481,24 @@ silent = true
 | Setting | Type | Default | Accepted Values | Description |
 |---------|------|---------|----------------|-------------|
 | `channel` | string | `"release"` | `release`, `beta`, `alpha` | Which release channel to check against. |
-| `enabled` | boolean | `true` | — | Enables all automatic and manual update checks. |
+| `enabled` | boolean | `true` | - | Enables all automatic and manual update checks. |
 | `check_interval` | int | `60` | `30` or greater | Minutes between automatic checks. HTTP 429 responses apply exponential backoff up to four hours. |
-| `notify_admins` | boolean | `true` | — | Allows an admin joining the proxy to receive an available-update notification. |
-| `silent` | boolean | `true` | — | Suppresses normal console success/update messages; `/vn updatecheck` still displays the result. |
+| `notify_admins` | boolean | `true` | - | Allows an admin joining the proxy to receive an available-update notification. |
+| `silent` | boolean | `true` | - | Suppresses normal console success/update messages; `/vn updatecheck` still displays the result. |
 
 Most servers should keep `channel = "release"`. Choose `beta` only if you want stable and beta builds, or `alpha` if you deliberately want every published build. Use `/vn updatecheck` whenever you want to check manually.
 
 **v4.3 changes**:
-- Update checks are silent by default — no startup log line, no periodic console message.
+- Update checks are silent by default: no startup log line, no periodic console message.
 - Set `update_checker.silent = false` in `navigator.toml` to restore the previous behavior.
 
 > **Tip**: set `notify_on_startup = false` to defer the first automatic check until the normal interval. Set `notify_admins_on_join = false` to suppress in-game admin notifications.
 
 ---
 
-## `[startup]` — First-Run Experience
+## `[startup]`: First-Run Experience
 
-> **New in v4.1.0** — Controls the welcome dashboard and upgrade digest shown in console on plugin start.
+> **New in v4.1.0**: Controls the welcome dashboard and upgrade digest shown in console on plugin start.
 
 ```toml
 [startup]
@@ -483,13 +509,13 @@ welcome_enabled = true
 |---------|------|---------|-------------|
 | `welcome_enabled` | boolean | `true` | Show the "Getting Started" dashboard on fresh install and the release notes digest on upgrades. |
 
-Documentation links always use the official VelocityNavigator wiki and are no longer configurable. Existing `startup.wiki_url` entries are removed automatically the next time the configuration is loaded.
+Documentation links always use the official VelocityNavigator wiki and are no longer configurable. Existing `startup.wiki_url` entries are removed the next time the configuration is loaded.
 
 ---
 
-## `[bedrock]` — Bedrock/Geyser Support
+## `[bedrock]`: Bedrock/Geyser Support
 
-> **New in v4.1.0** — Configure Bedrock player routing support via Geyser and Floodgate.
+> **New in v4.1.0**: Configure Bedrock player routing support via Geyser and Floodgate.
 
 ```toml
 [bedrock]
@@ -503,7 +529,7 @@ use_gui_for_lobby = false
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `enabled` | boolean | `false` | Enable Bedrock/Geyser support manually. |
-| `auto_detect` | boolean | `true` | Auto-detect Geyser/Floodgate on the classpath to enable automatically. |
+| `auto_detect` | boolean | `true` | Auto-detect Geyser/Floodgate on the classpath to enable. |
 | `strip_advanced_formatting` | boolean | `true` | Strip gradients, hover actions, and click events from messages so they render on Bedrock clients. |
 | `affinity_use_java_uuid` | boolean | `true` | Use Floodgate-mapped Java UUIDs instead of Bedrock XUIDs for player affinity tracking. |
 | `use_gui_for_lobby` | boolean | `false` | Enable native Cumulus SimpleForm lobby selector menu for Bedrock players. **New in v4.2.** |
@@ -512,9 +538,9 @@ Bedrock title, content, and button text are configured in `messages.toml` under 
 
 ---
 
-## `[lobby]` — Empty Lobby Strategy
+## `[lobby]`: Empty Lobby Strategy
 
-> **New in v4.1.0** — Configures behavior when no lobby servers are available for routing.
+> **New in v4.1.0**: Configures behavior when no lobby servers are available for routing.
 
 ```toml
 [lobby]
@@ -572,7 +598,7 @@ bearer_token = ""
 
 ---
 
-## `[dashboard]` — HTML Operations Dashboard
+## `[dashboard]`: HTML Operations Dashboard
 
 The dashboard runs on its own port, separate from the Prometheus exporter, and is disabled by default. See [HTML Dashboard](HTML-Dashboard) for safe access and troubleshooting.
 
@@ -600,7 +626,7 @@ Keep the listener on loopback when possible. The browser address may be your pro
 ## Full Example Config
 
 ```toml
-# VelocityNavigator v4.4.0 Configuration
+# VelocityNavigator v4.5.0 Configuration
 # https://github.com/DemonZ-Development/VelocityNavigator/wiki
 
 notify_on_startup = true
@@ -669,6 +695,7 @@ enabled = false
 port = 9226
 bind_host = "127.0.0.1"
 bearer_token = ""
+refresh_seconds = 5
 
 [circuit_breaker]
 enabled = true
@@ -697,9 +724,85 @@ affinity_use_java_uuid = true
 no_server_strategy = "disconnect"
 fallback_server = ""
 
+[storage]
+type = "file"
+
+[auth]
+enabled = false
+algorithm = "argon2id"
+enable_2fa = false
+pin_length = 6
+void_world_holding = true
+holding_server = ""
+session_timeout_minutes = 60
+min_password_length = 8
+bedrock_form_enabled = true
+
 [debug]
 verbose_logging = false
 ```
+
+---
+
+## `[storage]`
+
+Controls the storage backend for persistent data (sessions, player records, configuration state).
+
+```toml
+[storage]
+type = "file"
+```
+
+| Setting | Type | Default | Accepted Values | Description |
+|---------|------|---------|----------------|-------------|
+| `type` | string | `"file"` | `file`, `sqlite`, `mysql`, `mariadb`, `postgresql` | Storage backend for persistent data. |
+
+### Provider-specific connection strings
+
+| Provider | Connection String Format |
+|----------|-------------------------|
+| `file` | `data/` (directory, no DB needed) |
+| `sqlite` | `jdbc:sqlite:data/velocitynavigator.db` |
+| `mysql` | `jdbc:mysql://localhost:3306/vn_data?user=vn&password=secret` |
+| `mariadb` | `jdbc:mariadb://localhost:3306/vn_data?user=vn&password=secret` |
+| `postgresql` | `jdbc:postgresql://localhost:5432/vn_data?user=vn&password=secret` |
+
+> **Tip**: `file` is the default and requires no database server. `sqlite` is a good single-server alternative. For multi-proxy setups, use `mysql`, `mariadb`, or `postgresql`.
+
+---
+
+## `[auth]`
+
+Authentication and session management settings. New passwords use Argon2id by default. TOTP is not implemented in 4.5.0; validation rejects `enable_2fa = true`.
+
+```toml
+[auth]
+enabled = false
+algorithm = "argon2id"
+enable_2fa = false
+pin_length = 6
+void_world_holding = true
+holding_server = ""
+session_timeout_minutes = 60
+min_password_length = 8
+bedrock_form_enabled = true
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `enabled` | boolean | `false` | Require player registration/login before normal routing. |
+| `algorithm` | string | `"argon2id"` | Password algorithm for new credentials: `argon2id` or `sha256`. |
+| `enable_2fa` | boolean | `false` | Reserved; 4.5.0 validation rejects `true` because TOTP is not implemented. |
+| `pin_length` | int | `6` | Reserved for the future TOTP implementation. |
+| `void_world_holding` | boolean | `true` | Compatibility setting; authentication currently requires a holding backend. |
+| `holding_server` | string | `""` | Registered, non-routed backend used until authentication succeeds. Required when auth is enabled. |
+| `session_timeout_minutes` | int | `60` | Minutes before an active session expires and requires re-authentication. |
+| `min_password_length` | int | `8` | Minimum characters required for registration passwords. |
+| `bedrock_form_enabled` | boolean | `true` | Open a native registration/login form for Floodgate players on the auth holding backend. Chat commands remain available. |
+
+Bedrock authentication forms require Geyser and Floodgate, but not the backend bridge JAR. Authentication itself still requires a reachable, non-routed `holding_server`. Bedrock CustomForm inputs are not masked, so passwords remain visible while typing; disable `bedrock_form_enabled` if you prefer commands only.
+
+Form labels and authentication feedback come from the active language pack under `auth.*` in `messages.toml`. Custom `.properties` language packs can override the same keys. Keep `auth.form.register_title`, `auth.form.login_title`, `auth.form.password_visible`, `auth.form.repeat_password`, and `auth.form.password_placeholder` as plain text.
 
 ---
 

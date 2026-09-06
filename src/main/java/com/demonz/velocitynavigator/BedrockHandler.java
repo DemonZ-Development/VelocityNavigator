@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package com.demonz.velocitynavigator;
+import com.demonz.velocitynavigator.config.Config;
 
 import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.proxy.Player;

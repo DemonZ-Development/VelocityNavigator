@@ -16,25 +16,35 @@
 - [Player Affinity](Player-Affinity)
 - [Health & Circuit Breakers](Health-Checks-and-Circuit-Breakers)
 - [Retries & Fallbacks](Retries-and-Fallbacks)
+- [Geo Routing](Geo-Routing)
 
 **Player Experience**
 - [Java & Bedrock Selectors](Java-and-Bedrock-Selectors)
 - [Selector Customization](Server-Display-Names)
+- [Backend NPCs](Backend-NPCs)
+- [Backend YAML Menus](Backend-Menus)
 - [Language Packs](Language-Packs)
 - [Party System](Party-System)
 - [Capacity Queue](Capacity-Queue)
 
 **Configuration**
 - [Configuration Guide](Configuration-Guide)
+- [Modular Configuration](Modular-Configuration)
+- [MOTD Configuration](MOTD-Configuration)
+- [Authentication & Security](Authentication-and-Security)
 - [Backend Bridge Configuration](Backend-Bridge-Configuration)
 - [Migration Guide v3 → v4](Migration-Guide-v3-to-v4)
+- [Migration Guide v4.4 → 4.5](Migration-Guide-v4-to-v5)
 
 **Network & Operations**
 - [Advanced Proxy Systems](Advanced-Proxy-Systems)
 - [Redis & Multi-Proxy](Redis-and-Multi-Proxy)
+- [Common Core Architecture](Common-Core-Architecture)
+- [NavigatorAPI](NavigatorAPI)
 - [Storage & Databases](Storage-and-Databases)
 - [Server Management](Server-Management)
 - [Backend Lifecycle States](Backend-Lifecycle-States)
+- [Maintenance Mode](Maintenance-Mode)
 - [HTML Dashboard](HTML-Dashboard)
 - [Operations Runbook](Operations-Runbook)
 - [Prometheus & Grafana Setup](Prometheus-&-Grafana-Setup)
@@ -42,4 +52,4 @@
 - [FAQ](FAQ)
 
 ---
-*VelocityNavigator 4.4.0*
+*VelocityNavigator 4.5.0*

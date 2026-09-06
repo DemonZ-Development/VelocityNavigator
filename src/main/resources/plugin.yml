@@ -1,6 +1,30 @@
 name: VelocityNavigator
-version: '4.4.0'
+version: '4.5.0'
 main: com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge
 api-version: '1.16'
 authors: [DemonZDevelopment]
 description: Backend inventory GUI bridge for VelocityNavigator.
+folia-supported: true
+softdepend: [GeoRestrict, PlaceholderAPI, SkinsRestorer]
+commands:
+  vnav:
+    description: VelocityNavigator backend command reference and manager.
+    usage: /vnav help
+    permission: velocitynavigator.use
+  vnavmenu:
+    description: Manage and open VelocityNavigator backend YAML menus.
+    aliases: [vnmenu]
+    usage: /vnavmenu open [player] [menu_name] | add | remove | title | rows | list | reload
+    permission: velocitynavigator.use
+  vnavnpc:
+    description: Manage VelocityNavigator backend server-selector NPCs.
+    aliases: [vnnpc]
+    usage: /vnavnpc create <id> [display name...] | action | skin | target | title | toggle | glow | hand | offhand | status | respawn | remove | list | tp | reload
+    permission: velocitynavigator.admin
+permissions:
+  velocitynavigator.use:
+    description: Allows use of VelocityNavigator server selectors (menus and NPCs).
+    default: true
+  velocitynavigator.admin:
+    description: Allows administration of VelocityNavigator menus and NPCs.
+    default: op

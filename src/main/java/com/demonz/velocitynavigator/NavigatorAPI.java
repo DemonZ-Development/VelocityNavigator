@@ -14,17 +14,36 @@
  * limitations under the License.
  */
 package com.demonz.velocitynavigator;
+import com.demonz.velocitynavigator.config.Config;
+import com.demonz.velocitynavigator.health.CircuitBreaker;
+import com.demonz.velocitynavigator.health.ServerHealthService;
+import com.demonz.velocitynavigator.routing.RouteDecision;
 
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
 
+import org.slf4j.Logger;
+
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public interface NavigatorAPI {
 
-    CompletableFuture<RouteDecision> previewRoute(Player player);
+    String pluginVersion();
 
-    CompletableFuture<ServerHealthService.ServerStatus> inspectServer(String serverName);
+    ProxyServer server();
+
+    Logger logger();
+
+    Path dataDirectory();
+
+    Config config();
+
+    BedrockHandler bedrockHandler();
+
+    CompletableFuture<RouteDecision> previewRoute(Player player);
 
     Config.Routing getRoutingConfig();
 
@@ -34,5 +53,13 @@ public interface NavigatorAPI {
 
     Map<String, Long> getHealthCheckLatencies();
 
-    Map<String, CircuitBreaker.State> getCircuitBreakerStatuses();
+    Map<String, CircuitBreakerState> getCircuitBreakerStatuses();
+
+    CompletableFuture<ServerHealthStatus> inspectServer(String serverName);
+
+    boolean isGlobalMaintenance();
+
+    boolean isServerInMaintenance(String serverName);
+
+    Set<String> getMaintenanceServers();
 }

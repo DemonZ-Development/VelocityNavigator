@@ -2,13 +2,13 @@
 
 ![VelocityNavigator capacity queue](headers/capacity-queue.png)
 
-The queue is used when every suitable lobby is full. Players see their position and are connected automatically when a slot opens.
+The queue starts when every suitable lobby is full. Waiting players see their position and move automatically when a slot becomes available.
 
-## Before enabling it
+## Quick setup
 
-Every lobby in the pool must have a finite `max_players` value. An uncapped lobby means the pool is never considered full, so the queue will not start.
+First, give every lobby in the pool a finite `max_players` value. An uncapped lobby can never be considered full, so the queue will never start.
 
-Example lobby entries:
+In `plugins/velocitynavigator/navigator.toml`:
 
 ```toml
 [routing]
@@ -16,11 +16,7 @@ default_lobbies = [
   { server = "lobby-1", max_players = 100 },
   { server = "lobby-2", max_players = 100 },
 ]
-```
 
-## Queue settings
-
-```toml
 [queue]
 enabled = true
 poll_seconds = 2
@@ -31,69 +27,66 @@ command = "queue"
 permission = "none"
 ```
 
-- `poll_seconds` controls how often VelocityNavigator looks for space.
-- `notify_seconds` controls position updates.
-- `max_size` prevents an unlimited queue.
-- `holding_server` is optional and is mainly useful when a player's first proxy connection arrives while every lobby is full.
+Register a real backend named `holding` in `velocity.toml`, then run:
 
-## Holding server
+```text
+/vn config validate
+/vn reload
+```
 
-VelocityNavigator does not create a holding server, generate a world, or modify a map. `holding_server` is only the name of an existing backend that you create and register in Velocity.
+To test it, fill both lobbies to their configured limits and connect another player. That player should enter `holding`, receive position updates, and move to a lobby when one slot opens.
 
-That leaves the waiting experience entirely up to you. It can be a small void room, a dirt platform, a parkour map, or a fully designed waiting lobby with scoreboards, holograms, NPCs, music, and other backend plugins. Queue membership and commands are handled by Velocity, so the holding backend does not need the VelocityNavigator JAR unless you also want its Java inventory bridge there.
+`poll_seconds` controls how often the proxy checks for space. `notify_seconds` controls position updates, and `max_size` limits how many players may wait.
 
-Register the backend like any other Velocity server:
+## Set up the holding server
+
+VelocityNavigator does not create the holding server, its world, or its map. `holding_server` must be the name of an existing backend registered in Velocity.
+
+Example:
 
 ```toml
 # velocity.toml
 [servers]
 lobby-1 = "127.0.0.1:25566"
 lobby-2 = "127.0.0.1:25567"
-queue-holding = "127.0.0.1:25568"
+holding = "127.0.0.1:25568"
 try = ["lobby-1"]
 ```
 
-Then use the same name in `navigator.toml`:
+The waiting area can be a simple room, parkour map, or full lobby with scoreboards and NPCs. It only needs the VelocityNavigator JAR if you want bridge features such as backend menus, NPCs, or PlaceholderAPI there.
 
-```toml
-[queue]
-holding_server = "queue-holding"
-```
+Keep `holding` out of `default_lobbies` and contextual routing groups. Protect its backend port and configure player forwarding exactly like your other Velocity backends.
 
-Use a separate backend for `queue-holding` and do not include it in `default_lobbies` or a contextual routing group. It is a waiting room, not a possible lobby destination. Configure forwarding and protect its backend port in the same way as your other Velocity servers.
+Make its player limit large enough for the expected queue. If `queue.max_size = 500`, it must accept roughly that many waiting players, plus room for staff and reconnects.
 
-The holding server's own player limit must be large enough for the expected queue. If `queue.max_size = 500`, the backend must be able to accept that many waiting players or you should choose a smaller queue limit. Leave some additional capacity for staff and reconnects.
+If `holding_server` is blank, players who are already online wait on their current backend. New connections are not sent to a dedicated waiting server.
 
-If `holding_server` is blank, players who are already on another backend can still wait there. A brand-new connection follows the normal no-lobby behavior instead of being sent to a holding server.
+## What players see
 
-## What a joining player sees
+When all eligible lobbies are full, a new player is sent to `holding`, added to the queue, and shown their position in the action bar. A normal Minecraft connection screen can appear briefly during the transfer.
 
-A player is not left on Minecraft's dirt loading screen. When every suitable lobby is full, Velocity connects a new player to `holding_server`, adds them to the queue, and shows their position in the action bar.
+When space opens, VelocityNavigator removes the first eligible player from the queue and sends them to a lobby.
 
-The dirt screen is visible only during the normal connection or transfer. After that, the player sees the world you created on the holding backend. When a lobby has space, VelocityNavigator sends the connecting message, removes the player from the queue, and transfers them automatically.
-
-If the queue reaches `max_size`, the player receives the configured queue-full message and is not assigned a position. If they already reached the holding backend, they remain there until another command or plugin sends them elsewhere.
+If the queue reaches `max_size`, the player receives the queue-full message and is not added. If they are already on the holding backend, they stay there until a command or another plugin moves them.
 
 ## Player commands
 
 | Command | Purpose |
 |---|---|
-| `/queue` | Show the current queue position |
+| `/queue` | Show the current position |
 | `/queue leave` | Leave the queue without disconnecting |
 
-Position updates appear in the action bar. When a lobby has room, VelocityNavigator removes the player from the queue and starts the connection.
+`/queue leave` removes the queue entry but does not move the player. Add an exit NPC, portal, or another server command if players need a way out of the holding area.
 
-`/queue leave` removes only the queue entry. It does not guess where the player should go, so a player using it on the holding server remains in that world. Provide an exit command, NPC, portal, or another server destination if players need somewhere else to go.
+## If you run more than one proxy
 
-## Multi-proxy networks
-
-Queue positions are local to one proxy and are not shared through Redis. Use proxy affinity at your external load balancer so a reconnecting player returns to the same Velocity node.
+Queue positions live in one proxy's memory. Redis does not share them. Use proxy affinity at your external load balancer so reconnecting players return to the same Velocity instance.
 
 ## Troubleshooting
 
-- **Queue never starts:** check that every lobby has `max_players` and that all candidates are actually full.
-- **Holding server validation fails:** register it in Velocity and remove it from all lobby pools.
-- **Players remain queued after space opens:** use `/vn servers` to confirm the proxy sees the new player count and healthy state.
-- **The queue command conflicts:** choose another `command` value and run `/vn config validate`.
+- **Queue never starts:** Verify every eligible lobby has a finite `max_players` value and is actually full.
+- **Holding server validation fails:** Register it in Velocity and remove it from every lobby pool.
+- **Players remain queued after space opens:** Run `/vn servers` and confirm the proxy sees the new player count and a healthy lobby.
+- **The queue command conflicts:** Choose another `command` value and run `/vn config validate`.
 
-Queue messages are in `messages.toml`; see [Language Packs](Language-Packs).
+Queue messages live in `messages.toml`. See [Language Packs](Language-Packs) if you want to translate them.
