@@ -28,14 +28,16 @@ Simple round-robin routing breaks in production networks. Disconnections, player
 * **Sequential Round Robin (`round_robin`)**: Strict cyclic distribution across all healthy candidate backends.
 * **Uniform Random (`random`)**: Pure random distribution across available healthy lobbies.
 
-### Sticky Sessions & Player Affinity
+**Sticky Sessions & Player Affinity**
+
 Returning players hate being thrown into a random lobby every time they switch worlds. VelocityNavigator provides **configurable player affinity**:
 * Remembers a player's previous lobby within a configurable time window.
 * Automatically routes players back to their familiar lobby upon reconnecting.
 * Fully persistent across proxy restarts with atomic on-disk storage.
 * Instant expiration bypass when the preferred lobby is full, draining, or undergoing maintenance.
 
-### Live Route Explanations
+**Live Route Explanations**
+
 Need to diagnose why a player routed to a specific lobby? Run `/vn debug player <username>` to view the real-time routing trace: candidate pool discovery, filter rules (health, capacity, drain, maintenance, affinity), scoring calculations, and the selected winner.
 
 ---
@@ -238,7 +240,8 @@ circuit_breaker_reset_seconds = 30
 
 ## 12. Command & Permission Reference
 
-### Administrative Commands
+**Administrative Commands**
+
 | Command | Permission | Description |
 |---|---|---|
 | `/vn health` | `velocitynavigator.admin` | Consolidated proxy diagnostics and circuit health overview |
@@ -252,7 +255,8 @@ circuit_breaker_reset_seconds = 30
 | `/vn menu validate` | `velocitynavigator.admin` | Validate custom menu items, slots, and materials |
 | `/vn reload` | `velocitynavigator.admin` | Hot-reload all configurations, menus, and language packs |
 
-### Player Commands
+**Player Commands**
+
 | Command | Permission | Description |
 |---|---|---|
 | `/lobby` or `/hub` | `none` (configurable) | Route player to the best available healthy lobby |
@@ -294,7 +298,8 @@ circuit_breaker_reset_seconds = 30
 
 ---
 
-### Sponsored by Nexeu Hosting
+**Sponsored by Nexeu Hosting**
+
 
 [![Nexeu Hosting](https://whodoesntloveavatars.s3.fra.databucket.eu/assets/promo.png)](https://nexeu.zip/)
 
