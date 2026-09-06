@@ -3,6 +3,7 @@ name: Build & Release
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -45,6 +46,15 @@ jobs:
         shell: bash
         run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare Named Distribution JARs
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          cp "target/VelocityNavigator-${version}.jar" "target/VelocityNavigator-Proxy-${version}.jar"
+          cp "target/VelocityNavigator-${version}.jar" "target/VelocityNavigator-Spigot-Backend-${version}.jar"
+          ls -la target/VelocityNavigator-*.jar
+
       - name: Upload JAR Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -83,6 +93,9 @@ jobs:
           set -euo pipefail
           version='${{ needs.build.outputs.version }}'
           mkdir -p target/velocity4-smoke/plugins
+          # Keep only primary universal JAR in plugins dir during smoke test to avoid duplicate plugin id warnings
+          rm -f "target/velocity4-smoke/plugins/VelocityNavigator-Proxy-${version}.jar"
+          rm -f "target/velocity4-smoke/plugins/VelocityNavigator-Spigot-Backend-${version}.jar"
           curl --fail --location --silent --show-error \
             'https://fill-data.papermc.io/v1/objects/4540289f48c83e305fc2f2c495a84d1f4d0b7f360830251e169dd5a208740e70/velocity-4.0.0-6.jar' \
             --output target/velocity4-smoke/velocity.jar
@@ -98,7 +111,7 @@ jobs:
 
   release:
     needs: [build, velocity4-compatibility]
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.create_release }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.create_release) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,7 +120,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download verified release JAR
+      - name: Download verified release JARs
         uses: actions/download-artifact@v4
         with:
           name: VelocityNavigator-${{ needs.build.outputs.version }}
@@ -117,12 +130,12 @@ jobs:
         run: |
           awk '/^## \[/{if (p) exit; p=1; print; next} p' CHANGELOG.md > release_notes.md
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.build.outputs.version }}
-          name: VelocityNavigator v${{ needs.build.outputs.version }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
+          name: VelocityNavigator ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
           body_path: release_notes.md
           files: release-artifacts/VelocityNavigator-*.jar
           draft: false
-          prerelease: ${{ inputs.prerelease }}
+          prerelease: ${{ (github.event_name == 'workflow_dispatch' && inputs.prerelease) || contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
