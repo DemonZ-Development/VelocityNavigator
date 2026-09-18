@@ -4,7 +4,7 @@
 
 # VelocityNavigator
 
-> **4.5.0** · Velocity 3.4.x, 3.5.x, and 4.0.0 · Java 17/21/25 depending on Velocity version · Feature-dependent Paper/Spigot/Folia bridge
+> **4.5.1** · Velocity 3.4.x, 3.5.x, and 4.0.0 · Java 17/21/25 depending on Velocity version · Feature-dependent Paper/Spigot/Folia bridge
 
 VelocityNavigator stops one lobby from taking every player when it appears first in Velocity's `try` list. It chooses a healthy, suitable lobby for initial joins and lobby commands, and gives you controls for maintenance and larger networks.
 
@@ -72,7 +72,7 @@ Make sure those names already exist in Velocity's `velocity.toml`, then run `/vn
 | Proxy | Velocity 3.4.x, Velocity 3.5.x, or Velocity 4.0.0 (same JAR) |
 | Java | 17 for Velocity 3.4.x, 21 for Velocity 3.5.x, or 25 for Velocity 4.0.0 |
 | Minecraft | Any version supported by your Velocity build |
-| Backend features | Paper, Spigot, or Folia 1.16.5+ with the JAR installed |
+| Backend features | Paper, Spigot, or Folia 1.16.5–26.3+ with the JAR installed |
 | Native Bedrock form | Geyser and Floodgate |
 | Database storage | SQLite (bundled), MySQL 5.7+, MariaDB 10.3+, PostgreSQL 12+ |
 | GeoIP routing | MaxMind GeoLite2 database (free) or IP-API HTTP fallback |

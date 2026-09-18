@@ -350,18 +350,68 @@ public final class BackendNPCManager {
             if (online != null) {
                 playerProfile = online.getClass().getMethod("getPlayerProfile").invoke(online);
             } else {
-                playerProfile = Bukkit.class.getMethod("createPlayerProfile", String.class)
-                        .invoke(null, username);
+                playerProfile = createOfflineProfile(username);
             }
-            Class<?> resolvableProfileClass = Class.forName(
-                    "io.papermc.paper.datacomponent.item.ResolvableProfile");
-            Object resolvable = buildResolvableProfile(
-                    resolvableProfileClass, playerProfile, online, username);
-            body.getClass().getMethod("setProfile", resolvableProfileClass).invoke(body, resolvable);
+
+            boolean applied = false;
+            Class<?> resolvableProfileClass = findResolvableProfileClass();
+            if (resolvableProfileClass != null) {
+                try {
+                    Object resolvable = buildResolvableProfile(
+                            resolvableProfileClass, playerProfile, online, username);
+                    for (Method method : body.getClass().getMethods()) {
+                        if (method.getName().equals("setProfile") && method.getParameterCount() == 1
+                                && method.getParameterTypes()[0].isAssignableFrom(resolvableProfileClass)) {
+                            method.invoke(body, resolvable);
+                            applied = true;
+                            break;
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+
+            if (!applied && playerProfile != null) {
+                for (Method method : body.getClass().getMethods()) {
+                    if ((method.getName().equals("setProfile") || method.getName().equals("setPlayerProfile"))
+                            && method.getParameterCount() == 1
+                            && method.getParameterTypes()[0].isInstance(playerProfile)) {
+                        method.invoke(body, playerProfile);
+                        applied = true;
+                        break;
+                    }
+                }
+            }
         } catch (Throwable t) {
             plugin.getLogger().warning("Could not apply native profile '" + username + "' to NPC: "
                     + t.getMessage());
         }
+    }
+
+    private static Object createOfflineProfile(String username) throws Exception {
+        try {
+            return Bukkit.class.getMethod("createPlayerProfile", String.class).invoke(null, username);
+        } catch (NoSuchMethodException e) {
+            try {
+                return Bukkit.class.getMethod("createProfile", String.class).invoke(null, username);
+            } catch (NoSuchMethodException e2) {
+                return Bukkit.class.getMethod("createProfile", UUID.class, String.class)
+                        .invoke(null, UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8)), username);
+            }
+        }
+    }
+
+    private static Class<?> findResolvableProfileClass() {
+        for (String name : List.of(
+                "io.papermc.paper.datacomponent.item.ResolvableProfile",
+                "io.papermc.paper.profile.ResolvableProfile",
+                "io.papermc.paper.datacomponent.ResolvableProfile")) {
+            try {
+                return Class.forName(name);
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+        return null;
     }
 
     private Object buildResolvableProfile(Class<?> resolvableProfileClass, Object playerProfile,
@@ -377,36 +427,54 @@ public final class BackendNPCManager {
             SkinTexture restored = skinFromSkinsRestorer(online);
             if (restored != null) {
                 properties.removeIf(this::isTextureProperty);
-                Class<?> propertyClass = Class.forName("com.destroystokyo.paper.profile.ProfileProperty");
-                properties.add(propertyClass.getConstructor(String.class, String.class, String.class)
-                        .newInstance("textures", restored.value(), restored.signature()));
+                Class<?> propertyClass = findProfilePropertyClass();
+                if (propertyClass != null) {
+                    properties.add(propertyClass.getConstructor(String.class, String.class, String.class)
+                            .newInstance("textures", restored.value(), restored.signature()));
+                }
             }
             if (!properties.isEmpty()) {
                 builderClass.getMethod("addProperties", Collection.class).invoke(builder, properties);
             }
             return builderClass.getMethod("build").invoke(builder);
-        } catch (NoSuchMethodException unavailableBuilder) {
-            for (Method method : resolvableProfileClass.getMethods()) {
-                if (method.getName().equals("resolvableProfile") && method.getParameterCount() == 1
-                        && method.getParameterTypes()[0].isInstance(playerProfile)) {
-                    return method.invoke(null, playerProfile);
+        } catch (Throwable unavailableBuilder) {
+            if (playerProfile != null) {
+                for (Method method : resolvableProfileClass.getMethods()) {
+                    if (method.getParameterCount() == 1
+                            && method.getParameterTypes()[0].isAssignableFrom(playerProfile.getClass())
+                            && resolvableProfileClass.isAssignableFrom(method.getReturnType())) {
+                        return method.invoke(null, playerProfile);
+                    }
                 }
             }
             throw unavailableBuilder;
         }
     }
 
+    private static Class<?> findProfilePropertyClass() {
+        for (String name : List.of(
+                "com.destroystokyo.paper.profile.ProfileProperty",
+                "io.papermc.paper.profile.ProfileProperty")) {
+            try {
+                return Class.forName(name);
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+        return null;
+    }
+
     private List<Object> playerProfileProperties(Object playerProfile) {
         List<Object> result = new ArrayList<>();
+        if (playerProfile == null) {
+            return result;
+        }
         try {
-            Class<?> paperProfileClass = Class.forName("com.destroystokyo.paper.profile.PlayerProfile");
-            if (paperProfileClass.isInstance(playerProfile)) {
-                Object properties = paperProfileClass.getMethod("getProperties").invoke(playerProfile);
-                if (properties instanceof Collection<?> collection) {
-                    result.addAll(collection);
-                }
+            Method method = playerProfile.getClass().getMethod("getProperties");
+            Object properties = method.invoke(playerProfile);
+            if (properties instanceof Collection<?> collection) {
+                result.addAll(collection);
             }
-        } catch (ReflectiveOperationException ignored) {
+        } catch (Throwable ignored) {
         }
         return result;
     }

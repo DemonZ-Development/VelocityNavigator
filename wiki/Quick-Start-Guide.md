@@ -15,14 +15,14 @@ This guide uses `lobby-1` and `lobby-2`. Replace those names everywhere if your 
 
 ## Step 1: Download and Install
 
-1. Download `VelocityNavigator-4.5.0.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
+1. Download `VelocityNavigator-4.5.1.jar` from the [VelocityNavigator Modrinth page](https://modrinth.com/plugin/velocitynavigator).
 2. Place the JAR in your Velocity proxy's `plugins/` folder.
 3. Start or restart the proxy. `/vn reload` reloads configuration; it cannot replace a running JAR.
 4. For now, install the JAR only on Velocity. Add it to Paper/Spigot/Folia later if you want inventory menus or NPCs.
 
 ```
 plugins/
-├── VelocityNavigator-4.5.0.jar
+├── VelocityNavigator-4.5.1.jar
 └── ...
 ```
 

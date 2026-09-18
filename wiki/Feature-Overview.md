@@ -98,7 +98,7 @@ VelocityNavigator can run beside third-party NPC and GUI plugins such as Citizen
 
 - Velocity 3.4.x, Velocity 3.5.x, and Velocity 4.0.0 with one JAR
 - Java 17 for Velocity 3.4.x, Java 21 for Velocity 3.5.x, or Java 25 for Velocity 4.0.0
-- Paper, Spigot, or Folia 1.16.5+ wherever backend bridge features are used
+- Paper, Spigot, or Folia 1.16.5–26.3+ wherever backend bridge features are used
 - The backend JAR is required for native NPCs, YAML menus, Java inventory, and backend placeholders
 - Geyser and Floodgate for native Bedrock forms
 - File JSON, SQLite, MySQL, MariaDB, or PostgreSQL for storage (HikariCP connection pooling included)

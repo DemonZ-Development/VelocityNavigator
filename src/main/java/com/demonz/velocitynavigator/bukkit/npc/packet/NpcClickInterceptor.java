@@ -47,9 +47,12 @@ public final class NpcClickInterceptor {
         }
         try {
             Object handle = player.getClass().getMethod("getHandle").invoke(player);
-            Object gameConnection = findField(handle.getClass(), "connection").get(handle);
-            Object nettyConnection = findField(gameConnection.getClass(), "connection").get(gameConnection);
-            Channel channel = (Channel) findField(nettyConnection.getClass(), "channel").get(nettyConnection);
+            Channel channel = extractChannel(handle);
+            if (channel == null) {
+                injected.remove(player.getUniqueId());
+                LOG.warning("[VelocityNavigator] Could not locate Netty channel for " + player.getName());
+                return false;
+            }
             if (channel.pipeline().get(HANDLER_NAME) != null) {
                 return true;
             }
@@ -68,15 +71,70 @@ public final class NpcClickInterceptor {
         }
         try {
             Object handle = player.getClass().getMethod("getHandle").invoke(player);
-            Object gameConnection = findField(handle.getClass(), "connection").get(handle);
-            Object nettyConnection = findField(gameConnection.getClass(), "connection").get(gameConnection);
-            Channel channel = (Channel) findField(nettyConnection.getClass(), "channel").get(nettyConnection);
-            ChannelDuplexHandler handler = (ChannelDuplexHandler) channel.pipeline().get(HANDLER_NAME);
-            if (handler != null) {
-                channel.eventLoop().submit(() -> channel.pipeline().remove(HANDLER_NAME));
+            Channel channel = extractChannel(handle);
+            if (channel != null) {
+                ChannelDuplexHandler handler = (ChannelDuplexHandler) channel.pipeline().get(HANDLER_NAME);
+                if (handler != null) {
+                    channel.eventLoop().submit(() -> channel.pipeline().remove(HANDLER_NAME));
+                }
             }
         } catch (Throwable ignored) {
         }
+    }
+
+    private static Channel extractChannel(Object handle) {
+        try {
+            Object gameConnection = findFieldFlexible(handle, "connection");
+            if (gameConnection == null) return null;
+            Object nettyConnection = findFieldFlexible(gameConnection, "connection");
+            if (nettyConnection == null) return null;
+            return findChannel(nettyConnection);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static Object findFieldFlexible(Object target, String name) {
+        try {
+            return findField(target.getClass(), name).get(target);
+        } catch (Throwable ignored) {
+        }
+        for (Class<?> c = target.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(f.getModifiers())
+                        && (f.getType().getName().contains("Connection") || f.getType().getName().contains("PacketListener"))) {
+                    try {
+                        f.setAccessible(true);
+                        Object val = f.get(target);
+                        if (val != null) return val;
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Channel findChannel(Object nettyConnection) {
+        try {
+            Field f = findField(nettyConnection.getClass(), "channel");
+            Object val = f.get(nettyConnection);
+            if (val instanceof Channel ch) return ch;
+        } catch (Throwable ignored) {
+        }
+        for (Class<?> c = nettyConnection.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(f.getModifiers()) && Channel.class.isAssignableFrom(f.getType())) {
+                    try {
+                        f.setAccessible(true);
+                        Object val = f.get(nettyConnection);
+                        if (val instanceof Channel ch) return ch;
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public void removeAll() {

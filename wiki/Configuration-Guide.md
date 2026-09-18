@@ -143,7 +143,7 @@ Chat selector header, entry, and tooltip text now live under `[menus.chat]` in `
 
 ### Java inventory selector setup
 
-1. Put `VelocityNavigator-4.5.0.jar` in the Velocity proxy's `plugins/` directory.
+1. Put `VelocityNavigator-4.5.1.jar` in the Velocity proxy's `plugins/` directory.
 2. Put the same JAR in every backend Paper/Spigot server's `plugins/` directory.
 3. Set `routing.use_menu_for_lobby = true`.
 4. Set `routing.java_menu.type = "inventory"` and run `/vn reload`.
@@ -626,7 +626,7 @@ Keep the listener on loopback when possible. The browser address may be your pro
 ## Full Example Config
 
 ```toml
-# VelocityNavigator v4.5.0 Configuration
+# VelocityNavigator v4.5.1 Configuration
 # https://github.com/DemonZ-Development/VelocityNavigator/wiki
 
 notify_on_startup = true

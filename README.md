@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.5.0-cyan?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.5.1-cyan?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/channel-stable-38d6e0?style=for-the-badge" alt="Stable release channel">
   <img src="https://img.shields.io/badge/platform-Velocity_3.4.x_%2F_3.5.x_%2B_4.0.0-blue?style=for-the-badge" alt="Platform">
   <img src="https://img.shields.io/badge/java-17_%2F_21_%2F_25-orange?style=for-the-badge" alt="Java">
@@ -116,7 +116,7 @@ Unlike other proxy navigators that require separate Spigot plugins, protocol hac
 * **Single Universal JAR**: The exact same JAR file placed on Velocity runs on Paper, Spigot, and Folia backends.
 * **Zero-NMS Packet NPCs**:
   * Spawn lightweight, high-performance NPCs on backend servers without version-locked NMS code.
-  * Compatible across Paper 1.16.5 through 1.21.x and Folia out of the box.
+  * Compatible across Paper 1.16.5 through 26.3 and Folia out of the box.
   * Fetch custom player skins by username or Mojang texture properties.
   * Configure flexible click actions: connect to a server, open a custom menu, or execute proxy/backend commands.
   * Manage NPCs in-game with `/vn npc create <id> <name>`, `/vn npc skin <id> <player>`, and `/vn npc delete <id>`.
@@ -243,7 +243,7 @@ Store player data, sticky sessions, and auth credentials in the storage engine t
 
 Get up and running in under five minutes:
 
-1. Download `VelocityNavigator-4.5.0.jar` and place it into your Velocity proxy's `plugins/` directory.
+1. Download `VelocityNavigator-4.5.1.jar` and place it into your Velocity proxy's `plugins/` directory.
 2. Start the proxy once to generate default configuration files, then stop the proxy.
 3. Open `plugins/velocitynavigator/navigator.toml` and list your lobby servers (matching names in `velocity.toml`):
 
@@ -299,7 +299,7 @@ circuit_breaker_reset_seconds = 30
 | Command | Permission | Description |
 |---|---|---|
 | `/lobby` or `/hub` | `none` (configurable) | Route player to the best available healthy lobby |
-| `/menu` | `none` (configurable) | Open the interactive server selector |
+| `/lobby menu` | `none` (configurable) | Open the interactive server selector |
 | `/party` | `none` (configurable) | Access the cross-server party management system |
 | `/queue [leave]` | `none` (configurable) | Check queue position or leave the holding queue |
 
@@ -316,9 +316,9 @@ circuit_breaker_reset_seconds = 30
   * Velocity 3.5.x (Java 21+)
   * Velocity 4.0.0 (Java 25)
 * **Backend Platforms (Optional Bridge)**:
-  * Paper 1.16.5 – 1.21.x+
-  * Spigot 1.16.5 – 1.21.x+
-  * Folia 1.20.x – 1.21.x+
+  * Paper 1.16.5 – 26.3+
+  * Spigot 1.16.5 – 26.3+
+  * Folia 1.20.x – 26.3+
 * **Ecosystem Integrations**:
   * GeyserMC & Floodgate (Native Bedrock forms and Floodgate UUID translation)
   * PlaceholderAPI (Rich backend placeholders)

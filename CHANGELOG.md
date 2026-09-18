@@ -3,6 +3,17 @@
 This file documents all notable changes to VelocityNavigator.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.5.1] - 2026-09-18
+
+Small patch release fixing server routing for backend NPCs and menus, plus compatibility updates for Paper 26.3+.
+
+### Fixed
+- **NPC & Menu Routing**: Fixed an issue where clicking a backend NPC or YAML menu targeting a server (like `server:survival`) failed with "Selection unavailable" if that server wasn't listed in `default_lobbies`. You can now route players directly to any server registered in Velocity's `velocity.toml` from backend NPCs and menus.
+- **Documentation**: Fixed a typo in the command reference tables where `/lobby menu` was incorrectly listed as `/menu`.
+
+### Added / Improved
+- **Paper & Folia 26.3+ Compatibility**: Updated internal packet handling (NPC entity spawning, head rotation packets, and Netty channel interception) to support Paper, Spigot, and Folia 26.3+ runtimes.
+
 ## [4.5.0] - 2026-09-06
 
 VelocityNavigator v4.5.0 is our most comprehensive release to date, introducing a unified universal JAR architecture, a zero-dependency packet NPC engine, global GeoIP distance routing, dynamic server list MOTD rotations, cross-server party synchronization with full PlaceholderAPI expansions, Argon2id authentication with private Sign GUIs, multi-engine database storage, and native Folia multi-threading support.
@@ -18,13 +29,13 @@ VelocityNavigator v4.5.0 is our most comprehensive release to date, introducing 
 
 A completely new, zero-dependency in-game NPC server selector engine built natively into the backend bridge:
 
-- **Real Player-Model NPCs on 1.20.5+**: Spawns genuine player models via direct packet transmission on Paper, Spigot, and Folia 1.20.5 through 1.21.x — real Mojang skins, full-size interaction hitboxes, held items, and smooth head rotation. Zero external plugins required (no Citizens, no ProtocolLib).
+- **Real Player-Model NPCs on 1.20.5+**: Spawns genuine player models via direct packet transmission on Paper, Spigot, and Folia 1.20.5 through 1.21.x / 26.x — real Mojang skins, full-size interaction hitboxes, held items, and smooth head rotation. Zero external plugins required (no Citizens, no ProtocolLib).
 - **Billboarded TextDisplay Holograms**: Multi-line floating text labels billboarded (`CENTER`) so names and server stats face players cleanly from every direction without one-sided distortion.
 - **Scoreboard Team Glowing**: Custom team glowing outline colors (`/vnavnpc glow <id> <on|off> [color]`) configured without interfering with player scoreboard setups.
 - **Packet-Level Netty Click Interception**: Direct Netty channel handler captures clicks on fake players with built-in interaction range validation (6-block radius).
 - **Smart Click Actions & Conditional Routing**: Configure NPCs to route players to servers, open backend YAML menus, run commands, or execute conditional permission routing (`action:cond(perm=velocitynavigator.vip?server:vip-lobby|server:lobby)`).
 - **Dynamic Proximity Head Tracking**: NPCs rotate their heads toward the nearest player within 64 blocks smoothly on the player's scheduler.
-- **Paper 26.2 Mannequin & Folia Safety**: Built with native support for Paper mannequin entities and Folia's regionized schedulers.
+- **Paper 26.2 / 26.3 Mannequin & Folia Safety**: Built with native support for Paper mannequin entities and Folia's regionized schedulers.
 - **Automatic Fallback for Older Servers**: Automatically detects backends older than 1.20.5 and seamlessly uses an optimized armor-stand mannequin with Interaction hitboxes.
 - **Full In-Game Management (`/vnavnpc`)**: Comprehensive command tree with tab completion (`create`, `action`, `skin`, `glow`, `hand`, `offhand`, `status`, `respawn`, `tp`, `remove`, `list`, `reload`).
 

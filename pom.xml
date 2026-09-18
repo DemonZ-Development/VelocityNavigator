@@ -6,7 +6,7 @@
 
     <groupId>com.demonz</groupId>
     <artifactId>VelocityNavigator</artifactId>
-    <version>4.5.0</version>
+    <version>4.5.1</version>
     <packaging>jar</packaging>
 
     <name>VelocityNavigator</name>

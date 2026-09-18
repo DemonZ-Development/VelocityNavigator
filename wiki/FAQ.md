@@ -217,7 +217,7 @@ Redis Cluster discovery and Sentinel failover are not implemented. Point every p
 
 Velocity owns routing but cannot open Bukkit inventories. The same universal JAR runs as a lightweight Paper/Spigot bridge that only renders the menu and returns clicks. Startup logs identify `VELOCITY PROXY mode` or `BACKEND GUI BRIDGE mode`. Use `/vn bridge status` after a player joins each backend. Without a detected bridge, `fallback_to_chat = true` safely shows the clickable chat selector.
 
-The bridge is built against the Spigot API 1.16.5 baseline and uses no version-specific NMS. Java 17+ is required on backends; the proxy must use the Java version required by its Velocity release.
+The bridge supports Paper, Spigot, and Folia 1.16.5 through 26.3+ with no version-specific NMS required. Java 17+ is required on backends; the proxy must use the Java version required by its Velocity release.
 
 ---
 

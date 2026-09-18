@@ -16,7 +16,7 @@ You do not need the bridge for a proxy-only setup or for the clickable chat sele
 
 The backend should appear as available after a player joins it. If it does not, check both consoles for plugin-channel or startup errors.
 
-The bridge supports Paper, Spigot, and Folia 1.16.5 or newer and requires Java 17 or newer. It does not use version-specific NMS.
+The bridge supports Paper, Spigot, and Folia 1.16.5 through 26.3+ and requires Java 17 or newer. It does not use version-specific NMS.
 
 ## Default backend config
 

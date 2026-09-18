@@ -6,10 +6,11 @@ VelocityNavigator includes a native NPC server selector engine that runs on **Pa
 
 The renderer is picked automatically at startup:
 
-- **Player-model NPCs** (Mojang-mapped Paper 1.20.5+ runtimes, including Folia): the backend sends fake-player spawn packets, so every player sees a real player model with a working skin, held items, and a full-size click hitbox — no armor stands involved. Clicks are captured through a small Netty pipeline handler and validated against the player's current view and interaction range. The backend log confirms this mode with `player-model renderer active`.
+- **Native Mannequin NPCs** (Paper 26.2 / 26.3+ runtimes): uses native Paper Mannequin entities with `ResolvableProfile` skins, living equipment, and Folia region safety. The backend log confirms this mode with `native mannequin renderer active`.
+- **Player-model NPCs** (Mojang-mapped Paper 1.20.5+ through 1.21.x / 26.x runtimes, including Folia): the backend sends fake-player spawn packets, so every player sees a real player model with a working skin, held items, and a full-size click hitbox — no armor stands involved. Clicks are captured through a small Netty pipeline handler and validated against the player's current view and interaction range. The backend log confirms this mode with `player-model renderer active`.
 - **Armor stand NPCs** (older or versioned CraftBukkit/Spigot runtimes): an arms-free, base-plate-free armor stand wearing the resolved player head plus an Interaction entity hitbox. The log says `armor stand renderer active`.
 
-Both modes share the same hologram system:
+All modes share the same hologram system:
 
 - **Hologram lines** — `TextDisplay` entities (1.19.4+, billboarded so they face every player) or ArmorStand name tags (1.17–1.19.3) floating above the NPC
 

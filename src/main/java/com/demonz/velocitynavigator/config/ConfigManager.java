@@ -302,7 +302,7 @@ public final class ConfigManager {
 
     private void writeMessages(LanguageBundle language) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.5.0 language and menu text\n");
+        b.append("# VelocityNavigator 4.5.1 language and menu text\n");
         b.append("# MiniMessage formatting and documented placeholders are supported.\n");
         b.append("# Built-ins: ").append(String.join(", ", LanguagePacks.supportedCodes())).append(". Any other code is treated as a custom language.\n");
         b.append("# Change language, restart or /vn reload, and built-in text will be replaced automatically.\n\n");
@@ -512,7 +512,7 @@ public final class ConfigManager {
 
     private void writeGui(GuiConfig gui) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.5.0 Java inventory and Bedrock form layout\n");
+        b.append("# VelocityNavigator 4.5.1 Java inventory and Bedrock form layout\n");
         b.append("# Text defaults live in messages.toml; per-server names/lore may use MiniMessage, & codes, § codes, or hex colors.\n\n");
         b.append("config_version = ").append(GUI_CONFIG_VERSION).append("\n\n");
         b.append("[layout]\n");

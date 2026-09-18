@@ -81,20 +81,19 @@ public final class NpcPackets {
             entityTypePlayer = staticField(entityTypeClass, "PLAYER");
 
             vec3Ctor = Class.forName("net.minecraft.world.phys.Vec3").getConstructor(double.class, double.class, double.class);
-            addEntityCtor = findCtor(addEntityClass, int.class, UUID.class, double.class, double.class,
-                    double.class, float.class, float.class, entityTypeClass, int.class, vec3Ctor.getDeclaringClass(), double.class);
-            removeEntitiesCtor = removeEntitiesClass.getConstructor(int[].class);
+            addEntityCtor = findAddEntityCtor(addEntityClass, entityTypeClass, vec3Ctor.getDeclaringClass());
+            removeEntitiesCtor = findRemoveEntitiesCtor(removeEntitiesClass);
             removePlayerInfoCtor = removePlayerInfoClass.getConstructor(List.class);
 
             setEntityDataCtor = setEntityDataClass.getConstructor(int.class, List.class);
-            rotateEntityCtor = rotateEntityClass.getConstructor(int.class, byte.class, byte.class, boolean.class);
+            rotateEntityCtor = findRotateEntityCtor(rotateEntityClass);
             pairCtor = Class.forName("com.mojang.datafixers.util.Pair").getConstructor(Object.class, Object.class);
             equipmentSlotClass = Class.forName("net.minecraft.world.entity.EquipmentSlot");
             setEquipmentCtor = setEquipmentClass.getConstructor(int.class, List.class);
 
             dataValueClass = Class.forName("net.minecraft.network.syncher.SynchedEntityData$DataValue");
-            sharedFlagsAccessor = staticField(Class.forName("net.minecraft.world.entity.Entity"), "DATA_SHARED_FLAGS_ID");
-            skinLayersAccessor = staticField(Class.forName("net.minecraft.world.entity.player.Player"), "DATA_PLAYER_MODE_CUSTOMISATION");
+            sharedFlagsAccessor = findSharedFlagsAccessor(Class.forName("net.minecraft.world.entity.Entity"));
+            skinLayersAccessor = findSkinLayersAccessor(Class.forName("net.minecraft.world.entity.player.Player"));
 
             propertyClass = Class.forName("com.mojang.authlib.properties.Property");
             gameProfileCtor = Class.forName("com.mojang.authlib.GameProfile").getConstructor(UUID.class, String.class);
@@ -157,6 +156,76 @@ public final class NpcPackets {
         }
     }
 
+    static Constructor<?> findAddEntityCtor(Class<?> addEntityClass, Class<?> entityTypeClass, Class<?> vec3Class) {
+        Constructor<?> ctor = findCtor(addEntityClass, int.class, UUID.class, double.class, double.class,
+                double.class, float.class, float.class, entityTypeClass, int.class, vec3Class, double.class);
+        if (ctor != null) {
+            return ctor;
+        }
+        ctor = findCtor(addEntityClass, int.class, UUID.class, double.class, double.class,
+                double.class, float.class, float.class, entityTypeClass, int.class, vec3Class, float.class);
+        if (ctor != null) {
+            return ctor;
+        }
+        for (Constructor<?> c : addEntityClass.getConstructors()) {
+            Class<?>[] p = c.getParameterTypes();
+            if (p.length >= 7 && p[0] == int.class && p[1] == UUID.class
+                    && p[2] == double.class && p[3] == double.class && p[4] == double.class
+                    && p[5] == float.class && p[6] == float.class) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static Constructor<?> findRemoveEntitiesCtor(Class<?> removeEntitiesClass) {
+        Constructor<?> ctor = findCtor(removeEntitiesClass, int[].class);
+        if (ctor != null) {
+            return ctor;
+        }
+        for (Constructor<?> c : removeEntitiesClass.getConstructors()) {
+            Class<?>[] p = c.getParameterTypes();
+            if (p.length == 1) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    static Constructor<?> findRotateEntityCtor(Class<?> rotateClass) {
+        Constructor<?> ctor = findCtor(rotateClass, int.class, byte.class, byte.class, boolean.class);
+        if (ctor != null) {
+            return ctor;
+        }
+        for (Constructor<?> c : rotateClass.getConstructors()) {
+            Class<?>[] p = c.getParameterTypes();
+            if (p.length == 4 && p[0] == int.class && p[3] == boolean.class) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static Object findSharedFlagsAccessor(Class<?> entityClass) {
+        for (String name : List.of("DATA_SHARED_FLAGS_ID", "DATA_SHARED_FLAGS")) {
+            try {
+                return staticField(entityClass, name);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Object findSkinLayersAccessor(Class<?> playerClass) {
+        for (String name : List.of("DATA_PLAYER_MODE_CUSTOMISATION", "DATA_PLAYER_MODE_CUSTOMIZATION", "DATA_PLAYER_MODEL_CUSTOMISATION")) {
+            try {
+                return staticField(playerClass, name);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
     private static Constructor<?> findInfoEntryCtor() throws ClassNotFoundException {
         Class<?> entryClass = Class.forName(infoUpdateClass.getName() + "$Entry");
         Class<?> gameProfileClass = gameProfileCtor.getDeclaringClass();
@@ -211,10 +280,63 @@ public final class NpcPackets {
         findField(target.getClass(), name).set(target, value);
     }
 
+    static void setFieldFlexible(Object target, Class<?> expectedType, Object value, String... names) throws Exception {
+        for (String name : names) {
+            try {
+                Field f = locate(target.getClass(), name);
+                f.setAccessible(true);
+                if (isTypeCompatible(expectedType, f.getType())) {
+                    f.set(target, value);
+                    return;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        List<Field> matching = new ArrayList<>();
+        for (Class<?> c = target.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (!Modifier.isStatic(f.getModifiers()) && isTypeCompatible(expectedType, f.getType())) {
+                    matching.add(f);
+                }
+            }
+        }
+        if (matching.size() == 1) {
+            Field f = matching.get(0);
+            f.setAccessible(true);
+            f.set(target, value);
+            return;
+        }
+        setField(target, names[0], value);
+    }
+
+    private static boolean isTypeCompatible(Class<?> expectedType, Class<?> actualType) {
+        if (expectedType == null) {
+            return true;
+        }
+        if (expectedType == actualType) {
+            return true;
+        }
+        if (!expectedType.isPrimitive() && !actualType.isPrimitive()) {
+            return expectedType.isAssignableFrom(actualType);
+        }
+        return false;
+    }
+
     public static int getIntField(Object packet, String name) {
         try {
             return findField(packet.getClass(), name).getInt(packet);
         } catch (Throwable t) {
+            for (Class<?> c = packet.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (f.getType() == int.class && !Modifier.isStatic(f.getModifiers())) {
+                        try {
+                            f.setAccessible(true);
+                            return f.getInt(packet);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+            }
             return -1;
         }
     }
@@ -236,9 +358,10 @@ public final class NpcPackets {
 
     public static Object buildPlayerInfoAdd(UUID npcUuid, Object profile) throws Exception {
         Object packet = unsafe.allocateInstance(infoUpdateClass);
-        setField(packet, "actions", enumSetOf(
+        setFieldFlexible(packet, java.util.EnumSet.class, enumSetOf(
                 infoActionClass.getField("ADD_PLAYER").get(null),
-                infoActionClass.getField("UPDATE_LISTED").get(null)));
+                infoActionClass.getField("UPDATE_LISTED").get(null)),
+                "actions", "a");
 
         Class<?>[] paramTypes = infoEntryCtor.getParameterTypes();
         Object[] args = new Object[paramTypes.length];
@@ -266,29 +389,75 @@ public final class NpcPackets {
                 args[i] = null;
             }
         }
-        setField(packet, "entries", List.of(infoEntryCtor.newInstance(args)));
+        setFieldFlexible(packet, List.class, List.of(infoEntryCtor.newInstance(args)), "entries", "b");
         return packet;
     }
 
     public static Object buildAddEntity(int entityId, UUID npcUuid, WorldLocation loc) throws Exception {
         Object velocity = vec3Ctor.newInstance(0d, 0d, 0d);
-        return addEntityCtor.newInstance(entityId, npcUuid,
-                loc.x(), loc.y(), loc.z(),
-                loc.pitchDegrees(), loc.yawDegrees(),
-                entityTypePlayer, 0, velocity, (double) loc.yawDegrees());
+        Class<?>[] params = addEntityCtor.getParameterTypes();
+        if (params.length == 11 && params[7] == entityTypeClass && params[8] == int.class
+                && params[9] == vec3Ctor.getDeclaringClass() && (params[10] == double.class || params[10] == float.class)) {
+            Object headYaw = params[10] == float.class ? loc.yawDegrees() : (double) loc.yawDegrees();
+            return addEntityCtor.newInstance(entityId, npcUuid,
+                    loc.x(), loc.y(), loc.z(),
+                    loc.pitchDegrees(), loc.yawDegrees(),
+                    entityTypePlayer, 0, velocity, headYaw);
+        }
+        Object[] args = adaptAddEntityArgs(params, entityId, npcUuid, loc, entityTypeClass, entityTypePlayer, velocity);
+        return addEntityCtor.newInstance(args);
+    }
+
+    static Object[] adaptAddEntityArgs(Class<?>[] params, int entityId, UUID npcUuid, WorldLocation loc,
+                                       Class<?> entityTypeClass, Object entityTypePlayer, Object velocity) {
+        Object[] args = new Object[params.length];
+        if (params.length > 0) args[0] = entityId;
+        if (params.length > 1) args[1] = npcUuid;
+        if (params.length > 2) args[2] = params[2] == float.class ? (float) loc.x() : loc.x();
+        if (params.length > 3) args[3] = params[3] == float.class ? (float) loc.y() : loc.y();
+        if (params.length > 4) args[4] = params[4] == float.class ? (float) loc.z() : loc.z();
+        if (params.length > 5) args[5] = params[5] == byte.class ? (byte) Math.round(loc.pitchDegrees() * 256f / 360f) : loc.pitchDegrees();
+        if (params.length > 6) args[6] = params[6] == byte.class ? (byte) Math.round(loc.yawDegrees() * 256f / 360f) : loc.yawDegrees();
+        for (int i = 7; i < params.length; i++) {
+            Class<?> p = params[i];
+            if (p == entityTypeClass) {
+                args[i] = entityTypePlayer;
+            } else if (p == int.class) {
+                args[i] = 0;
+            } else if (velocity != null && p == velocity.getClass()) {
+                args[i] = velocity;
+            } else if (p == float.class) {
+                args[i] = loc.yawDegrees();
+            } else if (p == double.class) {
+                args[i] = (double) loc.yawDegrees();
+            } else if (p == byte.class) {
+                args[i] = (byte) Math.round(loc.yawDegrees() * 256f / 360f);
+            } else if (p == boolean.class) {
+                args[i] = Boolean.FALSE;
+            } else if (p.isPrimitive()) {
+                args[i] = 0;
+            } else {
+                args[i] = null;
+            }
+        }
+        return args;
     }
 
     public static Object buildRotateHead(int entityId, float headYawDegrees) throws Exception {
         Object packet = unsafe.allocateInstance(rotateHeadCtorClass());
-        setField(packet, "entityId", entityId);
-        setField(packet, "headYaw", (byte) Math.round(headYawDegrees * 256f / 360f));
+        setFieldFlexible(packet, int.class, entityId, "entityId", "id", "a");
+        byte yawByte = (byte) Math.round(headYawDegrees * 256f / 360f);
+        setFieldFlexible(packet, byte.class, yawByte, "yHeadRot", "headYaw", "yRot", "b");
         return packet;
     }
 
     public static Object buildRotateEntity(int entityId, float yawDegrees, float pitchDegrees) throws Exception {
         byte yaw = (byte) Math.round(yawDegrees * 256f / 360f);
         byte pitch = (byte) Math.round(pitchDegrees * 256f / 360f);
-        return rotateEntityCtor.newInstance(entityId, yaw, pitch, true);
+        Class<?>[] p = rotateEntityCtor.getParameterTypes();
+        Object p1 = p.length > 1 && p[1] == float.class ? yawDegrees : yaw;
+        Object p2 = p.length > 2 && p[2] == float.class ? pitchDegrees : pitch;
+        return rotateEntityCtor.newInstance(entityId, p1, p2, true);
     }
 
     private static Class<?> rotateHeadCtorClass() throws ClassNotFoundException {
@@ -299,6 +468,22 @@ public final class NpcPackets {
         int[] ids = new int[entityIds.size()];
         for (int i = 0; i < ids.length; i++) {
             ids[i] = entityIds.get(i);
+        }
+        Class<?> paramType = removeEntitiesCtor.getParameterTypes()[0];
+        if (paramType == int[].class) {
+            return removeEntitiesCtor.newInstance((Object) ids);
+        }
+        if (paramType.isAssignableFrom(List.class)) {
+            return removeEntitiesCtor.newInstance(entityIds);
+        }
+        try {
+            Class<?> intArrayListClass = Class.forName("it.unimi.dsi.fastutil.ints.IntArrayList");
+            Constructor<?> listCtor = intArrayListClass.getConstructor(int[].class);
+            Object fastList = listCtor.newInstance((Object) ids);
+            if (paramType.isInstance(fastList)) {
+                return removeEntitiesCtor.newInstance(fastList);
+            }
+        } catch (Throwable ignored) {
         }
         return removeEntitiesCtor.newInstance((Object) ids);
     }
@@ -341,9 +526,13 @@ public final class NpcPackets {
     public static Object buildCosmetics(int entityId, boolean glowing) {
         try {
             List<Object> values = new ArrayList<>();
-            values.add(createDataValue(sharedFlagsAccessor, glowing ? (byte) 0x40 : (byte) 0x00));
-            values.add(createDataValue(skinLayersAccessor, (byte) 0x7F));
-            return setEntityDataCtor.newInstance(entityId, values);
+            if (sharedFlagsAccessor != null) {
+                values.add(createDataValue(sharedFlagsAccessor, glowing ? (byte) 0x40 : (byte) 0x00));
+            }
+            if (skinLayersAccessor != null) {
+                values.add(createDataValue(skinLayersAccessor, (byte) 0x7F));
+            }
+            return values.isEmpty() ? null : setEntityDataCtor.newInstance(entityId, values);
         } catch (Throwable t) {
             return null;
         }
@@ -361,7 +550,7 @@ public final class NpcPackets {
         }
         try {
             Object handle = viewer.getClass().getMethod("getHandle").invoke(viewer);
-            Object connection = locate(handle.getClass(), "connection").get(handle);
+            Object connection = getConnection(handle);
             Method send = findSend(connection.getClass());
             if (send != null) {
                 send.invoke(connection, packet);
@@ -372,6 +561,22 @@ public final class NpcPackets {
             logSendFailure(t.getClass().getName() + ": " + String.valueOf(t.getMessage()), t);
         }
         return false;
+    }
+
+    private static Object getConnection(Object handle) throws Exception {
+        try {
+            return locate(handle.getClass(), "connection").get(handle);
+        } catch (NoSuchFieldException e) {
+            for (Class<?> c = handle.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (!Modifier.isStatic(f.getModifiers()) && f.getType().getName().contains("PacketListener")) {
+                        f.setAccessible(true);
+                        return f.get(handle);
+                    }
+                }
+            }
+            throw e;
+        }
     }
 
     private static void logSendFailure(String message, Throwable cause) {

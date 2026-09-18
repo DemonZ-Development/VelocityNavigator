@@ -60,16 +60,6 @@ public final class ConnectionWorkflow {
 
     public static void connectFromSelection(VelocityNavigator plugin, Player player, Config config,
                                             RouteDecision decision, String targetServer, String reason) {
-        boolean stillAvailable = decision.onlineCandidates().stream()
-                .anyMatch(candidate -> candidate.equalsIgnoreCase(targetServer));
-        if (!stillAvailable) {
-            plugin.cooldowns().clear(player.getUniqueId());
-            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
-                    Map.of("reason", config.language().text("reasons.selection_unavailable"),
-                            "player", player.getUsername()), player));
-            return;
-        }
-
         boolean sameServer = player.getCurrentServer()
                 .map(current -> current.getServerInfo().getName().equalsIgnoreCase(targetServer))
                 .orElse(false);
@@ -77,6 +67,16 @@ public final class ConnectionWorkflow {
             plugin.cooldowns().clear(player.getUniqueId());
             player.sendMessage(MessageFormatter.render(config.messages().alreadyConnected(),
                     Map.of("server", targetServer, "player", player.getUsername()), player));
+            return;
+        }
+
+        boolean stillAvailable = decision.onlineCandidates().stream()
+                .anyMatch(candidate -> candidate.equalsIgnoreCase(targetServer));
+        if (!stillAvailable) {
+            plugin.cooldowns().clear(player.getUniqueId());
+            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
+                    Map.of("reason", config.language().text("reasons.selection_unavailable"),
+                            "player", player.getUsername()), player));
             return;
         }
 
@@ -93,6 +93,45 @@ public final class ConnectionWorkflow {
         player.sendMessage(MessageFormatter.render(config.messages().connecting(),
                 Map.of("server", targetServer, "player", player.getUsername()), player));
         connectWithRetry(plugin, player, config, target.get(), selectionDecision, reason);
+    }
+
+    public static void connectFromBackendSelection(VelocityNavigator plugin, Player player, Config config,
+                                                   RouteDecision decision, String targetServer) {
+        if (player == null || targetServer == null || targetServer.isBlank()) {
+            return;
+        }
+        String normalizedTarget = targetServer.trim();
+
+        boolean sameServer = player.getCurrentServer()
+                .map(current -> current.getServerInfo().getName().equalsIgnoreCase(normalizedTarget))
+                .orElse(false);
+        if (sameServer && !config.commands().reconnectIfSameServer()) {
+            plugin.cooldowns().clear(player.getUniqueId());
+            player.sendMessage(MessageFormatter.render(config.messages().alreadyConnected(),
+                    Map.of("server", normalizedTarget, "player", player.getUsername()), player));
+            return;
+        }
+
+        Optional<RegisteredServer> target = plugin.server().getServer(normalizedTarget);
+        if (target.isEmpty()) {
+            plugin.cooldowns().clear(player.getUniqueId());
+            player.sendMessage(MessageFormatter.render(config.messages().noLobbyFound(),
+                    Map.of("reason", config.language().text("reasons.selection_unregistered"),
+                            "player", player.getUsername()), player));
+            return;
+        }
+
+        RouteDecision selectionDecision = decision != null
+                ? withTargetFirst(decision, normalizedTarget, "backend_selection")
+                : new RouteDecision(
+                        player.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse(""),
+                        null, null, List.of(normalizedTarget), List.of(normalizedTarget),
+                        normalizedTarget, false, "backend_selection",
+                        config.routing().selectionMode(), List.of(normalizedTarget));
+
+        player.sendMessage(MessageFormatter.render(config.messages().connecting(),
+                Map.of("server", normalizedTarget, "player", player.getUsername()), player));
+        connectWithRetry(plugin, player, config, target.get(), selectionDecision, "backend_selection");
     }
 
     public static void connectWithRetry(VelocityNavigator plugin, Player player, Config config, RegisteredServer target,

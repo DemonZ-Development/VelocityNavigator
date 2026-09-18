@@ -25,7 +25,7 @@ Install both plugins on the **Velocity proxy**, not just on Paper or another bac
 your-velocity-server/
 └── plugins/
     ├── georestrict-2.0.1.jar
-    └── VelocityNavigator-4.5.0.jar
+    └── VelocityNavigator-4.5.1.jar
 ```
 
 The GeoRestrict JAR can also run on backend platforms, but VelocityNavigator's geo-routing integration looks for its API on the proxy. If GeoRestrict exists only on Paper, it will not be detected for proxy routing.

@@ -79,7 +79,7 @@ Unlike other navigators requiring separate plugins or Citizens, VelocityNavigato
 
 [LIST]
 [*][B]Single Universal JAR:[/B] The exact same JAR file placed on Velocity runs on Paper, Spigot, and Folia backends.
-[*][B]Zero-NMS Packet NPCs:[/B] Spawn lightweight NPCs without version-locked NMS code. Compatible across Paper 1.16.5-1.21.x and Folia out of the box. Fetch player skins, configure click actions (server connect, open menu, dispatch commands), and manage in-game via /vn npc.
+[*][B]Zero-NMS Packet NPCs:[/B] Spawn lightweight NPCs without version-locked NMS code. Compatible across Paper 1.16.5-26.3 and Folia out of the box. Fetch player skins, configure click actions (server connect, open menu, dispatch commands), and manage in-game via /vn npc.
 [*][B]Backend YAML Menus (plugins/VelocityNavigator/menus/*.yml):[/B] Build custom inventory menus on backends without third-party GUI plugins. Supports custom model data, skull owners, sounds, and multi-actions.
 [*][B]PlaceholderAPI Bridge:[/B] Access proxy values (%velocitynavigator_lobby%, %velocitynavigator_party_leader%, %velocitynavigator_server_status_<server>%) on backends.
 [/LIST]
@@ -141,7 +141,7 @@ Supports JSON files, SQLite, MySQL, MariaDB, and PostgreSQL with HikariCP connec
 [SIZE=5][B]11. Five-Minute Quick Start[/B][/SIZE]
 
 [LIST=1]
-[*]Put VelocityNavigator-4.5.0.jar in Velocity's plugins/ directory.
+[*]Put VelocityNavigator-4.5.1.jar in Velocity's plugins/ directory.
 [*]Start the proxy once to generate default configuration, then open plugins/velocitynavigator/navigator.toml.
 [*]Configure your lobby pool:
 [/LIST]
@@ -179,7 +179,7 @@ default_lobbies = ["lobby-1", "lobby-2", "lobby-3"]
 [SIZE=5][B]13. Compatibility[/B][/SIZE]
 [LIST]
 [*]Velocity 3.4.x (Java 17+), 3.5.x (Java 21+), 4.0.0 (Java 25)
-[*]Paper, Spigot, Folia 1.16.5-1.21.x+ (Optional Backend Bridge)
+[*]Paper, Spigot, Folia 1.16.5-26.3+ (Optional Backend Bridge)
 [*]GeyserMC & Floodgate (Native Bedrock forms)
 [*]PlaceholderAPI, Prometheus & Grafana, MaxMind & GeoRestrict
 [/LIST]

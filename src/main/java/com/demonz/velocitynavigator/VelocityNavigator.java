@@ -116,7 +116,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Plugin(
         id = "velocitynavigator",
         name = "VelocityNavigator",
-        version = "4.5.0",
+        version = "4.5.1",
         description = "Lobby routing and load balancing for Velocity proxies.",
         authors = {"DemonZDevelopment"},
         dependencies = {
@@ -1065,11 +1065,13 @@ public final class VelocityNavigator implements NavigatorAPI {
             return;
         }
         previewRoute(player)
-                .thenAccept(decision -> ConnectionWorkflow.connectFromSelection(
-                        this, player, config(), decision, targetServer, "chat_menu"))
+                .thenAccept(decision -> ConnectionWorkflow.connectFromBackendSelection(
+                        this, player, config(), decision, targetServer))
                 .exceptionally(throwable -> {
                     logger.debug("[VelocityNavigator] Backend selection for {} failed: {}",
                             player.getUsername(), throwable.getMessage());
+                    ConnectionWorkflow.connectFromBackendSelection(
+                            this, player, config(), null, targetServer);
                     return null;
                 });
     }
