@@ -3,6 +3,28 @@
 This file documents all notable changes to VelocityNavigator.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.5.2] - 2026-10-10
+
+### Added
+
+- Added Halloween easter egg.
+
+### Fixed
+
+- Enforce authentication on every proxy backend transfer, including requests initiated by other commands or plugins. Pending players can enter only the configured holding server; an unavailable authentication service blocks admission.
+- Preserve account login failures and lockouts across disconnects. Successful authentication and expiry still clear them.
+- Read the `[settings]` layout emitted by the authentication file writer and shown in the setup guide. Authentication enablement, hashing, holding-server selection, and session settings now override main-file values correctly; legacy `[auth]` and flat layouts remain supported.
+- Keep repeated Redis circuit snapshots from restarting cooldowns or resetting half-open probes. Transition timestamps reject stale state after recovery, including transitions within the same clock millisecond.
+- Include contextual fallback-chain lobbies in health inspection so routing can select healthy static backups.
+- Verify legacy SHA-256 credentials with their original algorithm and upgrade them to Argon2id after a successful login when Argon2id is configured.
+
+### Improved
+
+- Verify Argon2id records using their encoded version and cost parameters, with limits on memory, iterations, parallelism, salt length, and hash length. Reject malformed credential records without opening a session.
+- Preserve the existing Redis circuit state fields for older peers and add transition timestamps for upgraded peers.
+- Correct descriptions of hashing costs, account lockouts, proxy-local sessions, and the player-load scoring used by `least_connections`.
+- Run the complete test suite against the Velocity 4 API by resolving the legacy Spigot test harness's SnakeYAML conflict with a test-only dependency. This dependency is excluded from the release JAR.
+
 ## [4.5.1] - 2026-09-18
 
 Small patch release fixing server routing for backend NPCs and menus, plus compatibility updates for Paper 26.3+.

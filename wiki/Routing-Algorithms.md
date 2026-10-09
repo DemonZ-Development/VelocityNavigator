@@ -129,7 +129,7 @@ default_lobbies = [
 
 ## 6. Least Connections (`least_connections`)
 
-You select the server with the lowest EMA of active connections and connection rate.
+You select the server with the lowest score combining an EMA of online player counts and a recent connection rate.
 
 **Complexity**: O(n). You scan all candidates and compute EMA.
 

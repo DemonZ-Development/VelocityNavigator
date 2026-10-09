@@ -29,7 +29,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class CircuitBreaker {
 
-    private record BreakerState(CircuitBreakerState state, int failureCount, Instant openSince, int halfOpenTests, int halfOpenSuccesses, Instant halfOpenGrantedAt) {}
+    private record BreakerState(CircuitBreakerState state, int failureCount, Instant openSince, int halfOpenTests, int halfOpenSuccesses, Instant halfOpenGrantedAt, Instant changedAt) {}
+
+    public record Snapshot(CircuitBreakerState state, long changedAtEpochMilli) {}
 
     private final ConcurrentMap<String, BreakerState> states = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, AtomicLong> tripCounts = new ConcurrentHashMap<>();
@@ -63,7 +65,7 @@ public final class CircuitBreaker {
                     if (current != null && current.state == CircuitBreakerState.OPEN
                             && clock.now().isAfter(current.openSince.plusSeconds(cooldownSeconds))) {
                         available.set(true);
-                        return new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount, current.openSince, 1, 0, clock.now());
+                        return new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount, current.openSince, 1, 0, clock.now(), transitionTime(current));
                     }
                     return current;
                 });
@@ -76,12 +78,12 @@ public final class CircuitBreaker {
                             && current.halfOpenTests < halfOpenMaxTests) {
                         available.set(true);
                         return new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount,
-                                current.openSince, current.halfOpenTests + 1, current.halfOpenSuccesses, clock.now());
+                                current.openSince, current.halfOpenTests + 1, current.halfOpenSuccesses, clock.now(), current.changedAt);
                     }
                     if (current != null && current.state == CircuitBreakerState.HALF_OPEN) {
                         Instant grantedAt = current.halfOpenGrantedAt != null ? current.halfOpenGrantedAt : current.openSince;
                         if (grantedAt != null && clock.now().isAfter(grantedAt.plusSeconds(cooldownSeconds))) {
-                            return new BreakerState(CircuitBreakerState.OPEN, current.failureCount, clock.now(), 0, 0, null);
+                            return new BreakerState(CircuitBreakerState.OPEN, current.failureCount, clock.now(), 0, 0, null, transitionTime(current));
                         }
                     }
                     return current;
@@ -98,15 +100,15 @@ public final class CircuitBreaker {
                 return null;
             }
             return switch (current.state) {
-                case CLOSED -> new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null);
+                case CLOSED -> new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null, current.changedAt);
                 case OPEN -> current;
                 case HALF_OPEN -> {
                     int successes = current.halfOpenSuccesses + 1;
                     if (successes >= halfOpenMaxTests) {
-                        yield new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null);
+                        yield new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null, transitionTime(current));
                     }
                     yield new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount,
-                            current.openSince, current.halfOpenTests, successes, current.halfOpenGrantedAt);
+                            current.openSince, current.halfOpenTests, successes, current.halfOpenGrantedAt, current.changedAt);
                 }
             };
         });
@@ -116,21 +118,21 @@ public final class CircuitBreaker {
         String normalizedServerName = normalize(serverName);
         states.compute(normalizedServerName, (key, current) -> {
             if (current == null) {
-                current = new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null);
+                current = new BreakerState(CircuitBreakerState.CLOSED, 0, null, 0, 0, null, transitionTime(null));
             }
             return switch (current.state) {
                 case CLOSED -> {
                     int newCount = current.failureCount + 1;
                     if (newCount >= failureThreshold) {
                         tripCounts.computeIfAbsent(normalizedServerName, k -> new AtomicLong(0)).incrementAndGet();
-                        yield new BreakerState(CircuitBreakerState.OPEN, newCount, clock.now(), 0, 0, null);
+                        yield new BreakerState(CircuitBreakerState.OPEN, newCount, clock.now(), 0, 0, null, transitionTime(current));
                     }
-                    yield new BreakerState(CircuitBreakerState.CLOSED, newCount, null, 0, 0, null);
+                    yield new BreakerState(CircuitBreakerState.CLOSED, newCount, null, 0, 0, null, current.changedAt);
                 }
-                case OPEN -> new BreakerState(CircuitBreakerState.OPEN, current.failureCount + 1, current.openSince, 0, 0, null);
+                case OPEN -> new BreakerState(CircuitBreakerState.OPEN, current.failureCount + 1, current.openSince, 0, 0, null, current.changedAt);
                 case HALF_OPEN -> {
                     tripCounts.computeIfAbsent(normalizedServerName, k -> new AtomicLong(0)).incrementAndGet();
-                    yield new BreakerState(CircuitBreakerState.OPEN, current.failureCount + 1, clock.now(), 0, 0, null);
+                    yield new BreakerState(CircuitBreakerState.OPEN, current.failureCount + 1, clock.now(), 0, 0, null, transitionTime(current));
                 }
             };
         });
@@ -146,7 +148,7 @@ public final class CircuitBreaker {
             states.compute(normalizedServerName, (key, current) -> {
                 if (current != null && current.state == CircuitBreakerState.OPEN
                         && clock.now().isAfter(current.openSince.plusSeconds(cooldownSeconds))) {
-                    return new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount, current.openSince, 0, 0, null);
+                    return new BreakerState(CircuitBreakerState.HALF_OPEN, current.failureCount, current.openSince, 0, 0, null, transitionTime(current));
                 }
                 return current;
             });
@@ -171,13 +173,42 @@ public final class CircuitBreaker {
 
     public void applyRemoteState(String serverName, CircuitBreakerState state) {
         String normalized = normalize(serverName);
-        if (state == null || state == CircuitBreakerState.CLOSED) {
-            states.remove(normalized);
-        } else if (state == CircuitBreakerState.OPEN) {
-            states.put(normalized, new BreakerState(CircuitBreakerState.OPEN, failureThreshold, clock.now(), 0, 0, null));
-        } else {
-            states.put(normalized, new BreakerState(CircuitBreakerState.HALF_OPEN, failureThreshold, clock.now(), 0, 0, null));
-        }
+        CircuitBreakerState incoming = state == null ? CircuitBreakerState.CLOSED : state;
+        states.compute(normalized, (key, current) -> {
+            if (current != null && current.state == incoming) return current;
+            if (current == null && incoming == CircuitBreakerState.CLOSED) return null;
+            return remoteState(incoming, transitionTime(current));
+        });
+    }
+
+    public void applyRemoteState(String serverName, CircuitBreakerState state, long changedAtEpochMilli) {
+        if (state == null || changedAtEpochMilli < 0) return;
+        Instant changedAt = Instant.ofEpochMilli(changedAtEpochMilli);
+        states.compute(normalize(serverName), (key, current) -> {
+            if (current != null && !changedAt.isAfter(current.changedAt)) return current;
+            return remoteState(state, changedAt);
+        });
+    }
+
+    public Map<String, Snapshot> getSnapshots() {
+        Map<String, Snapshot> snapshot = new LinkedHashMap<>();
+        states.keySet().forEach(server -> {
+            getState(server);
+            BreakerState current = states.get(server);
+            if (current != null) snapshot.put(server, new Snapshot(current.state, current.changedAt.toEpochMilli()));
+        });
+        return Map.copyOf(snapshot);
+    }
+
+    private BreakerState remoteState(CircuitBreakerState state, Instant changedAt) {
+        return state == CircuitBreakerState.CLOSED
+                ? new BreakerState(state, 0, null, 0, 0, null, changedAt)
+                : new BreakerState(state, failureThreshold, changedAt, 0, 0, null, changedAt);
+    }
+
+    private Instant transitionTime(BreakerState current) {
+        Instant now = Instant.ofEpochMilli(clock.now().toEpochMilli());
+        return current != null && !now.isAfter(current.changedAt) ? current.changedAt.plusMillis(1) : now;
     }
 
     public void reset(String serverName) {

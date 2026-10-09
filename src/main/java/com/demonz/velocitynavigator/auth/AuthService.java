@@ -27,8 +27,10 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -65,7 +67,7 @@ public final class AuthService {
     ) {
         this.storage = storage;
         this.logger = logger != null ? logger : NOPLogger.NOP_LOGGER;
-        this.algorithm = algorithm == null || algorithm.isBlank() ? "argon2id" : algorithm.toLowerCase(java.util.Locale.ROOT);
+        this.algorithm = algorithm == null || algorithm.isBlank() ? "argon2id" : algorithm.trim().toLowerCase(java.util.Locale.ROOT);
         this.minPasswordLength = Math.max(4, minPasswordLength);
         this.sessionTimeout = Duration.ofMinutes(Math.max(1, sessionTimeoutMinutes));
     }
@@ -95,11 +97,7 @@ public final class AuthService {
                 || rawPassword.length() < minPasswordLength || rawPassword.length() > 128) {
             return false;
         }
-        byte[] salt = new byte[16];
-        secureRandom.nextBytes(salt);
-        String saltBase64 = Base64.getEncoder().encodeToString(salt);
-        String hash = hashPassword(rawPassword, saltBase64);
-        storage.saveCredentials(player, hash, saltBase64);
+        storePassword(player, rawPassword);
         openSession(player);
         return true;
     }
@@ -115,15 +113,17 @@ public final class AuthService {
         StorageProvider.AuthRecord auth = record.get();
         String storedHash = auth.passwordHash();
         String salt = auth.salt();
+        if (storedHash == null || salt == null) return false;
         if (storedHash.startsWith("$argon2")) {
             if (!verifyArgon2(rawPassword, salt, storedHash)) {
                 return false;
             }
         } else {
-            String computed = hashPassword(rawPassword, salt);
+            String computed = hashSha256(rawPassword, salt);
             if (!MessageDigest.isEqual(computed.getBytes(StandardCharsets.UTF_8), storedHash.getBytes(StandardCharsets.UTF_8))) {
                 return false;
             }
+            if ("argon2id".equals(algorithm)) storePassword(player, rawPassword);
         }
         openSession(player);
         return true;
@@ -153,19 +153,17 @@ public final class AuthService {
         return hashSha256(rawPassword, saltBase64);
     }
 
+    private void storePassword(UUID player, String rawPassword) {
+        byte[] salt = new byte[16];
+        secureRandom.nextBytes(salt);
+        String saltBase64 = Base64.getEncoder().encodeToString(salt);
+        storage.saveCredentials(player, hashPassword(rawPassword, saltBase64), saltBase64);
+    }
+
     private String hashArgon2(String rawPassword, String saltBase64) {
         try {
             byte[] salt = Base64.getDecoder().decode(saltBase64);
-            Argon2Parameters params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                    .withMemoryAsKB(ARGON2_MEMORY)
-                    .withIterations(ARGON2_ITERATIONS)
-                    .withParallelism(ARGON2_PARALLELISM)
-                    .withSalt(salt)
-                    .build();
-            Argon2BytesGenerator generator = new Argon2BytesGenerator();
-            generator.init(params);
-            byte[] hash = new byte[ARGON2_HASH_LENGTH];
-            generator.generateBytes(rawPassword.getBytes(StandardCharsets.UTF_8), hash);
+            byte[] hash = argon2Bytes(rawPassword, salt, ARGON2_MEMORY, ARGON2_ITERATIONS, ARGON2_PARALLELISM, ARGON2_HASH_LENGTH);
             return "$argon2id$v=19$m=" + ARGON2_MEMORY + ",t=" + ARGON2_ITERATIONS + ",p=" + ARGON2_PARALLELISM + "$" + saltBase64 + "$" + Base64.getEncoder().encodeToString(hash);
         } catch (Exception e) {
             logger.error("Failed to hash password with Argon2id", e);
@@ -175,12 +173,44 @@ public final class AuthService {
 
     private boolean verifyArgon2(String rawPassword, String saltBase64, String storedHash) {
         try {
-            String recomputed = hashArgon2(rawPassword, saltBase64);
-            return MessageDigest.isEqual(recomputed.getBytes(StandardCharsets.UTF_8), storedHash.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            logger.error("Failed to verify Argon2id password", e);
+            if (storedHash.length() > 1024 || saltBase64.length() > 128) return false;
+            String[] fields = storedHash.split("\\$", -1);
+            if (fields.length != 6 || !fields[0].isEmpty() || !"argon2id".equals(fields[1]) || !"v=19".equals(fields[2])) return false;
+            Map<String, Integer> costs = new HashMap<>();
+            for (String parameter : fields[3].split(",", -1)) {
+                String[] value = parameter.split("=", -1);
+                if (value.length != 2 || costs.putIfAbsent(value[0], Integer.parseInt(value[1])) != null) return false;
+            }
+            if (!costs.keySet().equals(Set.of("m", "t", "p"))) return false;
+            int memory = costs.get("m");
+            int iterations = costs.get("t");
+            int parallelism = costs.get("p");
+            if (parallelism < 1 || parallelism > 16 || memory < 8 * parallelism || memory > 262144
+                    || iterations < 1 || iterations > 10) return false;
+            byte[] salt = Base64.getDecoder().decode(fields[4]);
+            byte[] expected = Base64.getDecoder().decode(fields[5]);
+            if (salt.length < 8 || salt.length > 64 || expected.length < 16 || expected.length > 64
+                    || !MessageDigest.isEqual(salt, Base64.getDecoder().decode(saltBase64))) return false;
+            return MessageDigest.isEqual(expected, argon2Bytes(rawPassword, salt, memory, iterations, parallelism, expected.length));
+        } catch (RuntimeException e) {
+            logger.debug("Invalid Argon2id credential record", e);
             return false;
         }
+    }
+
+    private byte[] argon2Bytes(String rawPassword, byte[] salt, int memory, int iterations, int parallelism, int length) {
+        Argon2Parameters params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+                .withMemoryAsKB(memory)
+                .withIterations(iterations)
+                .withParallelism(parallelism)
+                .withSalt(salt)
+                .build();
+        Argon2BytesGenerator generator = new Argon2BytesGenerator();
+        generator.init(params);
+        byte[] hash = new byte[length];
+        generator.generateBytes(rawPassword.getBytes(StandardCharsets.UTF_8), hash);
+        return hash;
     }
 
     private String hashSha256(String rawPassword, String saltBase64) {

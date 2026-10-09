@@ -189,11 +189,7 @@ public final class RedisSyncService implements Closeable {
     private void publishState() {
         try {
             List<Map.Entry<String, String>> messages = new ArrayList<>();
-            JsonObject circuit = envelope("circuit");
-            JsonObject circuitData = new JsonObject();
-            if (plugin.circuitBreaker() != null) plugin.circuitBreaker().getStates().forEach((name, state) -> circuitData.addProperty(name, state.name()));
-            circuit.add("data", circuitData);
-            messages.add(Map.entry(channel("state"), circuit.toString()));
+            messages.add(Map.entry(channel("state"), circuitEnvelope().toString()));
 
             JsonObject health = envelope("health");
             JsonObject healthData = new JsonObject();
@@ -217,6 +213,19 @@ public final class RedisSyncService implements Closeable {
         } catch (RuntimeException error) {
             plugin.logger().debug("[VelocityNavigator] Redis state publish failed: {}", error.getMessage());
         }
+    }
+
+    JsonObject circuitEnvelope() {
+        JsonObject circuit = envelope("circuit");
+        JsonObject data = new JsonObject();
+        JsonObject changedAt = new JsonObject();
+        if (plugin.circuitBreaker() != null) plugin.circuitBreaker().getSnapshots().forEach((name, snapshot) -> {
+            data.addProperty(name, snapshot.state().name());
+            changedAt.addProperty(name, snapshot.changedAtEpochMilli());
+        });
+        circuit.add("data", data);
+        circuit.add("changed_at", changedAt);
+        return circuit;
     }
 
     private void handle(String channel, String raw) {
@@ -243,7 +252,8 @@ public final class RedisSyncService implements Closeable {
             String type = string(payload, "type");
             JsonObject data = payload.has("data") && payload.get("data").isJsonObject() ? payload.getAsJsonObject("data") : new JsonObject();
             switch (type) {
-                case "circuit" -> mergeCircuit(data);
+                case "circuit" -> mergeCircuit(data, payload.has("changed_at") && payload.get("changed_at").isJsonObject()
+                        ? payload.getAsJsonObject("changed_at") : new JsonObject());
                 case "health" -> mergeHealth(data);
                 case "affinity" -> mergeAffinity(data);
                 default -> {
@@ -279,12 +289,17 @@ public final class RedisSyncService implements Closeable {
         plugin.logger().info("[VelocityNavigator] Dynamically registered backend {} at {}:{} from Redis.", name, host, port);
     }
 
-    private void mergeCircuit(JsonObject data) {
+    private void mergeCircuit(JsonObject data, JsonObject changedAt) {
         if (plugin.circuitBreaker() == null) return;
         for (Map.Entry<String, JsonElement> entry : data.entrySet()) {
             try {
-                plugin.circuitBreaker().applyRemoteState(entry.getKey(), CircuitBreakerState.valueOf(entry.getValue().getAsString()));
-            } catch (IllegalArgumentException ignored) {
+                CircuitBreakerState state = CircuitBreakerState.valueOf(entry.getValue().getAsString());
+                if (changedAt.has(entry.getKey())) {
+                    plugin.circuitBreaker().applyRemoteState(entry.getKey(), state, changedAt.get(entry.getKey()).getAsLong());
+                } else {
+                    plugin.circuitBreaker().applyRemoteState(entry.getKey(), state);
+                }
+            } catch (RuntimeException ignored) {
             }
         }
     }

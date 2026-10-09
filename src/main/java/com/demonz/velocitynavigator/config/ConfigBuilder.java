@@ -268,46 +268,55 @@ final class ConfigBuilder {
         }
 
         Object authEnabledVal = TomlReaderUtils.rawValue(authToml, "auth.enabled");
+        if (authEnabledVal == null && authToml != toml) authEnabledVal = TomlReaderUtils.rawValue(authToml, "settings.enabled");
         if (authEnabledVal == null) authEnabledVal = TomlReaderUtils.rawValue(authToml, "enabled");
         if (authEnabledVal == null) authEnabledVal = TomlReaderUtils.rawValue(toml, "auth.enabled");
         boolean authEnabled = authEnabledVal instanceof Boolean b ? b : defaults.auth().enabled();
 
         Object authAlgVal = TomlReaderUtils.rawValue(authToml, "auth.algorithm");
+        if (authAlgVal == null && authToml != toml) authAlgVal = TomlReaderUtils.rawValue(authToml, "settings.algorithm");
         if (authAlgVal == null) authAlgVal = TomlReaderUtils.rawValue(authToml, "algorithm");
         if (authAlgVal == null) authAlgVal = TomlReaderUtils.rawValue(toml, "auth.algorithm");
         String authAlg = authAlgVal instanceof String s ? s : defaults.auth().algorithm();
 
         Object auth2faVal = TomlReaderUtils.rawValue(authToml, "auth.enable_2fa");
+        if (auth2faVal == null && authToml != toml) auth2faVal = TomlReaderUtils.rawValue(authToml, "settings.enable_2fa");
         if (auth2faVal == null) auth2faVal = TomlReaderUtils.rawValue(authToml, "enable_2fa");
         if (auth2faVal == null) auth2faVal = TomlReaderUtils.rawValue(toml, "auth.enable_2fa");
         boolean auth2fa = auth2faVal instanceof Boolean b ? b : defaults.auth().enable2fa();
 
         Object pinLenVal = TomlReaderUtils.rawValue(authToml, "auth.pin_length");
+        if (pinLenVal == null && authToml != toml) pinLenVal = TomlReaderUtils.rawValue(authToml, "settings.pin_length");
         if (pinLenVal == null) pinLenVal = TomlReaderUtils.rawValue(authToml, "pin_length");
         if (pinLenVal == null) pinLenVal = TomlReaderUtils.rawValue(toml, "auth.pin_length");
         int authPinLen = pinLenVal instanceof Number n ? n.intValue() : defaults.auth().pinLength();
 
         Object voidVal = TomlReaderUtils.rawValue(authToml, "auth.void_world_holding");
+        if (voidVal == null && authToml != toml) voidVal = TomlReaderUtils.rawValue(authToml, "settings.void_world_holding");
         if (voidVal == null) voidVal = TomlReaderUtils.rawValue(authToml, "void_world_holding");
         if (voidVal == null) voidVal = TomlReaderUtils.rawValue(toml, "auth.void_world_holding");
         boolean authVoidHolding = voidVal instanceof Boolean b ? b : defaults.auth().voidWorldHolding();
 
         Object holdingVal = TomlReaderUtils.rawValue(authToml, "auth.holding_server");
+        if (holdingVal == null && authToml != toml) holdingVal = TomlReaderUtils.rawValue(authToml, "settings.holding_server");
         if (holdingVal == null) holdingVal = TomlReaderUtils.rawValue(authToml, "holding_server");
         if (holdingVal == null) holdingVal = TomlReaderUtils.rawValue(toml, "auth.holding_server");
         String authHoldingServer = holdingVal instanceof String s ? s : defaults.auth().holdingServer();
 
         Object timeoutVal = TomlReaderUtils.rawValue(authToml, "auth.session_timeout_minutes");
+        if (timeoutVal == null && authToml != toml) timeoutVal = TomlReaderUtils.rawValue(authToml, "settings.session_timeout_minutes");
         if (timeoutVal == null) timeoutVal = TomlReaderUtils.rawValue(authToml, "session_timeout_minutes");
         if (timeoutVal == null) timeoutVal = TomlReaderUtils.rawValue(toml, "auth.session_timeout_minutes");
         int authSessionTimeout = timeoutVal instanceof Number n ? n.intValue() : defaults.auth().sessionTimeoutMinutes();
 
         Object minPwdLenVal = TomlReaderUtils.rawValue(authToml, "auth.min_password_length");
+        if (minPwdLenVal == null && authToml != toml) minPwdLenVal = TomlReaderUtils.rawValue(authToml, "settings.min_password_length");
         if (minPwdLenVal == null) minPwdLenVal = TomlReaderUtils.rawValue(authToml, "min_password_length");
         if (minPwdLenVal == null) minPwdLenVal = TomlReaderUtils.rawValue(toml, "auth.min_password_length");
         int authMinPasswordLength = minPwdLenVal instanceof Number n ? n.intValue() : defaults.auth().minPasswordLength();
 
         Object bedrockFormVal = TomlReaderUtils.rawValue(authToml, "auth.bedrock_form_enabled");
+        if (bedrockFormVal == null && authToml != toml) bedrockFormVal = TomlReaderUtils.rawValue(authToml, "settings.bedrock_form_enabled");
         if (bedrockFormVal == null) bedrockFormVal = TomlReaderUtils.rawValue(authToml, "bedrock_form_enabled");
         if (bedrockFormVal == null) bedrockFormVal = TomlReaderUtils.rawValue(toml, "auth.bedrock_form_enabled");
         boolean authBedrockFormEnabled = bedrockFormVal instanceof Boolean b

@@ -42,7 +42,7 @@ sequenceDiagram
 - **`round_robin`**: You alternate players between lobbies in rotation.
 - **`random`**: You assign players a random lobby.
 - **`weighted_round_robin`**: You route more players to servers with higher weights.
-- **`least_connections`**: You use EMA of connection rates to handle burst traffic.
+- **`least_connections`**: You combine smoothed player counts with recent connection rates to handle burst traffic.
 - **`consistent_hash`**: You map player UUIDs to specific servers.
 - **`latency`**: You select the candidate with the lowest proxy-to-backend ping.
 

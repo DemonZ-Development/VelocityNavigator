@@ -6,7 +6,7 @@
 
     <groupId>com.demonz</groupId>
     <artifactId>VelocityNavigator</artifactId>
-    <version>4.5.1</version>
+    <version>4.5.2</version>
     <packaging>jar</packaging>
 
     <name>VelocityNavigator</name>
@@ -328,6 +328,12 @@
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
             <version>${bstats.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>1.33</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

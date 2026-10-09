@@ -390,11 +390,14 @@ public final class RoutePlanner {
         if (contextual.enabled() && !normalized.isBlank()) {
             String group = contextual.sources().get(normalized);
             if (group != null) {
-                Config.GroupConfig groupConfig = contextual.groups().get(group);
-                if (groupConfig != null) {
-                    for (Config.LobbyEntry entry : groupConfig.servers()) {
-                        targets.add(entry.server());
-                    }
+                Set<String> groups = new LinkedHashSet<>();
+                groups.add(group);
+                if (contextual.fallbackToDefault()) {
+                    groups.addAll(contextual.fallbackChain().getOrDefault(group, List.of()));
+                }
+                for (String targetGroup : groups) {
+                    Config.GroupConfig groupConfig = contextual.groups().get(targetGroup);
+                    if (groupConfig != null) groupConfig.servers().forEach(entry -> targets.add(entry.server()));
                 }
             }
         }

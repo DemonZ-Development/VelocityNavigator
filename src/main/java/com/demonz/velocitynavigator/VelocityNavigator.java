@@ -54,6 +54,7 @@ import com.demonz.velocitynavigator.routing.ServerLoadTracker;
 import com.demonz.velocitynavigator.util.CooldownService;
 import com.demonz.velocitynavigator.util.FirstRunHandler;
 import com.demonz.velocitynavigator.util.ManagedServerService;
+import com.demonz.velocitynavigator.util.ProxyHalloweenEasterEgg;
 import com.demonz.velocitynavigator.storage.*;
 import com.demonz.velocitynavigator.auth.AuthAttemptService;
 import com.demonz.velocitynavigator.auth.AuthService;
@@ -116,7 +117,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Plugin(
         id = "velocitynavigator",
         name = "VelocityNavigator",
-        version = "4.5.1",
+        version = "4.5.2",
         description = "Lobby routing and load balancing for Velocity proxies.",
         authors = {"DemonZDevelopment"},
         dependencies = {
@@ -179,6 +180,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     private ScheduledTask purgeTask;
     private ScheduledTask startupUpdateTask;
     private ScheduledTask affinitySaveTask;
+    private ProxyHalloweenEasterEgg halloweenEasterEgg;
 
     @Inject
     public VelocityNavigator(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactory) {
@@ -258,6 +260,10 @@ public final class VelocityNavigator implements NavigatorAPI {
             long startupMillis = System.currentTimeMillis() - startedAt;
             logger.info("VelocityNavigator v{} enabled in {}ms.", pluginVersion, startupMillis);
             logger.info("[VelocityNavigator] We would love to hear your feedback! Join our Discord: https://discord.com/invite/GYsTt96ypf");
+            if (halloweenEasterEgg == null) {
+                halloweenEasterEgg = new ProxyHalloweenEasterEgg(this, server, logger);
+            }
+            halloweenEasterEgg.start();
         } catch (IOException exception) {
             logger.error("VelocityNavigator could not start because navigator.toml could not be loaded.", exception);
         } catch (Exception exception) {
@@ -267,6 +273,9 @@ public final class VelocityNavigator implements NavigatorAPI {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        if (halloweenEasterEgg != null) {
+            halloweenEasterEgg.stop();
+        }
         NavigatorAPIProvider.clear();
         server.getChannelRegistrar().unregister(JavaInventoryMenuService.CHANNEL);
         if (storageProvider != null) {
@@ -304,7 +313,6 @@ public final class VelocityNavigator implements NavigatorAPI {
     @Subscribe
     public void onPlayerDisconnect(DisconnectEvent event) {
         cancelAuthTimeout(event.getPlayer());
-        AuthAttemptService.reset(event.getPlayer().getUniqueId());
         playerLeaves.incrementAndGet();
         menuSessions.remove(event.getPlayer().getUniqueId());
         pendingInitialQueues.remove(event.getPlayer().getUniqueId());
@@ -511,8 +519,7 @@ public final class VelocityNavigator implements NavigatorAPI {
             ));
             return EventTask.resumeWhenComplete(CompletableFuture.completedFuture(null));
         }
-        if (config.auth().enabled() && authService != null
-                && !authService.isAuthenticated(event.getPlayer().getUniqueId())) {
+        if (isAuthenticationPending(event.getPlayer())) {
             routeToAuthHolding(event);
             return EventTask.resumeWhenComplete(CompletableFuture.completedFuture(null));
         }
@@ -536,6 +543,11 @@ public final class VelocityNavigator implements NavigatorAPI {
     }
 
     private void routeToAuthHolding(PlayerChooseInitialServerEvent event) {
+        if (authService == null) {
+            event.getPlayer().disconnect(MessageFormatter.render(
+                    "<red>Authentication is temporarily unavailable. Please try again later.</red>", event.getPlayer()));
+            return;
+        }
         String holding = config.auth().holdingServer();
         Optional<RegisteredServer> target = server.getServer(holding);
         if (holding.isBlank() || target.isEmpty()) {
@@ -643,7 +655,7 @@ public final class VelocityNavigator implements NavigatorAPI {
 
     public boolean isAuthenticationPending(Player player) {
         return player != null && config != null && config.auth().enabled()
-                && authService != null && !authService.isAuthenticated(player.getUniqueId());
+                && (authService == null || !authService.isAuthenticated(player.getUniqueId()));
     }
 
     private void routeInitialJoin(PlayerChooseInitialServerEvent event, String countryCode) {
@@ -848,7 +860,19 @@ public final class VelocityNavigator implements NavigatorAPI {
     @Subscribe(order = PostOrder.LAST)
     public void onMaintenancePreConnect(ServerPreConnectEvent event) {
         RegisteredServer target = event.getResult().getServer().orElse(null);
-        if (target == null || !isServerInMaintenance(target.getServerInfo().getName())) return;
+        if (target == null) return;
+        if (!isServerInMaintenance(target.getServerInfo().getName())) {
+            Player player = event.getPlayer();
+            if (!isAuthenticationPending(player)
+                    || (authService != null && target.getServerInfo().getName().equalsIgnoreCase(config.auth().holdingServer()))) return;
+            event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            Component message = MessageFormatter.render(authService == null
+                    ? "<red>Authentication is temporarily unavailable. Please try again later.</red>"
+                    : "<yellow>Please authenticate before switching servers.</yellow>", player);
+            if (player.getCurrentServer().isEmpty()) player.disconnect(message);
+            else player.sendMessage(message);
+            return;
+        }
         event.setResult(ServerPreConnectEvent.ServerResult.denied());
         String reason = maintenanceService.serverReason(target.getServerInfo().getName());
         Player player = event.getPlayer();

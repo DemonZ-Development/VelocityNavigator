@@ -4,7 +4,7 @@
 
 # VelocityNavigator
 
-> **4.5.1** · Velocity 3.4.x, 3.5.x, and 4.0.0 · Java 17/21/25 depending on Velocity version · Feature-dependent Paper/Spigot/Folia bridge
+> **4.5.2** · Velocity 3.4.x, 3.5.x, and 4.0.0 · Java 17/21/25 depending on Velocity version · Feature-dependent Paper/Spigot/Folia bridge
 
 VelocityNavigator stops one lobby from taking every player when it appears first in Velocity's `try` list. It chooses a healthy, suitable lobby for initial joins and lobby commands, and gives you controls for maintenance and larger networks.
 

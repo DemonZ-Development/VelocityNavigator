@@ -1,5 +1,5 @@
 name: VelocityNavigator
-version: '4.5.1'
+version: '4.5.2'
 main: com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge
 api-version: '1.16'
 authors: [DemonZDevelopment]

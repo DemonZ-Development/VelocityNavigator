@@ -21,7 +21,7 @@ Simple round-robin routing breaks in production networks. Disconnections, player
 [*][B]Weighted Round Robin (weighted_round_robin):[/B] Distributes traffic proportionally across backends according to assigned server weights. Perfect for mixed hardware deployments (e.g. directing 3x more players to a 64GB dedicated node than an 8GB VPS).
 [*][B]Consistent Hashing (consistent_hash):[/B] Uses a Ketama hash ring with virtual nodes to consistently map player UUIDs to specific backends. Provides deterministic routing while smoothly re-distributing only a fraction of keys when servers are added or removed.
 [*][B]Latency-Aware Ping Routing (latency / ping):[/B] Actively evaluates round-trip ping to each backend and assigns incoming players to the lowest-latency responsive node.
-[*][B]Least Connections (least_connections):[/B] Tracks active concurrent connection workflows to prevent saturated servers from receiving connection spikes during peak join rushes.
+[*][B]Least Connections (least_connections):[/B] Scores servers using smoothed player counts and recent connection rates to distribute burst traffic.
 [*][B]Geo-Location Routing (geo):[/B] Automatically routes international players to regional backend clusters based on player country and continent codes. Supports MaxMind GeoLite2, IP-API, and native GeoRestrict integration.
 [*][B]Sequential Round Robin (round_robin):[/B] Strict cyclic distribution across all healthy candidate backends.
 [*][B]Uniform Random (random):[/B] Pure random distribution across available healthy lobbies.
@@ -109,11 +109,11 @@ Running multiple Velocity proxies behind BGP Anycast or DNS round-robin?
 [SIZE=5][B]7. Enterprise Security & Authentication Engine[/B][/SIZE]
 
 [LIST]
-[*][B]Argon2id Password Hashing:[/B] State-of-the-art password security with configurable memory cost and backward-compatible SHA-256 verification.
-[*][B]Brute-Force Rate Limiting:[/B] Login attempt tracking and temporary IP lockouts stop password guessing attacks.
+[*][B]Argon2id Password Hashing:[/B] Fixed 64 MiB memory, three iterations, and four lanes, with legacy SHA-256 verification and upgrades after successful login.
+[*][B]Brute-Force Rate Limiting:[/B] Account lockouts survive reconnects; a global attempt limit also restricts password guessing.
 [*][B]Holding Lobby Quarantine:[/B] Unauthenticated players are isolated in a holding lobby with movement, interaction, and chat restricted until login.
 [*][B]Native Bedrock Auth Forms:[/B] Bedrock players receive native modal dialogs instead of typing passwords in open chat.
-[*][B]Expiring Session Tokens:[/B] Secure session persistence remembers players across quick reconnects.
+[*][B]Expiring Session Tokens:[/B] Proxy-local sessions remember players across quick reconnects to the same proxy.
 [/LIST]
 
 [CENTER][IMG]https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/marketplace/06-operations.png[/IMG]
@@ -141,7 +141,7 @@ Supports JSON files, SQLite, MySQL, MariaDB, and PostgreSQL with HikariCP connec
 [SIZE=5][B]11. Five-Minute Quick Start[/B][/SIZE]
 
 [LIST=1]
-[*]Put VelocityNavigator-4.5.1.jar in Velocity's plugins/ directory.
+[*]Put VelocityNavigator-4.5.2.jar in Velocity's plugins/ directory.
 [*]Start the proxy once to generate default configuration, then open plugins/velocitynavigator/navigator.toml.
 [*]Configure your lobby pool:
 [/LIST]

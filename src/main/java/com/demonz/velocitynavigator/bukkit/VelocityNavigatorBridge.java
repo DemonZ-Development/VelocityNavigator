@@ -66,6 +66,7 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
     private BackendNPCManager npcManager;
     private Object proximityTaskHandle;
     private Object viewerTaskHandle;
+    private BackendHalloweenEasterEgg halloweenEasterEgg;
 
     @Override
     public void onEnable() {
@@ -99,6 +100,10 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
             getLogger().info("[Folia] Folia detected — using region scheduler for all tasks.");
         }
         getLogger().info("VelocityNavigator universal JAR is running in BACKEND GUI BRIDGE mode.");
+        if (halloweenEasterEgg == null) {
+            halloweenEasterEgg = new BackendHalloweenEasterEgg(this);
+        }
+        halloweenEasterEgg.start();
     }
 
     private void registerPlaceholderAPI() {
@@ -114,6 +119,9 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
 
     @Override
     public void onDisable() {
+        if (halloweenEasterEgg != null) {
+            halloweenEasterEgg.stop();
+        }
         if (!active) return;
         if (updateChecker != null) {
             updateChecker.shutdown();
@@ -242,7 +250,9 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (!active || !handshakeEnabled) return;
+        if (!active) return;
+        if (halloweenEasterEgg != null) halloweenEasterEgg.onPlayerJoin(event.getPlayer());
+        if (!handshakeEnabled) return;
         FoliaSchedulerCompat.runTaskLater(this, event.getPlayer(), () -> {
             if (event.getPlayer().isOnline()) {
                 try {

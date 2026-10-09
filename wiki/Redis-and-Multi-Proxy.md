@@ -82,6 +82,10 @@ Dynamic registration updates the running proxy. It does not edit `velocity.toml`
 
 ## Outages and recovery
 
+Version 4.5.2 adds a `changed_at` timestamp for each circuit state transition. Upgraded proxies ignore duplicate or older snapshots, preserving cooldowns and half-open probe progress. Closed-state timestamps prevent delayed open-state messages from undoing recovery. Keep proxy system clocks synchronized for transition ordering.
+
+Circuit payloads retain the existing state strings for older peers. State-only messages remain accepted, but stale-message ordering requires timestamps; upgrade every proxy to receive the full recovery fix.
+
 Redis acts as a synchronization layer. It is not required for local routing. If Redis drops, proxies continue using local health checks, routing configuration, circuit breakers, and saved affinity data. Remote state and dynamic registration events stall until the connection restores.
 
 The Velocity subscriber reconnects automatically using `reconnect_min_ms` and `reconnect_max_ms`. The state broadcast resumes upon connection. Check the live state:

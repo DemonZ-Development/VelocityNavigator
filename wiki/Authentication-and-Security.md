@@ -11,11 +11,11 @@ Get normal lobby routing working before enabling authentication. A bad holding-s
 
    ```toml
    [servers]
-   holding = "127.0.0.1:25568"
+   auth-holding = "127.0.0.1:25568"
    lobby-1 = "127.0.0.1:25566"
    ```
 
-3. Do not add `holding` to `routing.default_lobbies`, contextual groups, geo-affinity groups, or queue pools.
+3. Do not add `auth-holding` to `routing.default_lobbies`, contextual groups, geo-affinity groups, or queue pools.
 4. Edit `plugins/velocitynavigator/auth.toml`:
 
     ```toml
@@ -46,24 +46,30 @@ Get normal lobby routing working before enabling authentication. A bad holding-s
 5. Run `/vn config validate`. Do not continue until it reports no auth holding-server errors.
 6. Run `/vn reload`, then join with a test account.
 
-The test account lands on `auth-holding`. An interactive Sign Board GUI opens automatically on screen for password entry (protecting passwords from being leaked into public chat). Sign submissions are forwarded to the proxy over the backend bridge plugin channel, where the same rate limiting, validation, and session handling apply as to the chat commands. Java players also retain `/register` or `/login` commands as fallbacks. Bedrock players detected through Floodgate receive matching native registration or login forms.
+The proxy accepts the `[settings]` format above, legacy `[auth]` tables, and flat keys in `auth.toml`. Missing fields fall back to the main configuration. If both tables are present, `[auth]` takes precedence; keep one layout to avoid conflicting values.
+
+The test account lands on `auth-holding`. Java players can authenticate with `/register` or `/login`. The backend bridge attempts to open a private sign prompt; see the limitations below before relying on it. Sign submissions are forwarded to the proxy over the backend bridge plugin channel, where the same rate limiting, validation, and session handling apply as to the commands. Bedrock players detected through Floodgate receive matching native registration or login forms.
 
 | Field | Default | Description |
 |---|---:|---|
 | `enabled` | `true` | Enables auth commands and route enforcement. |
-| `use_sign_gui` | `true` | Opens an interactive Sign Board GUI on join for private password entry. Submissions are validated on the proxy. |
+| `use_sign_gui` | `true` | Exposed in the file template; the current prompt flow does not read this toggle. |
 | `algorithm` | `"Argon2id"` | Hash for new passwords: `Argon2id` or `SHA256`. Argon2id is recommended. |
 | `holding_server` | `"auth-holding"` | Registered, non-routed backend used until authentication succeeds. Required when auth is enabled. |
 | `session_timeout_minutes` | `60` | Lifetime of a proxy-local authenticated session. |
 | `min_password_length` | `6` | Minimum characters required for registration passwords. |
-| `darkness_effect_enabled` | `true` | Applies a blindness darkness effect to pending auth players until logged in. |
-| `restrict_movement` | `true` | Freezes player location until authentication succeeds. |
+| `darkness_effect_enabled` | `true` | Exposed in the template; backend blindness behavior currently uses a fixed policy. |
+| `restrict_movement` | `true` | Exposed in the template; backend movement restriction currently uses a fixed policy. |
+
+The 4.5.2 proxy reads the enablement, algorithm, holding-server, session lifetime, and minimum-password settings. The template also exposes prompt, restriction, and timeout options that are not yet connected to runtime behavior. Pending authentication currently times out with a kick after 60 seconds; `timeout_seconds`, `timeout_action`, and restriction overrides do not change that policy.
+
+The sign implementation sends a client-side sign block but then requires a real server-side `Sign` at that position. It cannot open the editor at a normal air position. Use command authentication until this flow is repaired and verified on your backend version.
 
 ## Player commands
 
 | Command | Purpose |
 |---|---|
-| `/register <password> [repeat]` | Creates credentials; passwords require at least eight characters. |
+| `/register <password> [repeat]` | Creates credentials; passwords must meet `min_password_length`. |
 | `/login <password>` | Opens a session and routes the player from the holding backend. |
 | `/logout` | Ends the session and returns the player to the holding backend. |
 
@@ -77,7 +83,11 @@ A useful first test is:
 
 After registration or login, the player should leave the holding server and receive a normal routed lobby. While authentication is pending, lobby, party, queue, party-chat, and VelocityNavigator admin commands are blocked.
 
-New credentials use Argon2id by default with a unique random salt. Existing unprefixed salted SHA-256 records remain compatible. Hash comparisons use constant-time comparison, and passwords, salts, and codes are omitted from logs.
+Every proxy backend transfer checks authentication, including transfers requested by other commands or plugins. Pending players may enter only the configured holding server. If authentication is enabled but its service is unavailable, admission is denied.
+
+Login failure counts and account lockouts survive disconnects on the same proxy. They clear after successful authentication or expiry; they are not shared through Redis.
+
+New credentials use Argon2id by default with a unique random salt and fixed costs of 64 MiB memory, three iterations, and four lanes. These costs are not configurable in this version. Existing unprefixed salted SHA-256 records remain compatible and upgrade to Argon2id after a successful login when that algorithm is configured. Argon2id verification reads the record's encoded costs within bounded limits and rejects malformed records. Hash comparisons use constant-time comparison, and passwords, salts, and codes are omitted from logs.
 
 Sessions expire after `session_timeout_minutes`, on logout, or when the proxy restarts. A reconnect to the same proxy keeps the session until that expiry. Credentials persist through the configured [Storage and Databases](Storage-and-Databases) provider; sessions are never synchronized through Redis.
 

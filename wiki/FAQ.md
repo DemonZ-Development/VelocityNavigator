@@ -99,7 +99,7 @@ It does **not** work with BungeeCord, Waterfall, or other proxy software.
 ### What's the difference between `least_players` and `least_connections`?
 
 - **`least_players`**: looks at the current player count and picks the server with the fewest players. Simple and accurate for steady-state traffic.
-- **`least_connections`**: uses an Exponential Moving Average (EMA) of connection rates and load over time. Better at handling **bursty** traffic where many players join simultaneously.
+- **`least_connections`**: combines an Exponential Moving Average (EMA) of player counts with recent connection rates. Better at handling **bursty** traffic where many players join simultaneously.
 
 For most networks, `least_players` or `power_of_two` is sufficient. Use `least_connections` if you experience traffic spikes.
 
