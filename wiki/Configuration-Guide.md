@@ -143,7 +143,7 @@ Chat selector header, entry, and tooltip text now live under `[menus.chat]` in `
 
 ### Java inventory selector setup
 
-1. Put `VelocityNavigator-4.5.2.jar` in the Velocity proxy's `plugins/` directory.
+1. Put `VelocityNavigator-4.6.0.jar` in the Velocity proxy's `plugins/` directory.
 2. Put the same JAR in every backend Paper/Spigot server's `plugins/` directory.
 3. Set `routing.use_menu_for_lobby = true`.
 4. Set `routing.java_menu.type = "inventory"` and run `/vn reload`.
@@ -154,10 +154,14 @@ Use `/vn bridge status` after a player has joined each backend to confirm its br
 
 ## `gui.toml`
 
-VelocityNavigator 4.5.0 uses `config_version = 2` for this menu-only file. The main `navigator.toml` schema is version 9.
+VelocityNavigator 4.6.0 uses `config_version = 3` for this menu-only file. The main `navigator.toml` schema is version 9.
 
 ```toml
-config_version = 2
+config_version = 3
+
+[java_ui]
+party = "auto"
+authentication = "auto"
 
 [layout]
 rows = 6
@@ -208,6 +212,10 @@ title = "Server Selector"
 content = "Select a destination server to connect:"
 button_format = "{display_name}\n§7{players}/{max_players}"
 ```
+
+`[java_ui]` configures Java UI modes for party management and authentication:
+- `party`: `auto`, `dialog`, `inventory` (also `chest`), or `chat`.
+- `authentication`: `auto`, `dialog`, `sign`, or `command`.
 
 `layout.rows` is customizable from `2` to `6`. Java chest menus always use nine columns, so this produces 18–54 total slots. The bottom row is reserved for controls by default, leaving `(rows - 1) × 9` automatic server slots per page; a six-row menu therefore displays 45 servers before adding another page. `refresh_seconds = 0` disables automatic refresh; otherwise the proxy re-evaluates availability while the GUI remains open. Offline configured candidates use `unavailable_material`, localized unavailable lore, and cannot be clicked.
 
@@ -626,7 +634,7 @@ Keep the listener on loopback when possible. The browser address may be your pro
 ## Full Example Config
 
 ```toml
-# VelocityNavigator v4.5.2 Configuration
+# VelocityNavigator v4.6.0 Configuration
 # https://github.com/DemonZ-Development/VelocityNavigator/wiki
 
 notify_on_startup = true

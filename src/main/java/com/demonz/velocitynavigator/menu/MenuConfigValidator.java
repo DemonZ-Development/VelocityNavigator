@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0.
  */
 package com.demonz.velocitynavigator.menu;
-import com.demonz.velocitynavigator.config.GuiConfig;
 
+import com.demonz.velocitynavigator.config.GuiConfig;
 import com.moandjiezana.toml.Toml;
 
 import java.nio.file.Files;
@@ -63,6 +63,8 @@ public final class MenuConfigValidator {
         int rows = rawRows(root, gui.rows(), errors);
         int inventorySize = rows * 9;
         validateMaterials(root, errors);
+        validateUiMode(root, "party", Set.of("auto", "dialog", "inventory", "chest", "chat"), errors);
+        validateUiMode(root, "authentication", Set.of("auto", "dialog", "sign", "command"), errors);
 
         Map<String, Integer> controlSlots = controlSlots(root, gui, inventorySize, errors);
         validateControlCollisions(controlSlots, errors);
@@ -76,6 +78,12 @@ public final class MenuConfigValidator {
         validateStateFields(value(root, "states"), errors);
 
         return new Validation(errors, warnings);
+    }
+
+    private static void validateUiMode(Map<String, Object> root, String key, Set<String> allowed, List<String> errors) {
+        Object raw = value(root, "java_ui", key);
+        if (raw != null && (!(raw instanceof String mode) || !allowed.contains(mode.trim().toLowerCase(Locale.ROOT))))
+            errors.add("java_ui." + key + " must be one of " + allowed + ".");
     }
 
     private static int rawRows(Map<String, Object> root, int fallback, List<String> errors) {

@@ -14,6 +14,7 @@ public final class BackendMenu {
     private final String name;
     private String title;
     private int rows;
+    private String uiType = "inherit";
     private final List<MenuBridgeProtocol.MenuItem> items;
 
     public BackendMenu(String name, String title, int rows, List<MenuBridgeProtocol.MenuItem> items) {
@@ -26,6 +27,9 @@ public final class BackendMenu {
     public String getName() {
         return name;
     }
+
+    public String getUiType() { return uiType; }
+    public void setUiType(String uiType) { this.uiType = uiType == null ? "inherit" : uiType; }
 
     public String getTitle() {
         return title;
@@ -52,5 +56,42 @@ public final class BackendMenu {
         if (items != null) {
             this.items.addAll(items);
         }
+    }
+
+    private String previousButton;
+    private String nextButton;
+    private String refreshButton;
+    private String closeButton;
+
+    public String getPreviousButton() {
+        return previousButton;
+    }
+
+    public void setPreviousButton(String previousButton) {
+        this.previousButton = previousButton;
+    }
+
+    public String getNextButton() {
+        return nextButton;
+    }
+
+    public void setNextButton(String nextButton) {
+        this.nextButton = nextButton;
+    }
+
+    public String getRefreshButton() {
+        return refreshButton;
+    }
+
+    public void setRefreshButton(String refreshButton) {
+        this.refreshButton = refreshButton;
+    }
+
+    public String getCloseButton() {
+        return closeButton;
+    }
+
+    public void setCloseButton(String closeButton) {
+        this.closeButton = closeButton;
     }
 }

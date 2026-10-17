@@ -17,13 +17,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class BackendConfigMigrator {
 
-    private static final int CURRENT_BACKEND_VERSION = 2;
+    private static final int CURRENT_BACKEND_VERSION = 3;
     private static final Pattern VERSION_BACKUP_PATTERN = Pattern.compile("^(.+)\\.v(\\d+)\\.bak$");
 
     private BackendConfigMigrator() {
@@ -31,7 +32,11 @@ public final class BackendConfigMigrator {
     }
 
     public static void migrate(JavaPlugin plugin) {
-        File configFile = new File(plugin.getDataFolder(), "config.yml");
+        migrate(plugin.getDataFolder().toPath(), plugin.getLogger());
+    }
+
+    static void migrate(Path dataFolder, Logger logger) {
+        File configFile = dataFolder.resolve("config.yml").toFile();
         if (!configFile.exists()) {
             return;
         }
@@ -45,7 +50,7 @@ public final class BackendConfigMigrator {
                 return;
             }
 
-            Path backupsDir = plugin.getDataFolder().toPath().resolve("backups");
+            Path backupsDir = dataFolder.resolve("backups");
             Files.createDirectories(backupsDir);
             Path backupPath = backupsDir.resolve("config.yml.v" + sourceVersion + ".bak");
             Files.copy(configPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
@@ -62,18 +67,22 @@ public final class BackendConfigMigrator {
                 }
                 newLines.add(line);
 
-                if (line.trim().startsWith("bstats_enabled:")) {
+                if (sourceVersion < 2 && line.trim().startsWith("bstats_enabled:")) {
                     newLines.add("update_check_enabled: true");
                     newLines.add("update_check_interval_minutes: 120");
                 }
             }
 
+            if (lines.stream().noneMatch(line -> line.trim().startsWith("java_ui:"))) {
+                newLines.add("java_ui: auto");
+            }
+
             Files.write(configPath, newLines, StandardCharsets.UTF_8);
-            plugin.getLogger().info("[VelocityNavigator] Backend config migrated from v" + sourceVersion
+            logger.info("[VelocityNavigator] Backend config migrated from v" + sourceVersion
                     + " to v" + CURRENT_BACKEND_VERSION + ". Backup: " + backupsDir.relativize(backupPath));
-            cleanObsoleteBackups(plugin.getDataFolder().toPath(), backupsDir);
+            cleanObsoleteBackups(dataFolder, backupsDir);
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "[VelocityNavigator] Backend config migration failed: " + e.getMessage(), e);
+            logger.log(Level.WARNING, "[VelocityNavigator] Backend config migration failed: " + e.getMessage(), e);
         }
     }
 

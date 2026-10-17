@@ -3,14 +3,16 @@
  * Licensed under the Apache License, Version 2.0.
  */
 package com.demonz.velocitynavigator.menu;
-import com.demonz.velocitynavigator.VelocityNavigator;
-import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
-import com.demonz.velocitynavigator.config.Config;
 
+import com.demonz.velocitynavigator.VelocityNavigator;
+import com.demonz.velocitynavigator.common.JavaUiMode;
+import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
+import com.demonz.velocitynavigator.config.Config;
 import com.demonz.velocitynavigator.config.GuiConfig;
 import com.demonz.velocitynavigator.locale.MessageFormatter;
+import com.demonz.velocitynavigator.routing.ConnectionWorkflow;
 import com.demonz.velocitynavigator.routing.RouteDecision;
-
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -36,6 +38,10 @@ public final class JavaInventoryMenuService {
     }
 
     public static boolean showLobbyMenu(Player player, VelocityNavigator plugin, RouteDecision decision, int requestedPage) {
+        return showLobbyMenu(player, plugin, decision, requestedPage, true);
+    }
+
+    private static boolean showLobbyMenu(Player player, VelocityNavigator plugin, RouteDecision decision, int requestedPage, boolean allowDialog) {
         Config config = plugin.config();
         GuiConfig gui = plugin.guiConfig();
         List<String> configured = decision.configuredCandidates() == null || decision.configuredCandidates().isEmpty()
@@ -54,21 +60,43 @@ public final class JavaInventoryMenuService {
             return true;
         }
         List<MenuServerInfo> all = MenuServerInfoResolver.resolve(plugin, config, candidates, decision.onlineCandidates());
-        int pageSize = gui.serverPageSize();
+        JavaUiMode mode = JavaUiMode.parse(config.routing().javaMenuType().configValue());
+        boolean dialog = allowDialog && plugin.uiService().canDialog(player, mode);
+        int pageSize = dialog ? 18 : gui.serverPageSize();
         int totalPages = Math.max(1, (all.size() + pageSize - 1) / pageSize);
         int page = Math.max(0, Math.min(requestedPage, totalPages - 1));
         int from = page * pageSize;
         int to = Math.min(all.size(), from + pageSize);
         List<MenuServerInfo> visible = all.subList(from, to);
 
-        List<String> allowedServers = visible.stream().filter(MenuServerInfo::available).map(MenuServerInfo::server).toList();
-        String token = plugin.createMenuToken(player, allowedServers);
-        List<MenuBridgeProtocol.MenuItem> items = buildServerItems(player, config, gui, visible);
+        List<MenuBridgeProtocol.MenuItem> items = dialog ? buildDialogItems(player, config, gui, visible)
+                : buildServerItems(player, config, gui, visible);
         Set<Integer> occupied = new LinkedHashSet<>();
         items.forEach(item -> occupied.add(item.slot()));
-        addControls(player, config, gui, page, totalPages, items, occupied);
+        addControls(player, config, gui, page, totalPages, items, occupied, dialog);
+
+        if (dialog) {
+            List<UiBridgeProtocol.Button> buttons = items.stream().map(item ->
+                    new UiBridgeProtocol.Button(
+                            "@disabled".equals(item.target()) ? "" : item.target(), item.name(), String.join("\n", item.lore()), item.material())).toList();
+            if (plugin.uiService().show(player, legacy(config.language().text("menus.inventory.title"), player),
+                    plugin.uiService().text(player, "menus.dialog.select_server"), buttons, List.of(), mode, false, false, action -> {
+                        if (action.action().startsWith("@")) {
+                            int nextPage = Integer.parseInt(action.action().substring(action.action().indexOf(':') + 1));
+                            plugin.previewRoute(player).thenAccept(next -> showLobbyMenu(player, plugin, next, nextPage))
+                                    .exceptionally(error -> { plugin.logger().debug("Could not refresh Java selector for {}.", player.getUsername()); return null; });
+                        } else {
+                            plugin.previewRoute(player).thenAccept(next -> ConnectionWorkflow.connectFromSelection(
+                                    plugin, player, config, next, action.action(), "dialog_menu"))
+                                    .exceptionally(error -> { player.sendMessage(MessageFormatter.render(config.language().text("messages.selection_validation_failed"), player)); return null; });
+                        }
+                    })) return true;
+            return showLobbyMenu(player, plugin, decision, requestedPage, false);
+        }
 
         try {
+            List<String> allowedServers = visible.stream().filter(MenuServerInfo::available).map(MenuServerInfo::server).toList();
+            String token = plugin.createMenuToken(player, allowedServers);
             byte[] payload = MenuBridgeProtocol.encodeOpen(
                     token,
                     gui.rows(),
@@ -122,27 +150,38 @@ public final class JavaInventoryMenuService {
         }
 
         for (Map.Entry<MenuServerInfo, Integer> entry : assigned.entrySet()) {
-            MenuServerInfo info = entry.getKey();
-            GuiConfig.ServerItem override = gui.server(info.server());
-            GuiConfig.StateStyle stateStyle = gui.stateStyle(info.state());
-            String material = resolveMaterial(gui, info, override, stateStyle);
-            String nameTemplate = override != null && !override.name().isBlank()
-                    ? override.name()
-                    : !stateStyle.name().isBlank()
-                    ? stateStyle.name()
-                    : config.language().text("menus.inventory.item_name");
-            List<String> loreTemplate = override != null && !override.lore().isEmpty()
-                    ? override.lore()
-                    : !stateStyle.lore().isEmpty()
-                    ? stateStyle.lore()
-                    : config.language().lines(info.available()
-                    ? "menus.inventory.item_lore" : "menus.inventory.unavailable_lore");
-            String name = legacy(replace(nameTemplate, info.placeholders()), player);
-            List<String> lore = loreTemplate.stream().map(line -> legacy(replace(line, info.placeholders()), player)).toList();
-            result.add(new MenuBridgeProtocol.MenuItem(entry.getValue(), info.available() ? info.server() : "@disabled",
-                    material, name, lore));
+            result.add(buildServerItem(player, config, gui, entry.getKey(), entry.getValue()));
         }
         return result;
+    }
+
+    public static List<MenuBridgeProtocol.MenuItem> buildDialogItems(Player player, Config config, GuiConfig gui,
+                                                                    List<MenuServerInfo> visible) {
+        List<MenuBridgeProtocol.MenuItem> items = new ArrayList<>();
+        for (MenuServerInfo info : visible) items.add(buildServerItem(player, config, gui, info, items.size()));
+        return items;
+    }
+
+    private static MenuBridgeProtocol.MenuItem buildServerItem(Player player, Config config, GuiConfig gui,
+                                                               MenuServerInfo info, int slot) {
+        GuiConfig.ServerItem override = gui.server(info.server());
+        GuiConfig.StateStyle stateStyle = gui.stateStyle(info.state());
+        String material = resolveMaterial(gui, info, override, stateStyle);
+        String nameTemplate = override != null && !override.name().isBlank()
+                ? override.name()
+                : !stateStyle.name().isBlank()
+                ? stateStyle.name()
+                : config.language().text("menus.inventory.item_name");
+        List<String> loreTemplate = override != null && !override.lore().isEmpty()
+                ? override.lore()
+                : !stateStyle.lore().isEmpty()
+                ? stateStyle.lore()
+                : config.language().lines(info.available()
+                ? "menus.inventory.item_lore" : "menus.inventory.unavailable_lore");
+        String name = legacy(replace(nameTemplate, info.placeholders()), player);
+        List<String> lore = loreTemplate.stream().map(line -> legacy(replace(line, info.placeholders()), player)).toList();
+        return new MenuBridgeProtocol.MenuItem(slot, info.available() ? info.server() : "@disabled",
+                material, name, lore);
     }
 
     private static String resolveMaterial(GuiConfig gui, MenuServerInfo info, GuiConfig.ServerItem override,
@@ -160,20 +199,23 @@ public final class JavaInventoryMenuService {
     }
 
     private static void addControls(Player player, Config config, GuiConfig gui, int page, int pages,
-                                    List<MenuBridgeProtocol.MenuItem> items, Set<Integer> occupied) {
+                                    List<MenuBridgeProtocol.MenuItem> items, Set<Integer> occupied, boolean dialog) {
+        int previousSlot = dialog ? 18 : gui.previousSlot();
+        int refreshSlot = dialog ? 19 : gui.refreshSlot();
+        int nextSlot = dialog ? 20 : gui.nextSlot();
         Map<String, String> pageValues = Map.of("page", String.valueOf(page + 1), "pages", String.valueOf(pages));
-        if (page > 0 && occupied.add(gui.previousSlot())) {
-            items.add(new MenuBridgeProtocol.MenuItem(gui.previousSlot(), "@page:" + (page - 1), gui.previousMaterial(),
+        if (page > 0 && occupied.add(previousSlot)) {
+            items.add(new MenuBridgeProtocol.MenuItem(previousSlot, "@page:" + (page - 1), gui.previousMaterial(),
                     legacy(config.language().text("menus.inventory.previous"), player),
                     List.of(legacy(replace(config.language().text("menus.inventory.page"), pageValues), player))));
         }
-        if (occupied.add(gui.refreshSlot())) {
-            items.add(new MenuBridgeProtocol.MenuItem(gui.refreshSlot(), "@refresh:" + page, gui.refreshMaterial(),
+        if (occupied.add(refreshSlot)) {
+            items.add(new MenuBridgeProtocol.MenuItem(refreshSlot, "@refresh:" + page, gui.refreshMaterial(),
                     legacy(config.language().text("menus.inventory.refresh"), player),
                     List.of(legacy(replace(config.language().text("menus.inventory.page"), pageValues), player))));
         }
-        if (page + 1 < pages && occupied.add(gui.nextSlot())) {
-            items.add(new MenuBridgeProtocol.MenuItem(gui.nextSlot(), "@page:" + (page + 1), gui.nextMaterial(),
+        if (page + 1 < pages && occupied.add(nextSlot)) {
+            items.add(new MenuBridgeProtocol.MenuItem(nextSlot, "@page:" + (page + 1), gui.nextMaterial(),
                     legacy(config.language().text("menus.inventory.next"), player),
                     List.of(legacy(replace(config.language().text("menus.inventory.page"), pageValues), player))));
         }

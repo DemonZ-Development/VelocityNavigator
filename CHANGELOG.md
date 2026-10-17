@@ -3,6 +3,19 @@
 This file documents all notable changes to VelocityNavigator.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.6.0] - 2026-10-17
+
+### Added
+
+- Native Java dialogs for lobby selectors, party management, authentication, and backend YAML menus, including NPC menu entry points. New configurations select dialogs on supported clients and Paper backends, with inventory, sign, and chat or command fallbacks.
+- Configurable Java UI modes per feature and per YAML menu. Existing selector choices survive migration; Bedrock forms retain their existing behavior.
+- Expiring, single-use dialog actions bound to the player and backend, private authentication input forwarding, and visible-password warnings.
+- Tests for UI protocol validation, callback/session binding, configuration migration, and pagination independent of chest dimensions; an optional Paper runtime dialog probe.
+
+### Fixed
+
+- Reopening an authentication prompt no longer resets the authentication deadline.
+
 ## [4.5.2] - 2026-10-10
 
 ### Added

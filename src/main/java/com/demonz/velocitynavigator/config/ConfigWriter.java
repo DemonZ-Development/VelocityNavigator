@@ -177,7 +177,7 @@ final class ConfigWriter {
         b.append("# Players can also type /lobby menu to trigger it manually.\n");
         b.append("use_menu_for_lobby = ").append(config.routing().useMenuForLobby()).append("\n\n");
 
-        b.append("# Java selector: \"inventory\" uses the backend bridge; \"chat\" uses hover/click text.\n");
+        b.append("# Java selector: \"auto\" prefers native dialogs; \"dialog\" also falls back safely. \"inventory\" forces a chest; \"chat\" uses text.\n");
         b.append("# Install this same JAR on backend Paper/Spigot servers for inventory mode.\n");
         b.append("[routing.java_menu]\n");
         b.append("type = ").append(quoted(config.routing().javaMenuType().configValue())).append("\n");

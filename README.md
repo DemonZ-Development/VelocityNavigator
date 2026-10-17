@@ -44,7 +44,9 @@ Health state is assembled from several sources: active pings, TCP socket checks,
 
 ![Java inventory selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png)
 
-Three front-ends, one config. You define `display_name`, `description`, `menu_order` and `show_in_menu` once per server and all three pick it up.
+Four front-ends, one config. You define `display_name`, `description`, `menu_order` and `show_in_menu` once per server and all four pick it up.
+
+**Java native dialogs.** New configurations prefer dialogs for Java 1.21.6+ players on a backend with Paper's dialog API. Lobby, party, auth, and YAML menus share this support; older runtimes fall back to existing interfaces. Choose dialogs, chest menus, or chat per feature, and override individual YAML menus. See [Native Java Dialogs](wiki/Native-Java-Dialogs.md) for configuration and compatibility.
 
 **Java chest GUI.** 1 to 6 rows, paginated. Separate material, name and lore for open / full / draining / maintenance / offline, so a dead lobby doesn't look identical to a healthy one. Counts refresh on a timer while the menu is open. Clicks are validated against a token so slots can't be spoofed.
 
@@ -115,7 +117,7 @@ JSON files, SQLite, MySQL/MariaDB (HikariCP pooling, automatic schema migrations
 
 ## Setup
 
-1. Put `VelocityNavigator-4.5.2.jar` in your Velocity `plugins/` folder.
+1. Put `VelocityNavigator-4.6.0.jar` in your Velocity `plugins/` folder.
 2. Start the proxy once to generate configs, then stop it.
 3. Open `plugins/velocitynavigator/navigator.toml` and list your lobbies. Names must match `velocity.toml`:
 

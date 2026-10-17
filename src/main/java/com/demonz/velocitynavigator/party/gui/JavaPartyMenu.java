@@ -5,6 +5,8 @@
 package com.demonz.velocitynavigator.party.gui;
 
 import com.demonz.velocitynavigator.VelocityNavigator;
+import com.demonz.velocitynavigator.common.JavaUiMode;
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
 import com.demonz.velocitynavigator.locale.MessageFormatter;
 import com.demonz.velocitynavigator.party.PartyService;
 import com.demonz.velocitynavigator.party.Role;
@@ -13,7 +15,10 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,6 +33,69 @@ public final class JavaPartyMenu {
     }
 
     public void open(Player player) {
+        if (openInteractive(player, 0)) return;
+        openChat(player);
+    }
+
+    private boolean openInteractive(Player player, int requestedPage) {
+        UUID playerId = player.getUniqueId();
+        List<UUID> members = plugin.partyService().members(playerId);
+        if (members.isEmpty()) return false;
+        var mode = plugin.guiConfig().javaUi().party();
+        if (mode == JavaUiMode.CHAT) return false;
+        boolean leader = plugin.partyService().isLeader(playerId);
+        int pages = Math.max(1, (members.size() + 4) / 5);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        List<UiBridgeProtocol.Button> buttons = new ArrayList<>();
+        Map<String, String> commands = new LinkedHashMap<>();
+        for (UUID memberId : members.subList(page * 5, Math.min(members.size(), (page + 1) * 5))) {
+            String name = plugin.server().getPlayer(memberId).map(Player::getUsername).orElse(null);
+            Role role = plugin.partyService().getRole(memberId);
+            String roleName = role == null ? "Member" : role.displayName();
+            if (name == null) {
+                buttons.add(new UiBridgeProtocol.Button("", memberId.toString(), "", "PLAYER_HEAD"));
+            } else if (leader && !memberId.equals(playerId)) {
+                addAction(player, buttons, commands, "promote " + name + " officer", "party.dialog.promote", name, "GOLD_INGOT");
+                addAction(player, buttons, commands, "promote " + name + " leader", "party.dialog.leader", name, "GOLD_BLOCK");
+                addAction(player, buttons, commands, "demote " + name, "party.dialog.demote", name, "IRON_INGOT");
+                addAction(player, buttons, commands, "kick " + name, "party.dialog.kick", name, "BARRIER");
+            } else {
+                buttons.add(new UiBridgeProtocol.Button("", name, roleName, "PLAYER_HEAD"));
+            }
+        }
+        if (leader) {
+            addAction(player, buttons, commands, "warp", "party.dialog.warp", "", "ENDER_PEARL");
+            addAction(player, buttons, commands, plugin.partyService().isPartyOpen(playerId) ? "close" : "open",
+                    plugin.partyService().isPartyOpen(playerId) ? "party.dialog.make_private" : "party.dialog.make_open", "", "OAK_DOOR");
+            addAction(player, buttons, commands, "disband", "party.dialog.disband", "", "TNT");
+        } else addAction(player, buttons, commands, "leave", "party.dialog.leave", "", "OAK_DOOR");
+        if (page > 0) buttons.add(new UiBridgeProtocol.Button("@page:" + (page - 1), plugin.uiService().text(player, "menus.inventory.previous"), "", "ARROW"));
+        if (page + 1 < pages) buttons.add(new UiBridgeProtocol.Button("@page:" + (page + 1), plugin.uiService().text(player, "menus.inventory.next"), "", "ARROW"));
+        buttons.add(new UiBridgeProtocol.Button("@page:" + page, plugin.uiService().text(player, "menus.inventory.refresh"), "", "CLOCK"));
+        String leaderName = plugin.partyService().leader(playerId).flatMap(id -> plugin.server().getPlayer(id)).map(Player::getUsername).orElse("Unknown");
+        String body = plugin.config().language().text("party.dialog.summary")
+                .replace("{leader}", leaderName).replace("{size}", Integer.toString(members.size()))
+                .replace("{page}", Integer.toString(page + 1)).replace("{pages}", Integer.toString(pages));
+        return plugin.uiService().show(player, plugin.uiService().text(player, "party.dialog.title"),
+                plugin.uiService().legacy(player, body), buttons, List.of(), mode, false, false, action -> {
+                    if (action.action().startsWith("@page:")) {
+                        openInteractive(player, Integer.parseInt(action.action().substring(6)));
+                    } else {
+                        String command = commands.get(action.action());
+                        if (command != null) plugin.server().getCommandManager().executeAsync(player, plugin.advancedConfig().party().command() + " " + command);
+                    }
+                });
+    }
+
+    private void addAction(Player player, List<UiBridgeProtocol.Button> buttons,
+                           Map<String, String> commands, String command, String key, String name, String material) {
+        String action = "action:" + commands.size();
+        commands.put(action, command);
+        String label = plugin.config().language().text(key).replace("{player}", name);
+        buttons.add(new UiBridgeProtocol.Button(action, plugin.uiService().legacy(player, label), "", material));
+    }
+
+    private void openChat(Player player) {
         UUID playerId = player.getUniqueId();
         List<UUID> members = plugin.partyService().members(playerId);
         if (members.isEmpty()) {

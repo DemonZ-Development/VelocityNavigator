@@ -48,7 +48,7 @@ Get normal lobby routing working before enabling authentication. A bad holding-s
 
 The proxy accepts the `[settings]` format above, legacy `[auth]` tables, and flat keys in `auth.toml`. Missing fields fall back to the main configuration. If both tables are present, `[auth]` takes precedence; keep one layout to avoid conflicting values.
 
-The test account lands on `auth-holding`. Java players can authenticate with `/register` or `/login`. The backend bridge attempts to open a private sign prompt; see the limitations below before relying on it. Sign submissions are forwarded to the proxy over the backend bridge plugin channel, where the same rate limiting, validation, and session handling apply as to the commands. Bedrock players detected through Floodgate receive matching native registration or login forms.
+The test account lands on `auth-holding`. Java players receive native login or registration dialogs on supported clients and Paper backends; other runtimes use the existing sign prompt and command instructions. Set `[java_ui] authentication = "auto"`, `"dialog"`, `"sign"`, or `"command"` in the proxy's `gui.toml`. Dialog text fields show passwords on screen and carry an explicit warning. Dialog and sign submissions use the backend plugin channel and the same rate limiting, validation, and session handling as commands. `/login` and `/register` without arguments reopen a prompt. See [Native Java Dialogs](Native-Java-Dialogs). Bedrock players keep their existing native forms.
 
 | Field | Default | Description |
 |---|---:|---|
@@ -61,7 +61,7 @@ The test account lands on `auth-holding`. Java players can authenticate with `/r
 | `darkness_effect_enabled` | `true` | Exposed in the template; backend blindness behavior currently uses a fixed policy. |
 | `restrict_movement` | `true` | Exposed in the template; backend movement restriction currently uses a fixed policy. |
 
-The 4.5.2 proxy reads the enablement, algorithm, holding-server, session lifetime, and minimum-password settings. The template also exposes prompt, restriction, and timeout options that are not yet connected to runtime behavior. Pending authentication currently times out with a kick after 60 seconds; `timeout_seconds`, `timeout_action`, and restriction overrides do not change that policy.
+The 4.6.0 proxy reads the enablement, algorithm, holding-server, session lifetime, and minimum-password settings. The template also exposes prompt, restriction, and timeout options that are not yet connected to runtime behavior. Pending authentication currently times out with a kick after 60 seconds; `timeout_seconds`, `timeout_action`, and restriction overrides do not change that policy.
 
 The sign implementation sends a client-side sign block but then requires a real server-side `Sign` at that position. It cannot open the editor at a normal air position. Use command authentication until this flow is repaired and verified on your backend version.
 

@@ -118,7 +118,7 @@ public final class LobbyCommand implements SimpleCommand {
 
         boolean forceMenu = args.length >= 1 && "menu".equalsIgnoreCase(args[0]);
         if (forceMenu || config.routing().useMenuForLobby()) {
-            if (config.routing().javaMenuType() == Config.JavaMenuType.INVENTORY) {
+            if (config.routing().javaMenuType() != Config.JavaMenuType.CHAT) {
                 if (JavaInventoryMenuService.showLobbyMenu(player, plugin, decision)) {
                     return;
                 }

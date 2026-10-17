@@ -1,11 +1,11 @@
 name: VelocityNavigator
-version: '4.5.2'
+version: '4.6.0'
 main: com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge
 api-version: '1.16'
 authors: [DemonZDevelopment]
 description: Backend inventory GUI bridge for VelocityNavigator.
 folia-supported: true
-softdepend: [GeoRestrict, PlaceholderAPI, SkinsRestorer]
+softdepend: [GeoRestrict, PlaceholderAPI, SkinsRestorer, ViaVersion, floodgate]
 commands:
   vnav:
     description: VelocityNavigator backend command reference and manager.

@@ -3,17 +3,21 @@
  * Licensed under the Apache License, Version 2.0.
  */
 package com.demonz.velocitynavigator.config;
+
+import com.demonz.velocitynavigator.common.JavaUiMode;
 import com.demonz.velocitynavigator.menu.MenuServerState;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public record GuiConfig(
         int rows,
@@ -30,7 +34,8 @@ public record GuiConfig(
         String nextMaterial,
         Map<String, ServerItem> servers,
         BedrockMenu bedrock,
-        Map<MenuServerState, StateStyle> states
+        Map<MenuServerState, StateStyle> states,
+        JavaUiOptions javaUi
 ) {
     public GuiConfig(int rows, String defaultMaterial, String unavailableMaterial, boolean fillEmptySlots, String fillerMaterial, int refreshSeconds, int previousSlot, int refreshSlot, int nextSlot, String previousMaterial, String refreshMaterial, String nextMaterial, Map<String, ServerItem> servers) {
         this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, BedrockMenu.defaults(), defaultStateStyles());
@@ -40,7 +45,20 @@ public record GuiConfig(
         this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, bedrock, defaultStateStyles());
     }
 
+    public record JavaUiOptions(JavaUiMode party,
+                                JavaUiMode authentication) {
+        public static JavaUiOptions defaults() {
+            return new JavaUiOptions(JavaUiMode.AUTO,
+                    JavaUiMode.AUTO);
+        }
+    }
+
+    public GuiConfig(int rows, String defaultMaterial, String unavailableMaterial, boolean fillEmptySlots, String fillerMaterial, int refreshSeconds, int previousSlot, int refreshSlot, int nextSlot, String previousMaterial, String refreshMaterial, String nextMaterial, Map<String, ServerItem> servers, BedrockMenu bedrock, Map<MenuServerState, StateStyle> states) {
+        this(rows, defaultMaterial, unavailableMaterial, fillEmptySlots, fillerMaterial, refreshSeconds, previousSlot, refreshSlot, nextSlot, previousMaterial, refreshMaterial, nextMaterial, servers, bedrock, states, JavaUiOptions.defaults());
+    }
+
     public GuiConfig {
+        javaUi = javaUi == null ? JavaUiOptions.defaults() : javaUi;
         rows = Math.max(2, Math.min(6, rows));
         int size = rows * 9;
         defaultMaterial = material(defaultMaterial, "COMPASS");
@@ -117,7 +135,7 @@ public record GuiConfig(
                     ServerItem item = server(name);
                     return item == null || item.showInMenu();
                 })
-                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+                .collect(Collectors.toCollection(ArrayList::new));
         visible.sort(Comparator
                 .comparingInt((String name) -> menuOrder(name) >= 0 ? 0 : 1)
                 .thenComparingInt(name -> Math.max(0, menuOrder(name))));
@@ -129,7 +147,7 @@ public record GuiConfig(
         return item == null ? -1 : item.menuOrder();
     }
 
-    private static int uniqueSlot(int value, int size, int fallback, java.util.Set<Integer> used) {
+    private static int uniqueSlot(int value, int size, int fallback, Set<Integer> used) {
         int firstControlSlot = size - 9;
         int selected = value >= firstControlSlot && value < size ? value : fallback;
         if (!used.add(selected)) {

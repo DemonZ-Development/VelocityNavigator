@@ -24,6 +24,7 @@ The backend creates `plugins/VelocityNavigator/config.yml`:
 
 ```yaml
 enabled: true
+java_ui: auto
 inventory_menu_enabled: true
 handshake_enabled: true
 refresh_enabled: true
@@ -41,6 +42,7 @@ update_check_interval_minutes: 120
 | Key | What it controls |
 |---|---|
 | `enabled` | Enables the backend plugin |
+| `java_ui` | Default for backend YAML menus: `auto` or `dialog` prefers native Java dialogs; `inventory` forces chests. Per-menu `ui` overrides this. |
 | `inventory_menu_enabled` | Allows the proxy to open its Java inventory selector |
 | `handshake_enabled` | Reports bridge availability to `/vn bridge status` |
 | `refresh_enabled` | Accepts selector refresh and page actions |
@@ -53,7 +55,7 @@ update_check_interval_minutes: 120
 | `update_check_enabled` | Enables the backend Modrinth update check |
 | `update_check_interval_minutes` | Delay between update checks, with a minimum of 30 |
 
-The proxy's `navigator.toml` decides whether players use an inventory or chat selector. Its `gui.toml` controls that selector's layout, slots, icons, and refresh timing.
+The proxy's `navigator.toml` selects dialogs, inventories, or chat for the lobby selector. Its `gui.toml` controls chest presentation and `[java_ui]` choices for parties and authentication. See [Native Java Dialogs](Native-Java-Dialogs) for required versions and fallbacks. `/vnavmenu reload` also reloads the backend `java_ui` setting.
 
 ## Keep the files in the right place
 

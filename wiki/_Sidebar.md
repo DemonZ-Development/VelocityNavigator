@@ -20,6 +20,7 @@
 
 **Player Experience**
 - [Java & Bedrock Selectors](Java-and-Bedrock-Selectors)
+- [Native Java Dialogs](Native-Java-Dialogs)
 - [Selector Customization](Server-Display-Names)
 - [Backend NPCs](Backend-NPCs)
 - [Backend YAML Menus](Backend-Menus)
@@ -52,4 +53,4 @@
 - [FAQ](FAQ)
 
 ---
-*VelocityNavigator 4.5.0*
+*VelocityNavigator 4.6.0*

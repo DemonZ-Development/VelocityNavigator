@@ -56,6 +56,7 @@ public final class AuthCommand implements RawCommand {
             return;
         }
         if (args.length < 1) {
+            if (com.demonz.velocitynavigator.auth.JavaAuthUi.open(player, plugin)) return;
             player.sendMessage(MessageFormatter.render(plugin.config().language().text("auth.register_usage"), player));
             return;
         }
@@ -92,6 +93,7 @@ public final class AuthCommand implements RawCommand {
             return;
         }
         if (args.length < 1) {
+            if (com.demonz.velocitynavigator.auth.JavaAuthUi.open(player, plugin)) return;
             player.sendMessage(MessageFormatter.render(plugin.config().language().text("auth.login_usage"), player));
             return;
         }

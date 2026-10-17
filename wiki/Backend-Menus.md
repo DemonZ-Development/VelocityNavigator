@@ -1,6 +1,6 @@
 # Backend YAML Menus
 
-VelocityNavigator has two different inventory systems:
+VelocityNavigator has two menu systems, each supporting native Java dialogs and chest inventories:
 
 | Menu | Opened with | Configured in |
 |---|---|---|
@@ -36,6 +36,7 @@ Create `plugins/VelocityNavigator/menus/network.yml`:
 ```yaml
 title: "&b&lNETWORK MENU"
 rows: 3
+ui: inherit
 
 items:
   main_lobby:
@@ -70,7 +71,7 @@ Run:
 /vnavmenu open network
 ```
 
-You should see a three-row menu titled `NETWORK MENU`.
+Supported Java players see a dialog titled `NETWORK MENU`; other clients use the three-row inventory. Set `ui: inventory` to force the chest layout, or `ui: auto` / `ui: dialog` to prefer dialogs. `inherit` uses the backend's `config.yml` setting `java_ui: auto`. Dialog control buttons can be customized per-menu under `dialog:` (`previous`, `next`, `refresh`, `close`) or globally in backend `config.yml`. NPC menu actions honor the same choice. See [Native Java Dialogs](Native-Java-Dialogs).
 
 ## Targets
 

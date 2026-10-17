@@ -53,7 +53,7 @@ The status output should list both players. `/party warp` should move PlayerTwo 
 | `/party promote [officer\|leader] <player>` | Promote an officer or transfer leadership |
 | `/party demote <player>` | Return an officer to member |
 | `/party warp` | Move online followers to the leader's current server |
-| `/party menu` or `/party gui` | Open a native Bedrock form or clickable Java chat panel |
+| `/party menu` or `/party gui` | Open the configured Java dialog, chest, or chat menu, or the native Bedrock form |
 | `/party kick <player>` | Remove a member |
 | `/party leave` | Leave the party |
 | `/party disband` | Close the party |
@@ -75,7 +75,7 @@ Parties have three roles:
 `/party menu` and `/party gui` choose a display that matches the player's client:
 
 - **Bedrock Edition:** Opens a native Floodgate/Cumulus form. Install Floodgate on the proxy for this interface.
-- **Java Edition:** Sends a clickable management panel in chat. It lists roles and provides buttons for actions the player is allowed to perform. It is not an inventory menu.
+- **Java Edition:** Uses native dialogs on supported clients and backends, with a chest fallback and chat when the bridge is unavailable. Set `[java_ui] party = "auto"`, `"dialog"`, `"inventory"`, or `"chat"` in the proxy's `gui.toml`. Menus paginate members and run the existing party commands with current permission and role checks. See [Native Java Dialogs](Native-Java-Dialogs).
 
 ## PlaceholderAPI
 

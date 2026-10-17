@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0.
  */
 package com.demonz.velocitynavigator.bukkit;
-import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+
+import com.demonz.velocitynavigator.bukkit.dialog.BackendUiService;
+import com.demonz.velocitynavigator.bukkit.dialog.UiInventoryHolder;
 import com.demonz.velocitynavigator.bukkit.menu.BackendMenuCommand;
 import com.demonz.velocitynavigator.bukkit.menu.BackendMenuListener;
 import com.demonz.velocitynavigator.bukkit.menu.BackendMenuManager;
@@ -12,6 +14,10 @@ import com.demonz.velocitynavigator.bukkit.npc.BackendNPCCommand;
 import com.demonz.velocitynavigator.bukkit.npc.BackendNPCListener;
 import com.demonz.velocitynavigator.bukkit.npc.BackendNPCManager;
 import com.demonz.velocitynavigator.bukkit.npc.NPCProximityLookTask;
+import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.command.CommandExecutor;
@@ -29,8 +35,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.bstats.bukkit.Metrics;
-import org.bstats.charts.SimplePie;
 
 import java.io.IOException;
 import java.util.List;
@@ -45,6 +49,11 @@ import java.util.concurrent.TimeUnit;
 public final class VelocityNavigatorBridge extends JavaPlugin implements PluginMessageListener, Listener {
 
     private static final int BACKEND_BSTATS_ID = 32887;
+
+    private BackendUiService uiService;
+
+    public BackendUiService uiService() { return uiService; }
+    public boolean isAuthenticationPending(Player player) { return authRestrictionListener.isRestricted(player.getUniqueId()); }
 
     private boolean active;
     private boolean inventoryMenuEnabled;
@@ -77,6 +86,7 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
             return;
         }
         active = true;
+        uiService = new BackendUiService(this, authSignGuiListener);
         inventoryMenuEnabled = getConfig().getBoolean("inventory_menu_enabled", true);
         handshakeEnabled = getConfig().getBoolean("handshake_enabled", true);
         refreshEnabled = getConfig().getBoolean("refresh_enabled", true);
@@ -85,9 +95,7 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         fallbackMaterial = Material.matchMaterial(getConfig().getString("fallback_material", "COMPASS"));
         if (fallbackMaterial == null || !fallbackMaterial.isItem()) fallbackMaterial = Material.COMPASS;
         getServer().getMessenger().registerIncomingPluginChannel(this, MenuBridgeProtocol.CHANNEL, this);
-        if (handshakeEnabled || getConfig().getBoolean("menus_enabled", true) || getConfig().getBoolean("npcs_enabled", true)) {
-            getServer().getMessenger().registerOutgoingPluginChannel(this, MenuBridgeProtocol.CHANNEL);
-        }
+        getServer().getMessenger().registerOutgoingPluginChannel(this, MenuBridgeProtocol.CHANNEL);
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(authRestrictionListener, this);
         getServer().getPluginManager().registerEvents(authSignGuiListener, this);
@@ -148,12 +156,27 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
             return;
         }
         try {
+            if (UiBridgeProtocol.isPacket(message)) {
+                UiBridgeProtocol.Type type = UiBridgeProtocol.type(message);
+                if (type == UiBridgeProtocol.Type.CLIENT_CONTEXT) {
+                    uiService.context(player, UiBridgeProtocol.decodeContext(message));
+                } else if (type == UiBridgeProtocol.Type.OPEN) {
+                    var open = UiBridgeProtocol.decodeOpen(message);
+                    FoliaSchedulerCompat.runTask(this, player, () -> uiService.open(player, open));
+                }
+                return;
+            }
             MenuBridgeProtocol.PacketType type = MenuBridgeProtocol.packetType(message);
             if (type == MenuBridgeProtocol.PacketType.AUTH_STATUS) {
                 boolean auth = MenuBridgeProtocol.decodeAuthStatus(message);
                 authRestrictionListener.setRestricted(player, !auth);
-                if (!auth) {
-                    FoliaSchedulerCompat.runTaskLater(this, player, () -> authSignGuiListener.openAuthSign(player, false), 10L);
+                if (auth) {
+                    FoliaSchedulerCompat.runTask(this, player, () -> uiService.cancel(player));
+                } else {
+                    FoliaSchedulerCompat.runTaskLater(this, player, () -> {
+                        if (authRestrictionListener.isRestricted(player.getUniqueId()) && !uiService.hasPrompt(player) && !uiService.bedrock(player))
+                            authSignGuiListener.openAuthSign(player, false);
+                    }, 30L);
                 }
                 return;
             }
@@ -174,6 +197,7 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         partyStates.remove(event.getPlayer().getUniqueId());
+        if (uiService != null) uiService.clear(event.getPlayer());
         if (npcManager != null && npcManager.isPacketMode()) {
             npcManager.packetRuntime().removeViewer(event.getPlayer());
         }
@@ -231,9 +255,14 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!active || !inventoryMenuEnabled) return;
+        if (!active) return;
         Inventory top = event.getView().getTopInventory();
-        if (!(top.getHolder() instanceof ProxyMenuHolder holder)) {
+        if (top.getHolder() instanceof UiInventoryHolder uiHolder) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player player) uiService.select(player, uiHolder, uiHolder.actions().get(event.getRawSlot()));
+            return;
+        }
+        if (!inventoryMenuEnabled || !(top.getHolder() instanceof ProxyMenuHolder holder)) {
             return;
         }
         event.setCancelled(true);
@@ -252,12 +281,13 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
     public void onPlayerJoin(PlayerJoinEvent event) {
         if (!active) return;
         if (halloweenEasterEgg != null) halloweenEasterEgg.onPlayerJoin(event.getPlayer());
-        if (!handshakeEnabled) return;
         FoliaSchedulerCompat.runTaskLater(this, event.getPlayer(), () -> {
             if (event.getPlayer().isOnline()) {
                 try {
-                    event.getPlayer().sendPluginMessage(this, MenuBridgeProtocol.CHANNEL,
+                    if (handshakeEnabled) event.getPlayer().sendPluginMessage(this, MenuBridgeProtocol.CHANNEL,
                             MenuBridgeProtocol.encodeHello(getDescription().getVersion()));
+                    event.getPlayer().sendPluginMessage(this, MenuBridgeProtocol.CHANNEL,
+                            UiBridgeProtocol.capabilities(uiService.dialogs().available()));
                 } catch (IOException | IllegalArgumentException ignored) {
                 }
             }
@@ -268,6 +298,7 @@ public final class VelocityNavigatorBridge extends JavaPlugin implements PluginM
         if (!player.isOnline()) {
             return;
         }
+        uiService.cancel(player);
         ProxyMenuHolder holder = new ProxyMenuHolder(open.token(), open.page());
         Inventory inventory = Bukkit.createInventory(holder, open.rows() * 9, safeTitle(open.title()));
         holder.bindInventory(inventory);

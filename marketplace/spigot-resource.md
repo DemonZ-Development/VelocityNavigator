@@ -64,6 +64,11 @@ Deliver a consistent navigation experience across every Minecraft client platfor
 
 ![Bedrock form selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png)
 
+* **Native Java Dialogs (Minecraft 1.21.6+ & Paper 1.21.7+)**:
+  * Clean, modern native client dialog interfaces for lobby selectors, party management, authentication, and backend YAML menus.
+  * Zero chest inventory clutter or item flickering: lobbies appear as native dialog buttons with pagination and hover tooltips.
+  * Configurable UI modes (`auto`, `dialog`, `inventory`, `sign`, `command`, `chat`) with seamless automatic fallbacks for older clients and backends.
+  * Built-in security with expiring, single-use action tokens bound to the player session.
 * **Java Chest Inventory GUI**:
   * Multi-page pagination with customizable row sizes (1–6 rows).
   * State-aware item presentation: configure distinct materials, display names, and lore for Open, Full, Draining, Maintenance, and Offline lobbies.
@@ -210,7 +215,7 @@ Store player data, sticky sessions, and auth credentials in the storage engine t
 
 Get up and running in under five minutes:
 
-1. Download `VelocityNavigator-4.5.2.jar` and place it into your Velocity proxy's `plugins/` directory.
+1. Download `VelocityNavigator-4.6.0.jar` and place it into your Velocity proxy's `plugins/` directory.
 2. Start the proxy once to generate default configuration files, then stop the proxy.
 3. Open `plugins/velocitynavigator/navigator.toml` and list your lobby servers (matching names in `velocity.toml`):
 

@@ -148,6 +148,23 @@ public final class LanguageBundle {
         strings.put("auth.form.command_fallback", "<yellow>Authentication form closed. Use /login or /register in chat.</yellow>");
         strings.put("auth.form.try_again", "<red>Authentication failed. Please try again.</red>");
 
+        strings.put("menus.dialog.close", "Close");
+        strings.put("menus.dialog.select_server", "Select a server. Hover over a button for its status and player count.");
+        strings.put("auth.dialog.login", "Log in");
+        strings.put("auth.dialog.register", "Register");
+        strings.put("auth.dialog.visible_warning", "Passwords are visible on this screen. They are sent privately to the server, never as a chat message.");
+        strings.put("party.dialog.title", "Party management");
+        strings.put("party.dialog.summary", "Leader: {leader} | Members: {size} | Page {page}/{pages}");
+        strings.put("party.dialog.promote", "Promote {player} to officer");
+        strings.put("party.dialog.leader", "Make {player} leader");
+        strings.put("party.dialog.demote", "Demote {player}");
+        strings.put("party.dialog.kick", "Remove {player}");
+        strings.put("party.dialog.warp", "Warp party");
+        strings.put("party.dialog.make_private", "Make private");
+        strings.put("party.dialog.make_open", "Make public");
+        strings.put("party.dialog.disband", "Disband party");
+        strings.put("party.dialog.leave", "Leave party");
+
         strings.put("menus.status_healthy", "HEALTHY");
         strings.put("menus.status_full", "FULL");
         strings.put("menus.status_draining", "DRAINED");

@@ -5,7 +5,7 @@
 package com.demonz.velocitynavigator.bukkit;
 
 import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
-
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -27,7 +27,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class BackendAuthSignGuiListener implements Listener {
 
-    private record SignState(boolean isRegister, String firstPassword, Location signLoc) {}
+    private record SignState(boolean isRegister, String firstPassword, Location signLoc, String uiToken) {}
+
+    private java.util.function.BiConsumer<Player, UiBridgeProtocol.Action> uiSubmitter;
+    public void setUiSubmitter(java.util.function.BiConsumer<Player, UiBridgeProtocol.Action> submitter) { uiSubmitter = submitter; }
+
+    public void clear(Player player) {
+        SignState state = activeSessions.remove(player.getUniqueId());
+        if (state != null && player.isOnline()) {
+            player.sendBlockChange(state.signLoc(), state.signLoc().getBlock().getBlockData());
+        }
+    }
 
     private final Plugin plugin;
     private final Map<UUID, SignState> activeSessions = new ConcurrentHashMap<>();
@@ -41,18 +51,23 @@ public final class BackendAuthSignGuiListener implements Listener {
     }
 
     public void openAuthSign(Player player, boolean isRegister, String firstPassword) {
+        openAuthSign(player, isRegister, firstPassword, null);
+    }
+
+    public void openAuthSign(Player player, boolean isRegister, String firstPassword, String uiToken) {
         if (player == null || !player.isOnline()) return;
         Location signLoc = player.getLocation().clone().add(0, 3, 0);
 
         try {
             player.sendBlockChange(signLoc, Material.OAK_SIGN.createBlockData());
-            activeSessions.put(player.getUniqueId(), new SignState(isRegister, firstPassword, signLoc));
+            SignState expected = new SignState(isRegister, firstPassword, signLoc, uiToken);
+            activeSessions.put(player.getUniqueId(), expected);
 
             FoliaSchedulerCompat.runTaskLater(
                     Bukkit.getPluginManager().getPlugin("VelocityNavigator"),
                     player,
                     () -> {
-                        if (!player.isOnline()) return;
+                        if (!player.isOnline() || activeSessions.get(player.getUniqueId()) != expected) return;
                         try {
                             Block block = signLoc.getBlock();
                             if (block.getState() instanceof Sign sign) {
@@ -110,28 +125,33 @@ public final class BackendAuthSignGuiListener implements Listener {
 
         if (entered == null || entered.isBlank()) {
             player.sendMessage(ChatColor.RED + "Password cannot be empty. Please try again.");
-            openAuthSign(player, state.isRegister(), state.firstPassword());
+            openAuthSign(player, state.isRegister(), state.firstPassword(), state.uiToken());
             return;
         }
 
         if (state.isRegister()) {
             if (state.firstPassword() == null) {
                 player.sendMessage(ChatColor.YELLOW + "Please repeat your password on the sign to confirm.");
-                openAuthSign(player, true, entered);
+                openAuthSign(player, true, entered, state.uiToken());
             } else {
                 if (state.firstPassword().equals(entered)) {
-                    sendAuthRequest(player, true, entered, entered);
+                    sendAuthRequest(player, true, entered, entered, state.uiToken());
                 } else {
                     player.sendMessage(ChatColor.RED + "Passwords did not match! Please try registering again.");
-                    openAuthSign(player, true, null);
+                    openAuthSign(player, true, null, state.uiToken());
                 }
             }
         } else {
-            sendAuthRequest(player, false, entered, null);
+            sendAuthRequest(player, false, entered, null, state.uiToken());
         }
     }
 
-    private void sendAuthRequest(Player player, boolean register, String password, String repeatPassword) {
+    private void sendAuthRequest(Player player, boolean register, String password, String repeatPassword, String uiToken) {
+        if (uiToken != null && uiSubmitter != null) {
+            Map<String, String> inputs = register ? Map.of("password", password, "repeat", repeatPassword) : Map.of("password", password);
+            uiSubmitter.accept(player, new UiBridgeProtocol.Action(uiToken, "submit", inputs));
+            return;
+        }
         try {
             player.sendPluginMessage(plugin, MenuBridgeProtocol.CHANNEL,
                     MenuBridgeProtocol.encodeAuthRequest(register, password, repeatPassword));

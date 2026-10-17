@@ -35,7 +35,7 @@ public final class ConfigValidator {
 
         List<String> selectionModes = Config.SelectionMode.allConfigValues();
         validateKey(toml, "routing.selection_mode", selectionModes, warnings);
-        validateKey(toml, "routing.java_menu.type", List.of("inventory", "chat"), warnings);
+        validateKey(toml, "routing.java_menu.type", List.of("auto", "dialog", "inventory", "chest", "chat"), warnings);
 
         List<String> channels = Config.UpdateChannel.allConfigValues();
         validateKey(toml, "update_checker.channel", channels, warnings);

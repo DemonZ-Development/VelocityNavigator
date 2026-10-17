@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 package com.demonz.velocitynavigator;
-import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+
+import com.demonz.velocitynavigator.auth.AuthAttemptService;
+import com.demonz.velocitynavigator.auth.AuthService;
+import com.demonz.velocitynavigator.auth.BedrockAuthForm;
+import com.demonz.velocitynavigator.auth.JavaAuthUi;
 import com.demonz.velocitynavigator.commands.AuthCommand;
 import com.demonz.velocitynavigator.commands.NavigatorAdminCommand;
 import com.demonz.velocitynavigator.commands.PartyChatCommand;
 import com.demonz.velocitynavigator.commands.PartyCommand;
 import com.demonz.velocitynavigator.commands.QueueCommand;
+import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
 import com.demonz.velocitynavigator.config.AdvancedConfig;
 import com.demonz.velocitynavigator.config.Config;
 import com.demonz.velocitynavigator.config.ConfigLoadResult;
@@ -28,9 +34,13 @@ import com.demonz.velocitynavigator.config.GuiConfig;
 import com.demonz.velocitynavigator.config.RuntimeConfigValidator;
 import com.demonz.velocitynavigator.health.CircuitBreaker;
 import com.demonz.velocitynavigator.health.DrainService;
+import com.demonz.velocitynavigator.health.MaintenanceEvacuation;
+import com.demonz.velocitynavigator.health.MaintenanceService;
 import com.demonz.velocitynavigator.health.ServerHealthService;
 import com.demonz.velocitynavigator.locale.MessageFormatter;
 import com.demonz.velocitynavigator.menu.JavaInventoryMenuService;
+import com.demonz.velocitynavigator.menu.ProxyUiService;
+import com.demonz.velocitynavigator.motd.MotdManager;
 import com.demonz.velocitynavigator.observability.DashboardServer;
 import com.demonz.velocitynavigator.observability.MetricsService;
 import com.demonz.velocitynavigator.observability.PrometheusExporter;
@@ -51,34 +61,26 @@ import com.demonz.velocitynavigator.routing.RoutePlanner;
 import com.demonz.velocitynavigator.routing.RouteSelectionStrategy;
 import com.demonz.velocitynavigator.routing.RoutingStats;
 import com.demonz.velocitynavigator.routing.ServerLoadTracker;
+import com.demonz.velocitynavigator.storage.*;
 import com.demonz.velocitynavigator.util.CooldownService;
 import com.demonz.velocitynavigator.util.FirstRunHandler;
 import com.demonz.velocitynavigator.util.ManagedServerService;
 import com.demonz.velocitynavigator.util.ProxyHalloweenEasterEgg;
-import com.demonz.velocitynavigator.storage.*;
-import com.demonz.velocitynavigator.auth.AuthAttemptService;
-import com.demonz.velocitynavigator.auth.AuthService;
-import com.demonz.velocitynavigator.auth.BedrockAuthForm;
-import com.demonz.velocitynavigator.health.MaintenanceService;
-import com.demonz.velocitynavigator.health.MaintenanceEvacuation;
-import com.demonz.velocitynavigator.motd.MotdManager;
-
 import com.google.inject.Inject;
+import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
-import com.velocitypowered.api.command.Command;
-import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.EventTask;
+import com.velocitypowered.api.event.PostOrder;
+import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
-import com.velocitypowered.api.event.proxy.ProxyPingEvent;
-import com.velocitypowered.api.proxy.server.ServerPing;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
@@ -87,6 +89,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.proxy.server.ServerPing;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import org.bstats.velocity.Metrics;
@@ -97,6 +100,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -113,11 +117,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 @Plugin(
         id = "velocitynavigator",
         name = "VelocityNavigator",
-        version = "4.5.2",
+        version = "4.6.0",
         description = "Lobby routing and load balancing for Velocity proxies.",
         authors = {"DemonZDevelopment"},
         dependencies = {
@@ -133,6 +138,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     private final Path dataDirectory;
     private final Metrics.Factory metricsFactory;
     private final String pluginVersion;
+    private final ProxyUiService uiService = new ProxyUiService(this);
     private final CooldownService cooldownService = new CooldownService();
     private final RouteSelectionStrategy selectionStrategy = new RouteSelectionStrategy();
     private final RoutingStats routingStats = new RoutingStats();
@@ -312,6 +318,7 @@ public final class VelocityNavigator implements NavigatorAPI {
 
     @Subscribe
     public void onPlayerDisconnect(DisconnectEvent event) {
+        uiService.clear(event.getPlayer());
         cancelAuthTimeout(event.getPlayer());
         playerLeaves.incrementAndGet();
         menuSessions.remove(event.getPlayer().getUniqueId());
@@ -322,6 +329,7 @@ public final class VelocityNavigator implements NavigatorAPI {
 
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
+        uiService.clear(event.getPlayer());
         if (isServerInMaintenance(event.getServer().getServerInfo().getName())) {
             if (isGlobalMaintenance()) {
                 disconnectForServerMaintenance(event.getPlayer(), maintenanceService.globalReason());
@@ -385,6 +393,10 @@ public final class VelocityNavigator implements NavigatorAPI {
             return;
         }
         try {
+            if (UiBridgeProtocol.isPacket(event.getData())) {
+                uiService.handle(player, source, event.getData());
+                return;
+            }
             MenuBridgeProtocol.PacketType type = MenuBridgeProtocol.packetType(event.getData());
             String backendName = source.getServerInfo().getName().toLowerCase(Locale.ROOT);
             if (type == MenuBridgeProtocol.PacketType.HELLO) {
@@ -426,7 +438,7 @@ public final class VelocityNavigator implements NavigatorAPI {
         }
     }
 
-    private void handleBackendAuthRequest(Player player, MenuBridgeProtocol.AuthRequest request) {
+    public void handleBackendAuthRequest(Player player, MenuBridgeProtocol.AuthRequest request) {
         if (authService == null || config == null || !config.auth().enabled()) {
             return;
         }
@@ -562,7 +574,7 @@ public final class VelocityNavigator implements NavigatorAPI {
         event.setInitialServer(target.get());
     }
 
-    private void showAuthenticationPrompt(Player player) {
+    public void showAuthenticationPrompt(Player player) {
         if (!isAuthenticationPending(player)) {
             return;
         }
@@ -572,6 +584,7 @@ public final class VelocityNavigator implements NavigatorAPI {
                 && BedrockAuthForm.open(player, this)) {
             return;
         }
+        if (JavaAuthUi.open(player, this)) return;
         String prompt = authService.isRegistered(player.getUniqueId())
                 ? config.language().text("auth.login_prompt")
                 : config.language().text("auth.register_prompt");
@@ -624,7 +637,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     private final Map<UUID, com.velocitypowered.api.scheduler.ScheduledTask> authTimeoutTasks = new ConcurrentHashMap<>();
 
     public void scheduleAuthTimeout(Player player) {
-        cancelAuthTimeout(player);
+        if (authTimeoutTasks.containsKey(player.getUniqueId())) return;
         if (authService == null || !authService.isEnabled() || !isAuthenticationPending(player)) return;
         com.velocitypowered.api.scheduler.ScheduledTask task = server.getScheduler().buildTask(this, () -> {
             if (player.isActive() && isAuthenticationPending(player)) {
@@ -966,7 +979,7 @@ public final class VelocityNavigator implements NavigatorAPI {
     }
 
     public RuntimeConfigValidator.Validation validateRuntimeConfiguration() {
-        Set<String> registered = server.getAllServers().stream().map(value -> value.getServerInfo().getName()).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<String> registered = server.getAllServers().stream().map(value -> value.getServerInfo().getName()).collect(Collectors.toCollection(LinkedHashSet::new));
         return RuntimeConfigValidator.validate(config, advancedConfig, registered);
     }
 
@@ -996,6 +1009,8 @@ public final class VelocityNavigator implements NavigatorAPI {
         }
         return Optional.empty();
     }
+
+    public ProxyUiService uiService() { return uiService; }
 
     public GuiConfig guiConfig() {
         return configManager == null ? GuiConfig.defaults() : configManager.guiConfig();
@@ -1050,7 +1065,7 @@ public final class VelocityNavigator implements NavigatorAPI {
         if (serverNames != null) {
             for (String serverName : serverNames) {
                 if (serverName != null && !serverName.isBlank()) {
-                    allowedServers.add(serverName.toLowerCase(java.util.Locale.ROOT));
+                    allowedServers.add(serverName.toLowerCase(Locale.ROOT));
                 }
             }
         }
@@ -1122,7 +1137,7 @@ public final class VelocityNavigator implements NavigatorAPI {
             return MessageFormatter.render(output.toString());
         }
         server.getAllServers().stream()
-                .sorted(java.util.Comparator.comparing(value -> value.getServerInfo().getName().toLowerCase(Locale.ROOT)))
+                .sorted(Comparator.comparing(value -> value.getServerInfo().getName().toLowerCase(Locale.ROOT)))
                 .forEach(registered -> {
                     String name = registered.getServerInfo().getName();
                     BridgeStatus status = backendBridges.get(name.toLowerCase(Locale.ROOT));

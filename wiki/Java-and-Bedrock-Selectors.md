@@ -2,12 +2,14 @@
 
 ![VelocityNavigator player selectors](headers/java-and-bedrock-selectors.png)
 
-You configure the proxy to show a Java inventory, a native Bedrock form, or a clickable chat list. You enforce the same lobby availability rules across all three menus.
+You configure the proxy to show a native Java dialog, a Java inventory, a native Bedrock form, or a clickable chat list. All interfaces enforce the same lobby availability rules. See [Native Java Dialogs](Native-Java-Dialogs) for compatibility, authentication, and settings shared with other menus.
 
 ## Which interface opens?
 
 | Player | Interface |
 |---|---|
+| Java 1.21.6+ with a bridge exposing Paper's dialog API | Native dialog when `routing.java_menu.type = "auto"` or `"dialog"` |
+| Java with an older client or backend | Inventory fallback for `auto` and `dialog` |
 | Java with a detected backend bridge | Java inventory when `routing.java_menu.type = "inventory"` |
 | Java without a bridge | Clickable chat when `fallback_to_chat = true` |
 | Bedrock detected through Floodgate | Native Bedrock form when `bedrock.use_gui_for_lobby = true` and the Bedrock menu is enabled |
@@ -15,7 +17,7 @@ You configure the proxy to show a Java inventory, a native Bedrock form, or a cl
 
 The Bedrock lobby form is proxy-side and does not require the backend bridge. NPCs and backend YAML menus still require the JAR on the backend where they exist.
 
-This client-specific behavior also applies to authentication. Java players use `/register` and `/login`. Floodgate Bedrock players receive a native registration or login form when `auth.bedrock_form_enabled = true`; the commands remain available as a fallback. The form fields are visible while typing because Bedrock CustomForm has no masked password input. See [Authentication and Security](Authentication-and-Security).
+This client-specific behavior also applies to authentication. Supported Java players receive a login or registration dialog by default; sign prompts and `/register` or `/login` commands remain available as fallbacks. Floodgate Bedrock players receive their existing native form when `auth.bedrock_form_enabled = true`. Both dialog and Bedrock form password fields are visible while typing. See [Authentication and Security](Authentication-and-Security).
 
 ## What players see
 
@@ -40,11 +42,11 @@ In `navigator.toml`:
 use_menu_for_lobby = true
 
 [routing.java_menu]
-type = "inventory"
+type = "auto"
 fallback_to_chat = true
 ```
 
-You configure `inventory` to use the backend bridge. You configure `chat` to use clickable text. Players type `/lobby menu` to open the selector.
+Use `auto` or `dialog` to prefer dialogs with an inventory fallback, `inventory` or `chest` to force the chest interface, and `chat` for clickable text. New installations use `auto`; migration preserves an existing explicit choice. Players type `/lobby menu` to open the selector.
 
 ## Java inventory setup
 
@@ -95,7 +97,7 @@ You configure control and fixed server slots with zero-based numbers. You keep s
 You configure per-server overrides to set selector metadata and Java-inventory presentation. You match the table key to the server ID in `velocity.toml`. You include spaces in `display_name` and use `description` in selector templates. You apply `menu_order` and `show_in_menu` to Java inventory, Java chat, and Bedrock.
 
 ```toml
-config_version = 2
+config_version = 3
 
 [servers]
 "lobby1" = { display_name = "Main Lobby 1", description = "Events, portals, and network help", menu_order = 10, show_in_menu = true, slot = 10, material = "NETHER_STAR", unavailable_material = "", name = "<gradient:#55FFFF:#FFFFFF><bold>{server}</bold></gradient>", lore = ["<gray>{description}</gray>", "<gray>Players</gray> <white>{players}/{max_players}</white>", "<dark_gray>Target: {server_id}</dark_gray>", "&#55FF88Click to connect"] }

@@ -255,7 +255,7 @@ public final class Config {
                         "<gradient:#8EF7FF:#D9F7FF><bold>Lobby Selector</bold></gradient> <gray>(Hover to view status, click to connect)</gray>",
                         "  <gray>•</gray> <white><bold>{server}</bold></white> <gray>| Click to connect</gray>",
                         "<white><bold>{server}</bold></white>\n<gray>Status:</gray> {status_color}{status}\n<gray>Players:</gray> <white>{players}/{max_players}</white>\n<gray>Ping:</gray> <white>{ping}ms</white>",
-                        JavaMenuType.INVENTORY,
+                        JavaMenuType.AUTO,
                         new InventoryMenuSettings(3, "COMPASS", true)
                 ),
                 new HealthChecks(true, 2500, 60),
@@ -620,11 +620,19 @@ public final class Config {
     }
 
     public enum JavaMenuType {
+        AUTO,
+        DIALOG,
         CHAT,
         INVENTORY;
 
         public static JavaMenuType fromString(String value) {
-            return "inventory".equalsIgnoreCase(value) ? INVENTORY : CHAT;
+            if (value == null) return AUTO;
+            return switch (value.trim().toLowerCase(Locale.ROOT)) {
+                case "inventory", "chest" -> INVENTORY;
+                case "chat" -> CHAT;
+                case "dialog" -> DIALOG;
+                default -> AUTO;
+            };
         }
 
         public String configValue() {

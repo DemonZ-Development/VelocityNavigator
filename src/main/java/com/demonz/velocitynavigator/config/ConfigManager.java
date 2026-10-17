@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 package com.demonz.velocitynavigator.config;
+
+import com.demonz.velocitynavigator.common.JavaUiMode;
 import com.demonz.velocitynavigator.locale.LanguageBundle;
 import com.demonz.velocitynavigator.locale.LanguagePacks;
 import com.demonz.velocitynavigator.menu.MenuServerState;
-
 import com.moandjiezana.toml.Toml;
 import org.slf4j.Logger;
 
@@ -27,16 +28,16 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.EnumMap;
 
 public final class ConfigManager {
 
-    private static final int GUI_CONFIG_VERSION = 2;
+    private static final int GUI_CONFIG_VERSION = 3;
 
     private final Path dataDirectory;
     private final Path configPath;
@@ -302,7 +303,7 @@ public final class ConfigManager {
 
     private void writeMessages(LanguageBundle language) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.5.2 language and menu text\n");
+        b.append("# VelocityNavigator 4.6.0 language and menu text\n");
         b.append("# MiniMessage formatting and documented placeholders are supported.\n");
         b.append("# Built-ins: ").append(String.join(", ", LanguagePacks.supportedCodes())).append(". Any other code is treated as a custom language.\n");
         b.append("# Change language, restart or /vn reload, and built-in text will be replaced automatically.\n\n");
@@ -500,7 +501,10 @@ public final class ConfigManager {
                 TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(guiToml, "controls.next_material"), defaults.nextMaterial()),
                 servers,
                 bedrockMenu,
-                stateStyles
+                stateStyles,
+                new GuiConfig.JavaUiOptions(
+                        readUiMode(guiToml, "java_ui.party", List.of("auto", "dialog", "inventory", "chest", "chat"), state),
+                        readUiMode(guiToml, "java_ui.authentication", List.of("auto", "dialog", "sign", "command"), state))
         );
         if (migrateGui) {
             writeGui(loaded);
@@ -510,11 +514,26 @@ public final class ConfigManager {
         return loaded;
     }
 
+    private JavaUiMode readUiMode(Toml toml, String key, List<String> allowed, ParseState state) {
+        String value = TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(toml, key), "auto").trim().toLowerCase(Locale.ROOT);
+        if (!allowed.contains(value)) {
+            state.warnings.add("gui.toml " + key + " must be one of " + allowed + "; auto was used.");
+            value = "auto";
+        }
+        return JavaUiMode.parse(value);
+    }
+
     private void writeGui(GuiConfig gui) throws IOException {
         StringBuilder b = new StringBuilder();
-        b.append("# VelocityNavigator 4.5.2 Java inventory and Bedrock form layout\n");
+        b.append("# VelocityNavigator 4.6.0 Java inventory and Bedrock form layout\n");
         b.append("# Text defaults live in messages.toml; per-server names/lore may use MiniMessage, & codes, § codes, or hex colors.\n\n");
         b.append("config_version = ").append(GUI_CONFIG_VERSION).append("\n\n");
+        b.append("# Java UIs: auto/dialog prefer native dialogs with safe fallbacks.\n");
+        b.append("[java_ui]\n");
+        b.append("# Party fallback: chest inventory, then chat when the backend bridge is unavailable.\n");
+        b.append("party = ").append(ConfigWriter.quoted(gui.javaUi().party().configValue())).append("\n");
+        b.append("# Authentication: auto, dialog, sign, or command. Dialog password fields are visible on screen.\n");
+        b.append("authentication = ").append(ConfigWriter.quoted(gui.javaUi().authentication().configValue())).append("\n\n");
         b.append("[layout]\n");
         b.append("# Java inventories have nine fixed columns. Choose 2-6 rows (18-54 slots);\n");
         b.append("# the bottom row is reserved for controls by default.\n");

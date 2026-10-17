@@ -15,7 +15,10 @@
  */
 package com.demonz.velocitynavigator.bukkit.menu;
 
+import com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge;
+import com.demonz.velocitynavigator.common.JavaUiMode;
 import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
+import com.demonz.velocitynavigator.common.UiBridgeProtocol;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -25,13 +28,19 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
@@ -51,6 +60,7 @@ public final class BackendMenuManager {
     }
 
     public void reloadAll() {
+        if (plugin instanceof JavaPlugin javaPlugin) javaPlugin.reloadConfig();
         menus.clear();
         if (!menusDir.exists()) {
             menusDir.mkdirs();
@@ -84,7 +94,18 @@ public final class BackendMenuManager {
 
             String title = config.getString("title", "&b&l" + menuName.toUpperCase());
             int rows = config.getInt("rows", 3);
-            menus.put(menuName, new BackendMenu(menuName, title, rows, result.items()));
+            String uiType = config.getString("ui", "inherit").trim().toLowerCase(Locale.ROOT);
+            BackendMenu menu = new BackendMenu(menuName, title, rows, result.items());
+            menu.setUiType(uiType);
+            String previousButton = config.getString("dialog.previous", config.getString("previous_button", null));
+            String nextButton = config.getString("dialog.next", config.getString("next_button", null));
+            String refreshButton = config.getString("dialog.refresh", config.getString("refresh_button", null));
+            String closeButton = config.getString("dialog.close", config.getString("close_button", null));
+            if (previousButton != null) menu.setPreviousButton(previousButton);
+            if (nextButton != null) menu.setNextButton(nextButton);
+            if (refreshButton != null) menu.setRefreshButton(refreshButton);
+            if (closeButton != null) menu.setCloseButton(closeButton);
+            menus.put(menuName, menu);
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load menu file " + file.getName(), e);
         }
@@ -98,11 +119,16 @@ public final class BackendMenuManager {
             return new ValidationResult(items, problems);
         }
         int rows = config.getInt("rows", 3);
+        String uiType = config.getString("ui", "inherit").trim().toLowerCase(Locale.ROOT);
+        if (!List.of("inherit", "auto", "dialog", "inventory", "chest").contains(uiType)) {
+            problems.add("ui must be inherit, auto, dialog, or inventory");
+        }
         if (rows < 2 || rows > 6) {
             problems.add("rows=" + rows + " is outside [2,6]");
             return new ValidationResult(items, problems);
         }
         int slotCap = rows * 9;
+        HashSet<Integer> usedSlots = new HashSet<>();
         if (!config.isConfigurationSection("items")) {
             return new ValidationResult(items, problems);
         }
@@ -116,6 +142,10 @@ public final class BackendMenuManager {
 
             if (slot < 0 || slot >= slotCap) {
                 problems.add("item '" + key + "' slot=" + slot + " is outside [0," + (slotCap - 1) + "]");
+                continue;
+            }
+            if (!usedSlots.add(slot)) {
+                problems.add("item '" + key + "' duplicates slot=" + slot);
                 continue;
             }
             if (target.isBlank() || material.isBlank() || name.isBlank()) {
@@ -184,6 +214,14 @@ public final class BackendMenuManager {
     }
 
     public boolean openMenu(Player player, String menuName) {
+        return openMenu(player, menuName, 0);
+    }
+
+    public boolean openMenu(Player player, String menuName, int requestedPage) {
+        if (plugin instanceof VelocityNavigatorBridge bridge && bridge.isAuthenticationPending(player)) {
+            player.sendMessage(ChatColor.YELLOW + "Please authenticate before opening a menu.");
+            return false;
+        }
         String key = (menuName == null || menuName.isBlank()) ? "main" : menuName.toLowerCase();
         BackendMenu menu = menus.get(key);
         if (menu == null) {
@@ -193,6 +231,46 @@ public final class BackendMenuManager {
             return false;
         }
 
+        if (plugin instanceof VelocityNavigatorBridge bridge && bridge.uiService() != null) {
+            var ui = bridge.uiService();
+            ui.cancel(player);
+            String configured = "inherit".equals(menu.getUiType()) ? bridge.getConfig().getString("java_ui", "auto") : menu.getUiType();
+            var mode = JavaUiMode.parse(configured);
+            if (mode.prefersDialog(ui.protocol(player), ui.dialogs().available(), ui.bedrock(player))) {
+                List<MenuBridgeProtocol.MenuItem> items = menu.getItems().stream().filter(item -> !item.name().isBlank())
+                        .sorted(Comparator.comparingInt(MenuBridgeProtocol.MenuItem::slot)).toList();
+                int pages = Math.max(1, (items.size() + 17) / 18);
+                int page = Math.max(0, Math.min(requestedPage, pages - 1));
+                List<UiBridgeProtocol.Button> buttons = new ArrayList<>();
+                Map<String, String> actions = new LinkedHashMap<>();
+                for (MenuBridgeProtocol.MenuItem item : items.subList(page * 18, Math.min(items.size(), (page + 1) * 18))) {
+                    String action = "@disabled".equals(item.target()) ? "" : "item:" + item.slot();
+                    if (!action.isBlank()) actions.put(action, item.target());
+                    buttons.add(new UiBridgeProtocol.Button(action,
+                            ChatColor.translateAlternateColorCodes('&', item.name()),
+                            ChatColor.translateAlternateColorCodes('&', String.join("\n", item.lore())), item.material()));
+                }
+                String previousLabel = resolveControlLabel(menu, "previous", "Previous");
+                String nextLabel = resolveControlLabel(menu, "next", "Next");
+                String refreshLabel = resolveControlLabel(menu, "refresh", "Refresh");
+                String closeLabel = resolveControlLabel(menu, "close", "Close");
+                if (page > 0) buttons.add(new UiBridgeProtocol.Button("@page:" + (page - 1), previousLabel, "", "ARROW"));
+                if (page + 1 < pages) buttons.add(new UiBridgeProtocol.Button("@page:" + (page + 1), nextLabel, "", "ARROW"));
+                buttons.add(new UiBridgeProtocol.Button("@page:" + page, refreshLabel, "", "CLOCK"));
+                String actualName = menu.getName();
+                var open = new UiBridgeProtocol.Open(UUID.randomUUID().toString(),
+                        ChatColor.translateAlternateColorCodes('&', menu.getTitle()), "", closeLabel, mode,
+                        ui.protocol(player), false, false, false, 60, buttons, List.of());
+                if (ui.dialogs().show(player, open, action -> {
+                    if ((!player.hasPermission("velocitynavigator.use") && !player.hasPermission("velocitynavigator.admin"))
+                            || bridge.isAuthenticationPending(player)) return;
+                    if (action.action().startsWith("@page:")) openMenu(player, actualName, Integer.parseInt(action.action().substring(6)));
+                    else if (actions.containsKey(action.action())) executeAction(player, actions.get(action.action()));
+                })) return true;
+            }
+        }
+
+        if (plugin instanceof VelocityNavigatorBridge bridge && bridge.uiService() != null) bridge.uiService().cancel(player);
         int slots = menu.getRows() * 9;
         String coloredTitle = ChatColor.translateAlternateColorCodes('&', menu.getTitle());
         BackendMenuHolder holder = new BackendMenuHolder(menu.getName());
@@ -222,6 +300,27 @@ public final class BackendMenuManager {
 
         player.openInventory(inv);
         return true;
+    }
+
+    public void executeAction(Player player, String target) {
+        String normalized = target.toLowerCase(Locale.ROOT);
+        if ("@disabled".equals(normalized)) return;
+        if (normalized.startsWith("menu:")) { openMenu(player, target.substring(5)); return; }
+        if (normalized.startsWith("cmd:") || normalized.startsWith("command:")) {
+            String command = target.substring(normalized.startsWith("cmd:") ? 4 : 8);
+            if (command.startsWith("/")) command = command.substring(1);
+            if (!command.isBlank()) player.performCommand(command);
+            return;
+        }
+        player.closeInventory();
+        if ("@close".equals(normalized) || "close".equals(normalized)) return;
+        String server = normalized.startsWith("server:") ? target.substring(7) : target;
+        try {
+            player.sendPluginMessage(plugin, MenuBridgeProtocol.CHANNEL,
+                    MenuBridgeProtocol.encodeSelection(MenuBridgeProtocol.BACKEND_SELECTION_TOKEN, server));
+        } catch (IOException | IllegalArgumentException exception) {
+            plugin.getLogger().warning("Could not send backend menu selection.");
+        }
     }
 
     public boolean addMenuItem(String menuName, int slot, String target, String material, String name, List<String> lore) {
@@ -287,6 +386,7 @@ public final class BackendMenuManager {
         YamlConfiguration config = new YamlConfiguration();
         config.set("title", menu.getTitle());
         config.set("rows", menu.getRows());
+        config.set("ui", menu.getUiType());
 
         List<MenuBridgeProtocol.MenuItem> items = menu.getItems();
         for (int i = 0; i < items.size(); i++) {
@@ -299,10 +399,35 @@ public final class BackendMenuManager {
             config.set(path + "lore", item.lore());
         }
 
+        if (menu.getPreviousButton() != null) config.set("dialog.previous", menu.getPreviousButton());
+        if (menu.getNextButton() != null) config.set("dialog.next", menu.getNextButton());
+        if (menu.getRefreshButton() != null) config.set("dialog.refresh", menu.getRefreshButton());
+        if (menu.getCloseButton() != null) config.set("dialog.close", menu.getCloseButton());
+
         try {
             config.save(file);
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to save menu file " + file.getName(), e);
         }
+    }
+
+    public String resolveControlLabel(BackendMenu menu, String key, String fallback) {
+        return resolveControlLabel(plugin, menu, key, fallback);
+    }
+
+    public static String resolveControlLabel(Plugin plugin, BackendMenu menu, String key, String fallback) {
+        String label = null;
+        if (menu != null) {
+            if ("previous".equals(key)) label = menu.getPreviousButton();
+            else if ("next".equals(key)) label = menu.getNextButton();
+            else if ("refresh".equals(key)) label = menu.getRefreshButton();
+            else if ("close".equals(key)) label = menu.getCloseButton();
+        }
+        if ((label == null || label.isBlank()) && plugin != null && plugin.getConfig() != null) {
+            label = plugin.getConfig().getString("dialog." + key,
+                    plugin.getConfig().getString(key + "_button",
+                    plugin.getConfig().getString("messages.dialog." + key, fallback)));
+        }
+        return ChatColor.translateAlternateColorCodes('&', (label != null && !label.isBlank()) ? label : fallback);
     }
 }
