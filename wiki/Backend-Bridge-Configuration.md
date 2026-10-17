@@ -23,6 +23,7 @@ The bridge supports Paper, Spigot, and Folia 1.16.5 through 26.3+ and requires J
 The backend creates `plugins/VelocityNavigator/config.yml`:
 
 ```yaml
+config_version: 3
 enabled: true
 java_ui: auto
 inventory_menu_enabled: true
@@ -37,10 +38,16 @@ npc_look_interval_ticks: 20
 bstats_enabled: true
 update_check_enabled: true
 update_check_interval_minutes: 120
+dialog:
+  previous: Previous
+  next: Next
+  refresh: Refresh
+  close: Close
 ```
 
 | Key | What it controls |
 |---|---|
+| `config_version` | Backend configuration format version (`3` in VelocityNavigator 4.6.0) |
 | `enabled` | Enables the backend plugin |
 | `java_ui` | Default for backend YAML menus: `auto` or `dialog` prefers native Java dialogs; `inventory` forces chests. Per-menu `ui` overrides this. |
 | `inventory_menu_enabled` | Allows the proxy to open its Java inventory selector |
@@ -54,6 +61,10 @@ update_check_interval_minutes: 120
 | `npc_look_interval_ticks` | Delay between NPC head-tracking checks |
 | `update_check_enabled` | Enables the backend Modrinth update check |
 | `update_check_interval_minutes` | Delay between update checks, with a minimum of 30 |
+| `dialog.previous` | Default label for native dialog previous page button |
+| `dialog.next` | Default label for native dialog next page button |
+| `dialog.refresh` | Default label for native dialog refresh button |
+| `dialog.close` | Default label for native dialog close button |
 
 The proxy's `navigator.toml` selects dialogs, inventories, or chat for the lobby selector. Its `gui.toml` controls chest presentation and `[java_ui]` choices for parties and authentication. See [Native Java Dialogs](Native-Java-Dialogs) for required versions and fallbacks. `/vnavmenu reload` also reloads the backend `java_ui` setting.
 

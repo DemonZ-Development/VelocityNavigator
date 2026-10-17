@@ -97,14 +97,18 @@ public final class BackendMenuManager {
             String uiType = config.getString("ui", "inherit").trim().toLowerCase(Locale.ROOT);
             BackendMenu menu = new BackendMenu(menuName, title, rows, result.items());
             menu.setUiType(uiType);
-            String previousButton = config.getString("dialog.previous", config.getString("previous_button", null));
-            String nextButton = config.getString("dialog.next", config.getString("next_button", null));
-            String refreshButton = config.getString("dialog.refresh", config.getString("refresh_button", null));
-            String closeButton = config.getString("dialog.close", config.getString("close_button", null));
-            if (previousButton != null) menu.setPreviousButton(previousButton);
-            if (nextButton != null) menu.setNextButton(nextButton);
-            if (refreshButton != null) menu.setRefreshButton(refreshButton);
-            if (closeButton != null) menu.setCloseButton(closeButton);
+            String previousButton = config.getString("dialog.previous");
+            if (previousButton == null || previousButton.isBlank()) previousButton = config.getString("previous_button", null);
+            String nextButton = config.getString("dialog.next");
+            if (nextButton == null || nextButton.isBlank()) nextButton = config.getString("next_button", null);
+            String refreshButton = config.getString("dialog.refresh");
+            if (refreshButton == null || refreshButton.isBlank()) refreshButton = config.getString("refresh_button", null);
+            String closeButton = config.getString("dialog.close");
+            if (closeButton == null || closeButton.isBlank()) closeButton = config.getString("close_button", null);
+            if (previousButton != null && !previousButton.isBlank()) menu.setPreviousButton(previousButton);
+            if (nextButton != null && !nextButton.isBlank()) menu.setNextButton(nextButton);
+            if (refreshButton != null && !refreshButton.isBlank()) menu.setRefreshButton(refreshButton);
+            if (closeButton != null && !closeButton.isBlank()) menu.setCloseButton(closeButton);
             menus.put(menuName, menu);
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load menu file " + file.getName(), e);
@@ -424,9 +428,13 @@ public final class BackendMenuManager {
             else if ("close".equals(key)) label = menu.getCloseButton();
         }
         if ((label == null || label.isBlank()) && plugin != null && plugin.getConfig() != null) {
-            label = plugin.getConfig().getString("dialog." + key,
-                    plugin.getConfig().getString(key + "_button",
-                    plugin.getConfig().getString("messages.dialog." + key, fallback)));
+            label = plugin.getConfig().getString("dialog." + key);
+            if (label == null || label.isBlank()) {
+                label = plugin.getConfig().getString(key + "_button");
+            }
+            if (label == null || label.isBlank()) {
+                label = plugin.getConfig().getString("messages.dialog." + key);
+            }
         }
         return ChatColor.translateAlternateColorCodes('&', (label != null && !label.isBlank()) ? label : fallback);
     }

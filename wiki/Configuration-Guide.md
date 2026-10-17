@@ -135,18 +135,18 @@ max_retries = 2
 | `default_lobbies` | LobbyEntry[] | `["lobby-1", "lobby-2"]` | See below | The pool of lobby servers. |
 | `max_retries` | int | `2` | `0`–`10` | Number of retry attempts on connection failure. **New in v4.** |
 | `use_menu_for_lobby` | boolean | `false` | - | Show the configured Java selector instead of immediately routing. Legacy `use_chat_menu_for_lobby` remains accepted. |
-| `routing.java_menu.type` | string | `"inventory"` | `inventory`, `chat` | Java selector presentation. Inventory mode requires the backend bridge. |
+| `routing.java_menu.type` | string | `"auto"` | `auto`, `dialog`, `inventory`, `chat` | Java selector presentation. `auto` and `dialog` prefer native dialogs; `inventory` requires the backend bridge. |
 | `routing.java_menu.fallback_to_chat` | boolean | `true` | - | Show the clickable chat selector if the current backend does not have the bridge installed. |
 | Menu selection token lifetime | int | `60` seconds | Internal safety limit for one-time inventory selections; it is not currently a user-configurable TOML setting. |
 
 Chat selector header, entry, and tooltip text now live under `[menus.chat]` in `messages.toml`. Inventory title, item name, and lore live under `[menus.inventory]`; Bedrock form text lives under `[menus.bedrock]`.
 
-### Java inventory selector setup
+### Java selector setup
 
 1. Put `VelocityNavigator-4.6.0.jar` in the Velocity proxy's `plugins/` directory.
 2. Put the same JAR in every backend Paper/Spigot server's `plugins/` directory.
 3. Set `routing.use_menu_for_lobby = true`.
-4. Set `routing.java_menu.type = "inventory"` and run `/vn reload`.
+4. Set `routing.java_menu.type = "auto"` (or `"dialog"` / `"inventory"`) and run `/vn reload`.
 
 Velocity remains responsible for routing validation. The backend bridge only renders the inventory; every click carries a one-time token that expires after 60 seconds (hardcoded, clamped to 5–3600).
 

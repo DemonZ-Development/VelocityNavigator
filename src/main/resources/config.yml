@@ -13,6 +13,11 @@ npc_look_interval_ticks: 20
 bstats_enabled: true
 update_check_enabled: true
 update_check_interval_minutes: 120
+dialog:
+  previous: Previous
+  next: Next
+  refresh: Refresh
+  close: Close
 redis:
   enabled: false
   host: 127.0.0.1

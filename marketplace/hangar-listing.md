@@ -83,7 +83,7 @@ Deliver a consistent navigation experience across every Minecraft client platfor
   * Lightweight, zero-GUI text selector accessible from any client.
   * Formatted with rich MiniMessage styling, hover tooltips showing server details, and single-click connection commands.
 * **One Server Configuration for All Selectors**:
-  * Define server metadata once in your configuration: `display_name`, `description`, `menu_order`, and `show_in_menu`. Changes immediately synchronize across Java Inventory, Bedrock Forms, and Chat selectors.
+  * Define server metadata once in your configuration: `display_name`, `description`, `menu_order`, and `show_in_menu`. Changes immediately synchronize across Native Dialogs, Java Inventory, Bedrock Forms, and Chat selectors.
 
 ---
 
