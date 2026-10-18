@@ -353,19 +353,29 @@ public final class ConfigManager {
     }
 
     private static boolean matchesForeignBaseline(Toml messageToml, String selectedLanguage, Path dataDirectory) {
-        String sampleKey = "messages.connecting";
-        String currentSample = TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(messageToml, sampleKey), "");
-        if (currentSample.isBlank()) {
+        String sampleConnecting = "messages.connecting";
+        String currentConnecting = TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(messageToml, sampleConnecting), "");
+        if (currentConnecting.isBlank()) {
             return false;
         }
-        if (currentSample.contains("\\u") || currentSample.contains("\\\\u")) {
+        if (currentConnecting.contains("\\u") || currentConnecting.contains("\\\\u")) {
             return true;
         }
-        if ("en".equalsIgnoreCase(selectedLanguage)) {
-            return false;
+        String sampleAlready = "messages.already_connected";
+        String currentAlready = TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(messageToml, sampleAlready), "");
+
+        for (String code : LanguagePacks.supportedCodes()) {
+            if (code.equalsIgnoreCase(selectedLanguage)) {
+                continue;
+            }
+            LanguageBundle other = LanguagePacks.bundle(code, dataDirectory);
+            if (other != null
+                    && other.text(sampleConnecting).equals(currentConnecting)
+                    && other.text(sampleAlready).equals(currentAlready)) {
+                return true;
+            }
         }
-        LanguageBundle english = LanguagePacks.bundle("en", dataDirectory);
-        return english != null && english.text(sampleKey).equals(currentSample);
+        return false;
     }
 
     private GuiConfig loadGui(Toml navigatorToml, ParseState state) throws IOException {
