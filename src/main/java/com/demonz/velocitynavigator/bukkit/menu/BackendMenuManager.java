@@ -92,27 +92,44 @@ public final class BackendMenuManager {
                 return;
             }
 
-            String title = config.getString("title", "&b&l" + menuName.toUpperCase());
-            int rows = config.getInt("rows", 3);
-            String uiType = config.getString("ui", "inherit").trim().toLowerCase(Locale.ROOT);
-            BackendMenu menu = new BackendMenu(menuName, title, rows, result.items());
-            menu.setUiType(uiType);
-            String previousButton = config.getString("dialog.previous");
-            if (previousButton == null || previousButton.isBlank()) previousButton = config.getString("previous_button", null);
-            String nextButton = config.getString("dialog.next");
-            if (nextButton == null || nextButton.isBlank()) nextButton = config.getString("next_button", null);
-            String refreshButton = config.getString("dialog.refresh");
-            if (refreshButton == null || refreshButton.isBlank()) refreshButton = config.getString("refresh_button", null);
-            String closeButton = config.getString("dialog.close");
-            if (closeButton == null || closeButton.isBlank()) closeButton = config.getString("close_button", null);
-            if (previousButton != null && !previousButton.isBlank()) menu.setPreviousButton(previousButton);
-            if (nextButton != null && !nextButton.isBlank()) menu.setNextButton(nextButton);
-            if (refreshButton != null && !refreshButton.isBlank()) menu.setRefreshButton(refreshButton);
-            if (closeButton != null && !closeButton.isBlank()) menu.setCloseButton(closeButton);
-            menus.put(menuName, menu);
+            BackendMenu menu = loadMenu(config, menuName, result);
+            if (menu != null) {
+                menus.put(menuName, menu);
+            }
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load menu file " + file.getName(), e);
         }
+    }
+
+    public static BackendMenu loadMenu(YamlConfiguration config, String menuName) {
+        return loadMenu(config, menuName, validate(config));
+    }
+
+    public static BackendMenu loadMenu(YamlConfiguration config, String menuName, ValidationResult result) {
+        if (config == null || result == null || !result.problems().isEmpty()) {
+            return null;
+        }
+
+        String title = config.getString("title", "&b&l" + menuName.toUpperCase());
+        int rows = config.getInt("rows", 3);
+        String uiType = config.getString("ui", "inherit").trim().toLowerCase(Locale.ROOT);
+        boolean fillEmptySlots = config.getBoolean("fill_empty_slots", true);
+        String fillerMaterial = config.getString("filler_material", "GRAY_STAINED_GLASS_PANE");
+        BackendMenu menu = new BackendMenu(menuName, title, rows, result.items(), fillEmptySlots, fillerMaterial);
+        menu.setUiType(uiType);
+        String previousButton = config.getString("dialog.previous");
+        if (previousButton == null || previousButton.isBlank()) previousButton = config.getString("previous_button", null);
+        String nextButton = config.getString("dialog.next");
+        if (nextButton == null || nextButton.isBlank()) nextButton = config.getString("next_button", null);
+        String refreshButton = config.getString("dialog.refresh");
+        if (refreshButton == null || refreshButton.isBlank()) refreshButton = config.getString("refresh_button", null);
+        String closeButton = config.getString("dialog.close");
+        if (closeButton == null || closeButton.isBlank()) closeButton = config.getString("close_button", null);
+        if (previousButton != null && !previousButton.isBlank()) menu.setPreviousButton(previousButton);
+        if (nextButton != null && !nextButton.isBlank()) menu.setNextButton(nextButton);
+        if (refreshButton != null && !refreshButton.isBlank()) menu.setRefreshButton(refreshButton);
+        if (closeButton != null && !closeButton.isBlank()) menu.setCloseButton(closeButton);
+        return menu;
     }
 
     public static ValidationResult validate(YamlConfiguration config) {
@@ -195,26 +212,39 @@ public final class BackendMenuManager {
     }
 
     private void createMenuTemplate(String fileName, String title, int rows, List<MenuBridgeProtocol.MenuItem> items) {
+        createMenuTemplate(fileName, title, rows, true, "GRAY_STAINED_GLASS_PANE", items);
+    }
+
+    private void createMenuTemplate(String fileName, String title, int rows, boolean fillEmptySlots, String fillerMaterial, List<MenuBridgeProtocol.MenuItem> items) {
         File file = new File(menusDir, fileName);
         if (file.exists()) return;
 
-        YamlConfiguration config = new YamlConfiguration();
-        config.set("title", title);
-        config.set("rows", rows);
-        for (int i = 0; i < items.size(); i++) {
-            MenuBridgeProtocol.MenuItem item = items.get(i);
-            String path = "items.item_" + i + ".";
-            config.set(path + "slot", item.slot());
-            config.set(path + "target", item.target());
-            config.set(path + "material", item.material());
-            config.set(path + "name", item.name());
-            config.set(path + "lore", item.lore());
-        }
+        YamlConfiguration config = createMenuTemplateConfig(title, rows, fillEmptySlots, fillerMaterial, items);
         try {
             config.save(file);
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to save menu template " + fileName, e);
         }
+    }
+
+    public static YamlConfiguration createMenuTemplateConfig(String title, int rows, boolean fillEmptySlots, String fillerMaterial, List<MenuBridgeProtocol.MenuItem> items) {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("title", title);
+        config.set("rows", rows);
+        config.set("fill_empty_slots", fillEmptySlots);
+        config.set("filler_material", (fillerMaterial != null && !fillerMaterial.isBlank()) ? fillerMaterial : "GRAY_STAINED_GLASS_PANE");
+        if (items != null) {
+            for (int i = 0; i < items.size(); i++) {
+                MenuBridgeProtocol.MenuItem item = items.get(i);
+                String path = "items.item_" + i + ".";
+                config.set(path + "slot", item.slot());
+                config.set(path + "target", item.target());
+                config.set(path + "material", item.material());
+                config.set(path + "name", item.name());
+                config.set(path + "lore", item.lore());
+            }
+        }
+        return config;
     }
 
     public boolean openMenu(Player player, String menuName) {
@@ -280,30 +310,65 @@ public final class BackendMenuManager {
         BackendMenuHolder holder = new BackendMenuHolder(menu.getName());
         Inventory inv = Bukkit.createInventory(holder, slots, coloredTitle);
         holder.bindInventory(inv);
-
-        for (MenuBridgeProtocol.MenuItem item : menu.getItems()) {
-            if (item.slot() >= 0 && item.slot() < slots) {
-                Material mat = Material.matchMaterial(item.material());
-                if (mat == null) mat = Material.COMPASS;
-
-                ItemStack is = new ItemStack(mat);
-                ItemMeta meta = is.getItemMeta();
-                if (meta != null) {
-                    meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', item.name()));
-                    List<String> lore = new ArrayList<>();
-                    for (String line : item.lore()) {
-                        lore.add(ChatColor.translateAlternateColorCodes('&', line));
-                    }
-                    meta.setLore(lore);
-                    is.setItemMeta(meta);
-                }
-                inv.setItem(item.slot(), is);
-                holder.targetsBySlot().put(item.slot(), item.target());
-            }
-        }
+        populateInventory(inv, menu, holder);
 
         player.openInventory(inv);
         return true;
+    }
+
+    public void populateInventory(Inventory inv, BackendMenu menu) {
+        populateInventory(inv, menu, null);
+    }
+
+    public static void populateInventory(Inventory inv, BackendMenu menu, BackendMenuHolder holder) {
+        int slots = inv.getSize();
+        if (menu.isFillEmptySlots()) {
+            ItemStack filler = createItem(menu.getFillerMaterial(), " ", List.of(), Material.GRAY_STAINED_GLASS_PANE);
+            for (int slot = 0; slot < slots; slot++) {
+                inv.setItem(slot, filler);
+            }
+        }
+
+        for (MenuBridgeProtocol.MenuItem item : menu.getItems()) {
+            if (item.slot() >= 0 && item.slot() < slots) {
+                ItemStack is = createItem(item.material(), item.name(), item.lore(), Material.COMPASS);
+                inv.setItem(item.slot(), is);
+                if (holder != null) {
+                    holder.targetsBySlot().put(item.slot(), item.target());
+                }
+            }
+        }
+    }
+
+    private static ItemStack createItem(String materialName, String displayName, List<String> lore, Material fallback) {
+        Material mat = Material.matchMaterial(materialName);
+        if (mat == null || !mat.isItem()) {
+            mat = fallback;
+        }
+
+        ItemStack is = new ItemStack(mat);
+        ItemMeta meta = null;
+        try {
+            meta = is.getItemMeta();
+        } catch (Exception ignored) {
+        }
+        if (meta != null) {
+            if (displayName != null) {
+                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
+            }
+            if (lore != null && !lore.isEmpty()) {
+                List<String> coloredLore = new ArrayList<>();
+                for (String line : lore) {
+                    coloredLore.add(ChatColor.translateAlternateColorCodes('&', line));
+                }
+                meta.setLore(coloredLore);
+            }
+            try {
+                is.setItemMeta(meta);
+            } catch (Exception ignored) {
+            }
+        }
+        return is;
     }
 
     public void executeAction(Player player, String target) {
@@ -391,6 +456,8 @@ public final class BackendMenuManager {
         config.set("title", menu.getTitle());
         config.set("rows", menu.getRows());
         config.set("ui", menu.getUiType());
+        config.set("fill_empty_slots", menu.isFillEmptySlots());
+        config.set("filler_material", menu.getFillerMaterial());
 
         List<MenuBridgeProtocol.MenuItem> items = menu.getItems();
         for (int i = 0; i < items.size(); i++) {

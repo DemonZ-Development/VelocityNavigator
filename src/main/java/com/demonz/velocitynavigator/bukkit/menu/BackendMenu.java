@@ -15,13 +15,21 @@ public final class BackendMenu {
     private String title;
     private int rows;
     private String uiType = "inherit";
+    private boolean fillEmptySlots = true;
+    private String fillerMaterial = "GRAY_STAINED_GLASS_PANE";
     private final List<MenuBridgeProtocol.MenuItem> items;
 
     public BackendMenu(String name, String title, int rows, List<MenuBridgeProtocol.MenuItem> items) {
+        this(name, title, rows, items, true, "GRAY_STAINED_GLASS_PANE");
+    }
+
+    public BackendMenu(String name, String title, int rows, List<MenuBridgeProtocol.MenuItem> items, boolean fillEmptySlots, String fillerMaterial) {
         this.name = name;
         this.title = title;
         this.rows = Math.max(2, Math.min(6, rows));
         this.items = items != null ? new ArrayList<>(items) : new ArrayList<>();
+        this.fillEmptySlots = fillEmptySlots;
+        this.fillerMaterial = (fillerMaterial == null || fillerMaterial.isBlank()) ? "GRAY_STAINED_GLASS_PANE" : fillerMaterial;
     }
 
     public String getName() {
@@ -30,6 +38,22 @@ public final class BackendMenu {
 
     public String getUiType() { return uiType; }
     public void setUiType(String uiType) { this.uiType = uiType == null ? "inherit" : uiType; }
+
+    public boolean isFillEmptySlots() {
+        return fillEmptySlots;
+    }
+
+    public void setFillEmptySlots(boolean fillEmptySlots) {
+        this.fillEmptySlots = fillEmptySlots;
+    }
+
+    public String getFillerMaterial() {
+        return fillerMaterial;
+    }
+
+    public void setFillerMaterial(String fillerMaterial) {
+        this.fillerMaterial = (fillerMaterial == null || fillerMaterial.isBlank()) ? "GRAY_STAINED_GLASS_PANE" : fillerMaterial;
+    }
 
     public String getTitle() {
         return title;
