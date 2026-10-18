@@ -1,5 +1,7 @@
 # Native Java Dialogs
 
+![Native Java dialog selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-dialog-selector.png)
+
 Starting with VelocityNavigator 4.6.0, Java players can use Minecraft's native dialogs for the lobby selector, party management, authentication, and backend YAML menus, including menus opened by NPCs. New configurations use `auto`: dialogs on supported clients and backends, with the existing interfaces as fallbacks.
 
 ## Requirements and fallbacks

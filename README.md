@@ -42,6 +42,8 @@ Health state is assembled from several sources: active pings, TCP socket checks,
 
 ## Server selector
 
+![Native Java dialog selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-dialog-selector.png)
+
 ![Java inventory selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png)
 
 Four front-ends, one config. You define `display_name`, `description`, `menu_order` and `show_in_menu` once per server and all four pick it up.

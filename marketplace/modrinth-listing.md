@@ -60,6 +60,8 @@ When a backend crashes or suffers severe TPS drops, standard proxies leave playe
 
 Deliver a consistent navigation experience across every Minecraft client platform:
 
+![Native Java dialog selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-dialog-selector.png)
+
 ![Java inventory selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/java-inventory-selector.png)
 
 ![Bedrock form selector](https://raw.githubusercontent.com/DemonZ-Development/VelocityNavigator/main/assets/bedrock-selector.png)
