@@ -59,7 +59,7 @@ dialog:
 | `menus_enabled` | Enables backend YAML menus in `menus/*.yml` |
 | `npcs_enabled` | Enables NPC files in `npcs/*.yml` |
 | `npc_look_interval_ticks` | Delay between NPC head-tracking checks |
-| `update_check_enabled` | Enables the backend Modrinth update check |
+| `update_check_enabled` | Enables backend DemonZ and Modrinth update checking |
 | `update_check_interval_minutes` | Delay between update checks, with a minimum of 30 |
 | `dialog.previous` | Default label for native dialog previous page button |
 | `dialog.next` | Default label for native dialog next page button |

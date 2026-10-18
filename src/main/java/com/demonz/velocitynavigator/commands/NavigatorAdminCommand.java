@@ -227,7 +227,7 @@ public final class NavigatorAdminCommand implements SimpleCommand {
     }
 
     private void updateCheck(CommandSource source) {
-        source.sendMessage(MessageFormatter.render("<gray>Checking Modrinth for updates...</gray>"));
+        source.sendMessage(MessageFormatter.render("<gray>Checking DemonZ and Modrinth for updates...</gray>"));
         plugin.updateChecker().checkAsync(plugin.config().updateChecker())
                 .thenRun(() -> source.sendMessage(plugin.buildVersionComponent()))
                 .exceptionally(throwable -> {

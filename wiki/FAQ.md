@@ -167,7 +167,7 @@ In v4.1.0, the update checker features a **periodic scheduled task** with expone
 2. A **recurring scheduled check**: repeats at the configured `check_interval` (minimum 30 minutes).
 3. A **manual check command**: `/vn updatecheck`.
 4. An **admin join notification**: when a player with `velocitynavigator.admin` permission joins, if an update is available, they receive a chat message.
-5. **HTTP 429 backoff**: if Modrinth returns rate-limit errors, the checker backs off exponentially up to 4 hours.
+5. **HTTP 429 backoff**: if DemonZ or Modrinth returns rate-limit errors, the checker backs off exponentially up to 4 hours.
 
 To suppress the startup notification, set `notify_on_startup = false`. To suppress the admin join notification, set `notify_admins_on_join = false`.
 

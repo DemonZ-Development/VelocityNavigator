@@ -475,7 +475,7 @@ cache_seconds = 60
 
 ## `[update_checker]`
 
-Controls Modrinth update checks. The checker runs after startup, repeats at the configured interval, and can be triggered manually with `/vn updatecheck`.
+Controls DemonZ and Modrinth update checks. The checker runs after startup, repeats at the configured interval, and can be triggered manually with `/vn updatecheck`.
 
 ```toml
 [update_checker]

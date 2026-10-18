@@ -73,7 +73,7 @@ All `/vn` and `/velocitynavigator` commands require `velocitynavigator.admin`.
 | `/vn debug player <name>` | Previews the route the named online player would receive |
 | `/vn debug server <name>` | Inspects one registered server's health and circuit information |
 | `/vn version` | Shows installed and latest allowed remote version |
-| `/vn updatecheck` | Checks Modrinth immediately through the configured release channel |
+| `/vn updatecheck` | Checks DemonZ and Modrinth immediately through the configured release channel |
 | `/vn help` | Shows the in-game command reference |
 
 ## Maintenance, configuration, and storage

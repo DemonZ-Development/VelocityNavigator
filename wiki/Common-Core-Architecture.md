@@ -16,6 +16,7 @@ The `common/` package contains seven classes:
 | `common/RedisTransport` | Pure RESP wire primitives: connect/authenticate/writeCommand/readResponse + safety caps | `CONNECT_MAX_RESP_LINE_BYTES`, `MAX_RESP_BULK_BYTES`, `MAX_RESP_ARRAY_LENGTH`, `MAX_RESP_NESTING_DEPTH`, `MAX_RESP_FRAME_BYTES`, `ConnectionSettings`, `connect`, `authenticate`, `writeCommand`, `readResponse` |
 | `common/RedisSecurityUtils` | Pure validation: HMAC delegation, timestamp freshness window, allowlisted-host matcher | `sign`, `fresh`, `hostAllowed` |
 | `common/ModrinthClient` | Data-only Modrinth primitives: URL constant, User-Agent helper, VersionType enum, row parser, best-version selector | `API_URL`, `DOWNLOAD_URL`, `VersionType.fromString`, `ModrinthRelease`, `userAgent`, `parseRelease`, `bestVersionIn` |
+| `common/DemonzClient` | Data-only DemonZ primitives: URL constants, User-Agent helper, VersionType enum, best-version selector | `API_BASE`, `UPDATES_URL`, `PROJECT_URL`, `DOWNLOAD_URL`, `VersionType.fromString`, `DemonzRelease`, `userAgent`, `bestVersionIn` |
 | `common/SemanticVersion` | Version parsing, prerelease detection, and ordering | `parse`, `isPrerelease`, `compareTo` |
 
 ## Why these classes live here

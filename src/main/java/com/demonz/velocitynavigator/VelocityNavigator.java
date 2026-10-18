@@ -27,6 +27,8 @@ import com.demonz.velocitynavigator.commands.QueueCommand;
 import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
 import com.demonz.velocitynavigator.common.UiBridgeProtocol;
 import com.demonz.velocitynavigator.config.AdvancedConfig;
+import com.demonz.velocitynavigator.common.DemonzClient;
+import com.demonz.velocitynavigator.common.ModrinthClient;
 import com.demonz.velocitynavigator.config.Config;
 import com.demonz.velocitynavigator.config.ConfigLoadResult;
 import com.demonz.velocitynavigator.config.ConfigManager;
@@ -740,7 +742,9 @@ public final class VelocityNavigator implements NavigatorAPI {
                 server.getScheduler().buildTask(this, () -> {
                     event.getPlayer().sendMessage(MessageFormatter.render(
                             "<yellow>[VelocityNavigator]</yellow> <white>Update available: " + pluginVersion
-                                    + " → " + status.latestKnownVersion() + ". Use /vn updatecheck for details.</white>"
+                                    + " → " + status.latestKnownVersion() + ".</white> <gray>Website: <aqua>"
+                                    + DemonzClient.PROJECT_URL + "</aqua> | Modrinth: <aqua>"
+                                    + ModrinthClient.DOWNLOAD_URL + "</aqua></gray>"
                     ));
                 }).delay(2, TimeUnit.SECONDS).schedule();
             }
@@ -752,7 +756,9 @@ public final class VelocityNavigator implements NavigatorAPI {
                                 if (event.getPlayer().isActive()) {
                                     event.getPlayer().sendMessage(MessageFormatter.render(
                                             "<yellow>[VelocityNavigator]</yellow> <white>Update available: " + pluginVersion
-                                                    + " → " + updateChecker.status().latestKnownVersion() + ". Use /vn updatecheck for details.</white>"
+                                                    + " → " + updateChecker.status().latestKnownVersion() + ".</white> <gray>Website: <aqua>"
+                                                    + DemonzClient.PROJECT_URL + "</aqua> | Modrinth: <aqua>"
+                                                    + ModrinthClient.DOWNLOAD_URL + "</aqua></gray>"
                                     ));
                                 }
                             }).delay(1, TimeUnit.SECONDS).schedule();
@@ -1322,14 +1328,17 @@ public final class VelocityNavigator implements NavigatorAPI {
         UpdateStatus status = updateChecker.status();
         String remote = status.latestKnownVersion();
         String availability = status.updateAvailable() ? "<green>Update available</green>" : "<gray>No newer version found</gray>";
+        String links = status.updateAvailable()
+                ? "\n<gray>Website:</gray> <aqua>" + DemonzClient.PROJECT_URL + "</aqua>\n<gray>Modrinth:</gray> <aqua>" + ModrinthClient.DOWNLOAD_URL + "</aqua>"
+                : "";
         String errorLine = status.lastError().isBlank() ? "<gray>No update-check errors recorded.</gray>" : "<red>" + status.lastError() + "</red>";
         return MessageFormatter.render("""
                 <gradient:#8EF7FF:#D9F7FF><bold>VelocityNavigator Version</bold></gradient>
                 <gray>Installed:</gray> <white>%s</white>
                 <gray>Latest allowed remote:</gray> <white>%s</white>
+                %s%s
                 %s
-                %s
-                """.formatted(pluginVersion, remote, availability, errorLine));
+                """.formatted(pluginVersion, remote, availability, links, errorLine));
     }
 
     public Component buildPlayerDebugComponent(RouteDecision decision) {
