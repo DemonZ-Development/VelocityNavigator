@@ -21,7 +21,11 @@ public final class UiBridgeProtocol {
     private static final int MAX_BYTES = 30000;
     public enum Type { CAPABILITIES, CLIENT_CONTEXT, OPEN, ACTION }
     public record Capabilities(boolean dialogs) {}
-    public record ClientContext(int protocol, boolean bedrock) {}
+    public record ClientContext(int protocol, boolean bedrock, String language) {
+        public ClientContext(int protocol, boolean bedrock) {
+            this(protocol, bedrock, "");
+        }
+    }
     public record Button(String action, String label, String tooltip, String material) {}
     public record Input(String key, String label, int maxLength) {}
     public record Open(String token, String title, String body, String closeLabel, JavaUiMode mode,
@@ -60,15 +64,26 @@ public final class UiBridgeProtocol {
     }
 
     public static byte[] context(int protocol, boolean bedrock) throws IOException {
-        return encode(Type.CLIENT_CONTEXT, out -> { out.writeInt(protocol); out.writeBoolean(bedrock); });
+        return context(protocol, bedrock, "");
+    }
+
+    public static byte[] context(int protocol, boolean bedrock, String language) throws IOException {
+        String lang = language == null ? "" : language.trim();
+        return encode(Type.CLIENT_CONTEXT, out -> {
+            out.writeInt(protocol);
+            out.writeBoolean(bedrock);
+            write(out, lang, 16);
+        });
     }
 
     public static ClientContext decodeContext(byte[] payload) throws IOException {
         try (DataInputStream in = input(payload)) {
             requireType(in, Type.CLIENT_CONTEXT);
-            ClientContext result = new ClientContext(in.readInt(), in.readBoolean());
+            int protocol = in.readInt();
+            boolean bedrock = in.readBoolean();
+            String language = in.available() > 0 ? read(in, 16) : "";
             end(in);
-            return result;
+            return new ClientContext(protocol, bedrock, language);
         }
     }
 

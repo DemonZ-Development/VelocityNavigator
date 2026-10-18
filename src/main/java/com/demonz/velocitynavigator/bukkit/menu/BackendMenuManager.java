@@ -19,6 +19,8 @@ import com.demonz.velocitynavigator.bukkit.VelocityNavigatorBridge;
 import com.demonz.velocitynavigator.common.JavaUiMode;
 import com.demonz.velocitynavigator.common.MenuBridgeProtocol;
 import com.demonz.velocitynavigator.common.UiBridgeProtocol;
+import com.demonz.velocitynavigator.locale.LanguageBundle;
+import com.demonz.velocitynavigator.locale.LanguagePacks;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -277,23 +279,27 @@ public final class BackendMenuManager {
                 int page = Math.max(0, Math.min(requestedPage, pages - 1));
                 List<UiBridgeProtocol.Button> buttons = new ArrayList<>();
                 Map<String, String> actions = new LinkedHashMap<>();
+                LanguageBundle bundle = resolveLanguageBundle(player);
                 for (MenuBridgeProtocol.MenuItem item : items.subList(page * 18, Math.min(items.size(), (page + 1) * 18))) {
                     String action = "@disabled".equals(item.target()) ? "" : "item:" + item.slot();
                     if (!action.isBlank()) actions.put(action, item.target());
+                    String name = resolveText(item.name(), bundle);
+                    List<String> lore = item.lore() == null ? List.of() : item.lore().stream().map(l -> resolveText(l, bundle)).toList();
                     buttons.add(new UiBridgeProtocol.Button(action,
-                            ChatColor.translateAlternateColorCodes('&', item.name()),
-                            ChatColor.translateAlternateColorCodes('&', String.join("\n", item.lore())), item.material()));
+                            ChatColor.translateAlternateColorCodes('&', name),
+                            ChatColor.translateAlternateColorCodes('&', String.join("\n", lore)), item.material()));
                 }
-                String previousLabel = resolveControlLabel(menu, "previous", "Previous");
-                String nextLabel = resolveControlLabel(menu, "next", "Next");
-                String refreshLabel = resolveControlLabel(menu, "refresh", "Refresh");
-                String closeLabel = resolveControlLabel(menu, "close", "Close");
+                String previousLabel = resolveControlLabelForPlayer(player, menu, "previous", "Previous");
+                String nextLabel = resolveControlLabelForPlayer(player, menu, "next", "Next");
+                String refreshLabel = resolveControlLabelForPlayer(player, menu, "refresh", "Refresh");
+                String closeLabel = resolveControlLabelForPlayer(player, menu, "close", "Close");
                 if (page > 0) buttons.add(new UiBridgeProtocol.Button("@page:" + (page - 1), previousLabel, "", "ARROW"));
                 if (page + 1 < pages) buttons.add(new UiBridgeProtocol.Button("@page:" + (page + 1), nextLabel, "", "ARROW"));
                 buttons.add(new UiBridgeProtocol.Button("@page:" + page, refreshLabel, "", "CLOCK"));
                 String actualName = menu.getName();
+                String title = resolveText(menu.getTitle(), bundle);
                 var open = new UiBridgeProtocol.Open(UUID.randomUUID().toString(),
-                        ChatColor.translateAlternateColorCodes('&', menu.getTitle()), "", closeLabel, mode,
+                        ChatColor.translateAlternateColorCodes('&', title), "", closeLabel, mode,
                         ui.protocol(player), false, false, false, 60, buttons, List.of());
                 if (ui.dialogs().show(player, open, action -> {
                     if ((!player.hasPermission("velocitynavigator.use") && !player.hasPermission("velocitynavigator.admin"))
@@ -305,22 +311,27 @@ public final class BackendMenuManager {
         }
 
         if (plugin instanceof VelocityNavigatorBridge bridge && bridge.uiService() != null) bridge.uiService().cancel(player);
+        LanguageBundle bundle = resolveLanguageBundle(player);
         int slots = menu.getRows() * 9;
-        String coloredTitle = ChatColor.translateAlternateColorCodes('&', menu.getTitle());
+        String coloredTitle = ChatColor.translateAlternateColorCodes('&', resolveText(menu.getTitle(), bundle));
         BackendMenuHolder holder = new BackendMenuHolder(menu.getName());
         Inventory inv = Bukkit.createInventory(holder, slots, coloredTitle);
         holder.bindInventory(inv);
-        populateInventory(inv, menu, holder);
+        populateInventory(inv, menu, holder, bundle);
 
         player.openInventory(inv);
         return true;
     }
 
     public void populateInventory(Inventory inv, BackendMenu menu) {
-        populateInventory(inv, menu, null);
+        populateInventory(inv, menu, null, null);
     }
 
     public static void populateInventory(Inventory inv, BackendMenu menu, BackendMenuHolder holder) {
+        populateInventory(inv, menu, holder, null);
+    }
+
+    public static void populateInventory(Inventory inv, BackendMenu menu, BackendMenuHolder holder, LanguageBundle bundle) {
         int slots = inv.getSize();
         if (menu.isFillEmptySlots()) {
             ItemStack filler = createItem(menu.getFillerMaterial(), " ", List.of(), Material.GRAY_STAINED_GLASS_PANE);
@@ -331,7 +342,9 @@ public final class BackendMenuManager {
 
         for (MenuBridgeProtocol.MenuItem item : menu.getItems()) {
             if (item.slot() >= 0 && item.slot() < slots) {
-                ItemStack is = createItem(item.material(), item.name(), item.lore(), Material.COMPASS);
+                String name = resolveText(item.name(), bundle);
+                List<String> lore = item.lore() == null ? List.of() : item.lore().stream().map(l -> resolveText(l, bundle)).toList();
+                ItemStack is = createItem(item.material(), name, lore, Material.COMPASS);
                 inv.setItem(item.slot(), is);
                 if (holder != null) {
                     holder.targetsBySlot().put(item.slot(), item.target());
@@ -482,11 +495,60 @@ public final class BackendMenuManager {
         }
     }
 
+    public LanguageBundle resolveLanguageBundle(Player player) {
+        String lang = null;
+        if (player != null && plugin instanceof VelocityNavigatorBridge bridge && bridge.uiService() != null) {
+            lang = bridge.uiService().language(player);
+        }
+        if (lang == null || lang.isBlank()) {
+            lang = plugin != null && plugin.getConfig() != null ? plugin.getConfig().getString("language", "auto") : "auto";
+        }
+        if (lang != null && !lang.isBlank() && !"auto".equalsIgnoreCase(lang) && LanguagePacks.isSupported(lang)) {
+            return LanguagePacks.bundle(lang);
+        }
+        return LanguagePacks.bundle("en");
+    }
+
+    public static String resolveText(String text, LanguageBundle bundle) {
+        if (text == null || bundle == null || !text.contains("{lang:")) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder();
+        int cursor = 0;
+        int start;
+        while ((start = text.indexOf("{lang:", cursor)) != -1) {
+            sb.append(text, cursor, start);
+            int end = text.indexOf('}', start + 6);
+            if (end == -1) {
+                sb.append(text.substring(start));
+                return sb.toString();
+            }
+            String key = text.substring(start + 6, end).trim();
+            String resolved = bundle.text(key);
+            sb.append(resolved != null && !resolved.isBlank() && !resolved.equals(key) ? resolved : "{" + key + "}");
+            cursor = end + 1;
+        }
+        sb.append(text.substring(cursor));
+        return sb.toString();
+    }
+
+    public String resolveControlLabelForPlayer(Player player, BackendMenu menu, String key, String fallback) {
+        String lang = null;
+        if (player != null && plugin instanceof VelocityNavigatorBridge bridge && bridge.uiService() != null) {
+            lang = bridge.uiService().language(player);
+        }
+        return resolveControlLabel(plugin, menu, key, fallback, lang);
+    }
+
     public String resolveControlLabel(BackendMenu menu, String key, String fallback) {
-        return resolveControlLabel(plugin, menu, key, fallback);
+        return resolveControlLabel(plugin, menu, key, fallback, null);
     }
 
     public static String resolveControlLabel(Plugin plugin, BackendMenu menu, String key, String fallback) {
+        return resolveControlLabel(plugin, menu, key, fallback, null);
+    }
+
+    public static String resolveControlLabel(Plugin plugin, BackendMenu menu, String key, String fallback, String language) {
         String label = null;
         if (menu != null) {
             if ("previous".equals(key)) label = menu.getPreviousButton();
@@ -494,7 +556,24 @@ public final class BackendMenuManager {
             else if ("refresh".equals(key)) label = menu.getRefreshButton();
             else if ("close".equals(key)) label = menu.getCloseButton();
         }
-        if ((label == null || label.isBlank()) && plugin != null && plugin.getConfig() != null) {
+        if (label != null && !label.isBlank()) {
+            return ChatColor.translateAlternateColorCodes('&', label);
+        }
+        String lang = language;
+        if ((lang == null || lang.isBlank()) && plugin != null && plugin.getConfig() != null) {
+            lang = plugin.getConfig().getString("language", "auto");
+        }
+        if (lang != null && !lang.isBlank() && !"auto".equalsIgnoreCase(lang) && !"en".equalsIgnoreCase(lang)
+                && LanguagePacks.isSupported(lang)) {
+            LanguageBundle bundle = LanguagePacks.bundle(lang);
+            if (bundle != null) {
+                String localized = localizedControl(bundle, key);
+                if (localized != null && !localized.isBlank()) {
+                    return ChatColor.translateAlternateColorCodes('&', localized);
+                }
+            }
+        }
+        if (plugin != null && plugin.getConfig() != null) {
             label = plugin.getConfig().getString("dialog." + key);
             if (label == null || label.isBlank()) {
                 label = plugin.getConfig().getString(key + "_button");
@@ -503,6 +582,45 @@ public final class BackendMenuManager {
                 label = plugin.getConfig().getString("messages.dialog." + key);
             }
         }
+        if (label != null && !label.isBlank() && !isDefaultEnglish(key, label)) {
+            return ChatColor.translateAlternateColorCodes('&', label);
+        }
+        if (lang != null && !lang.isBlank() && LanguagePacks.isSupported(lang)) {
+            LanguageBundle bundle = LanguagePacks.bundle(lang);
+            if (bundle != null) {
+                String localized = localizedControl(bundle, key);
+                if (localized != null && !localized.isBlank()) {
+                    return ChatColor.translateAlternateColorCodes('&', localized);
+                }
+            }
+        }
         return ChatColor.translateAlternateColorCodes('&', (label != null && !label.isBlank()) ? label : fallback);
+    }
+
+    private static String localizedControl(LanguageBundle bundle, String key) {
+        String primary = bundle.text("menus.dialog." + key);
+        if (primary != null && !primary.isBlank() && !primary.equals("menus.dialog." + key)) {
+            return primary;
+        }
+        String secondary = bundle.text("menus.inventory." + key);
+        if (secondary != null && !secondary.isBlank() && !secondary.equals("menus.inventory." + key)) {
+            return stripTags(secondary);
+        }
+        return null;
+    }
+
+    private static boolean isDefaultEnglish(String key, String label) {
+        return switch (key) {
+            case "previous" -> "Previous".equalsIgnoreCase(label);
+            case "next" -> "Next".equalsIgnoreCase(label);
+            case "refresh" -> "Refresh".equalsIgnoreCase(label);
+            case "close" -> "Close".equalsIgnoreCase(label);
+            default -> false;
+        };
+    }
+
+    private static String stripTags(String text) {
+        if (text == null) return "";
+        return text.replaceAll("<[^>]*>", "").replaceAll("&[0-9a-fk-orA-FK-OR]", "").trim();
     }
 }

@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Native Java dialogs for lobby selectors, party management, authentication, and backend YAML menus, including NPC menu entry points. New configurations select dialogs on supported clients and Paper backends, with inventory, sign, and chat or command fallbacks.
 - Configurable Java UI modes per feature and per YAML menu. Existing selector choices survive migration; Bedrock forms retain their existing behavior.
 - Expiring, single-use dialog actions bound to the player and backend, private authentication input forwarding, and visible-password warnings.
+- Cross-proxy language propagation across the UI bridge protocol, dynamically synchronizing proxy player locales to backend native Java dialogs and chest menus without requiring duplicate backend localization configuration.
+- Dynamic multi-language localization for native Java dialog controls (`Previous`, `Next`, `Refresh`, `Close`) supporting all 15 built-in locales and custom language packs.
+- Inline `{lang:key}` placeholder token resolution in backend custom menu YAML configuration for titles, item display names, and lore lines.
+- Configurable empty slot filler decoration (`fill_empty_slots` and `filler_material`) for backend chest menus.
 - Tests for UI protocol validation, callback/session binding, configuration migration, and pagination independent of chest dimensions; an optional Paper runtime dialog probe.
 
 ### Fixed

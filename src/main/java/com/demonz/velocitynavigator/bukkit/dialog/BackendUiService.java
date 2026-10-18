@@ -45,6 +45,14 @@ public final class BackendUiService {
     public boolean hasPrompt(Player player) { return tokens.containsKey(player.getUniqueId()); }
     public void context(Player player, UiBridgeProtocol.ClientContext context) { contexts.put(player.getUniqueId(), context); }
 
+    public String language(Player player) {
+        if (player == null) return null;
+        UiBridgeProtocol.ClientContext context = contexts.get(player.getUniqueId());
+        return context != null && context.language() != null && !context.language().isBlank()
+                ? context.language()
+                : null;
+    }
+
     public int protocol(Player player) {
         UiBridgeProtocol.ClientContext context = contexts.get(player.getUniqueId());
         int protocol = context == null ? -1 : context.protocol();
@@ -73,8 +81,9 @@ public final class BackendUiService {
     }
 
     public void open(Player player, UiBridgeProtocol.Open open) {
+        String lang = language(player);
         cancel(player);
-        contexts.put(player.getUniqueId(), new UiBridgeProtocol.ClientContext(open.protocol(), open.bedrock()));
+        contexts.put(player.getUniqueId(), new UiBridgeProtocol.ClientContext(open.protocol(), open.bedrock(), lang == null ? "" : lang));
         HashSet<String> actions = new HashSet<>();
         open.buttons().forEach(button -> { if (!button.action().isBlank()) actions.add(button.action()); });
         actions.add("@close");

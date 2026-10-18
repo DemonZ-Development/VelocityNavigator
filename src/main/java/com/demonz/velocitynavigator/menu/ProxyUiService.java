@@ -88,7 +88,8 @@ public final class ProxyUiService {
         if (UiBridgeProtocol.type(payload) == UiBridgeProtocol.Type.CAPABILITIES) {
             UiBridgeProtocol.Capabilities capability = UiBridgeProtocol.decodeCapabilities(payload);
             capabilities.put(player.getUniqueId(), new Capability(backend.getServerInfo().getName(), capability.dialogs()));
-            backend.sendPluginMessage(JavaInventoryMenuService.CHANNEL, UiBridgeProtocol.context(protocol(player), bedrock(player)));
+            String lang = plugin.config() != null && plugin.config().language() != null ? plugin.config().language().language() : "";
+            backend.sendPluginMessage(JavaInventoryMenuService.CHANNEL, UiBridgeProtocol.context(protocol(player), bedrock(player), lang));
             if (plugin.isAuthenticationPending(player)) plugin.showAuthenticationPrompt(player);
         } else if (UiBridgeProtocol.type(payload) == UiBridgeProtocol.Type.ACTION) {
             UiBridgeProtocol.Action action = UiBridgeProtocol.decodeAction(payload);
