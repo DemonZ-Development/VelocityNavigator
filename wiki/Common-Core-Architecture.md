@@ -60,6 +60,7 @@ Each common class is exercised by:
 | `RedisProtocolTest` | RESP encode precision, parse safety caps (lines, bulk, array, nesting, frame), malformed lengths |
 | `RedisSecurityTest` | Signature determinism, payload binding, host allowlist exact + wildcard rules, timestamp freshness window |
 | `ModrinthClientTest` | `bestVersionIn` for null/empty/no-match/typed-mixed arrays, SemanticVersion-order correctness |
+| `DemonzClientTest` | `bestVersionIn` for root, changelog, platforms, mixed types, and `inferFromVersion` semantic qualifier inference |
 
 ## Cross-references
 

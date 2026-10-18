@@ -315,10 +315,10 @@ final class ConfigWriter {
 
     private static void writeUpdateChecker(StringBuilder b, String wiki, Config config) {
         b.append("# ┌─────────────────────────────────────────────────────────────────┐\n");
-        b.append("# │  UPDATE CHECKER — Automatic Modrinth version checking           │\n");
+        b.append("# │  UPDATE CHECKER — Automatic DemonZ & Modrinth version checking  │\n");
         b.append("# └─────────────────────────────────────────────────────────────────┘\n");
         b.append("[update_checker]\n\n");
-        b.append("# Enable periodic update checking via the Modrinth API.\n");
+        b.append("# Enable periodic update checking via DemonZ and Modrinth APIs.\n");
         b.append("# Wiki: ").append(wiki).append("/Configuration-Guide#update_checker\n");
         b.append("enabled = ").append(config.updateChecker().enabled()).append("\n\n");
         b.append("# Which release channel to follow: \"release\", \"beta\", or \"alpha\".\n");

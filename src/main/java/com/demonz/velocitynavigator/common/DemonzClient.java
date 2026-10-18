@@ -39,13 +39,21 @@ public final class DemonzClient {
                 return UNKNOWN;
             }
             String lower = version.toLowerCase(Locale.ROOT);
-            if (lower.contains("alpha")) {
+            if (lower.contains("alpha") || lower.contains("snapshot") || lower.contains("dev") || lower.contains("nightly")) {
                 return ALPHA;
             }
-            if (lower.contains("beta")) {
+            if (lower.contains("beta") || lower.contains("rc") || lower.contains("pre")) {
                 return BETA;
             }
             return RELEASE;
+        }
+
+        public static VersionType resolve(String explicitType, String version) {
+            VersionType parsed = fromString(explicitType);
+            if (parsed != UNKNOWN) {
+                return parsed;
+            }
+            return inferFromVersion(version);
         }
     }
 
@@ -61,66 +69,92 @@ public final class DemonzClient {
         if (root == null || isAllowed == null) {
             return Optional.empty();
         }
-        SemanticVersion best = null;
-        String bestRaw = null;
+        SemanticVersion[] best = new SemanticVersion[1];
+        String[] bestRaw = new String[1];
 
         if (root.has("changelog") && root.get("changelog").isJsonObject()) {
             JsonObject changelog = root.getAsJsonObject("changelog");
+            if (changelog.has("latest") && changelog.get("latest").isJsonObject()) {
+                considerObject(changelog.getAsJsonObject("latest"), isAllowed, best, bestRaw);
+            }
             if (changelog.has("recent_history") && changelog.get("recent_history").isJsonArray()) {
-                JsonArray history = changelog.getAsJsonArray("recent_history");
-                for (JsonElement element : history) {
-                    if (element == null || !element.isJsonObject()) {
-                        continue;
-                    }
-                    JsonObject item = element.getAsJsonObject();
-                    String version = stringField(item, "version");
-                    if (version.isBlank()) {
-                        continue;
-                    }
-                    VersionType type = VersionType.inferFromVersion(version);
-                    DemonzRelease release = new DemonzRelease(version, type);
-                    if (!isAllowed.test(release)) {
-                        continue;
-                    }
-                    SemanticVersion parsed = SemanticVersion.parse(version.toLowerCase(Locale.ROOT));
-                    if (best == null || parsed.compareTo(best) > 0) {
-                        best = parsed;
-                        bestRaw = version;
+                for (JsonElement element : changelog.getAsJsonArray("recent_history")) {
+                    if (element != null && element.isJsonObject()) {
+                        considerObject(element.getAsJsonObject(), isAllowed, best, bestRaw);
                     }
                 }
             }
         }
 
-        String latestVersion = stringField(root, "latest_version");
-        if (!latestVersion.isBlank()) {
-            VersionType type = VersionType.inferFromVersion(latestVersion);
-            DemonzRelease release = new DemonzRelease(latestVersion, type);
-            if (isAllowed.test(release)) {
-                SemanticVersion parsed = SemanticVersion.parse(latestVersion.toLowerCase(Locale.ROOT));
-                if (best == null || parsed.compareTo(best) > 0) {
-                    best = parsed;
-                    bestRaw = latestVersion;
+        if (root.has("all_platforms") && root.get("all_platforms").isJsonArray()) {
+            for (JsonElement element : root.getAsJsonArray("all_platforms")) {
+                if (element != null && element.isJsonObject()) {
+                    considerObject(element.getAsJsonObject(), isAllowed, best, bestRaw);
+                }
+            }
+        }
+
+        if (root.has("platforms") && root.get("platforms").isJsonObject()) {
+            JsonObject platforms = root.getAsJsonObject("platforms");
+            for (String key : platforms.keySet()) {
+                JsonElement elem = platforms.get(key);
+                if (elem != null && elem.isJsonObject()) {
+                    considerObject(elem.getAsJsonObject(), isAllowed, best, bestRaw);
+                } else if (elem != null && elem.isJsonPrimitive()) {
+                    considerCandidate(elem.getAsString(), null, isAllowed, best, bestRaw);
                 }
             }
         }
 
         if (root.has("release") && root.get("release").isJsonObject()) {
-            JsonObject releaseObject = root.getAsJsonObject("release");
-            String releaseVersion = stringField(releaseObject, "version");
-            if (!releaseVersion.isBlank()) {
-                VersionType type = VersionType.inferFromVersion(releaseVersion);
-                DemonzRelease release = new DemonzRelease(releaseVersion, type);
-                if (isAllowed.test(release)) {
-                    SemanticVersion parsed = SemanticVersion.parse(releaseVersion.toLowerCase(Locale.ROOT));
-                    if (best == null || parsed.compareTo(best) > 0) {
-                        best = parsed;
-                        bestRaw = releaseVersion;
-                    }
-                }
-            }
+            considerObject(root.getAsJsonObject("release"), isAllowed, best, bestRaw);
         }
 
-        return bestRaw == null ? Optional.empty() : Optional.of(bestRaw);
+        String latestVersion = stringField(root, "latest_version");
+        if (!latestVersion.isBlank()) {
+            considerCandidate(latestVersion, stringField(root, "update_type"), isAllowed, best, bestRaw);
+        }
+
+        String rootVersion = stringField(root, "version");
+        if (!rootVersion.isBlank()) {
+            considerCandidate(rootVersion, stringField(root, "type"), isAllowed, best, bestRaw);
+        }
+
+        return bestRaw[0] == null ? Optional.empty() : Optional.of(bestRaw[0]);
+    }
+
+    private static void considerObject(JsonObject object, Predicate<DemonzRelease> isAllowed, SemanticVersion[] best, String[] bestRaw) {
+        String version = stringField(object, "version");
+        if (version.isBlank()) {
+            version = stringField(object, "version_number");
+        }
+        if (version.isBlank()) {
+            return;
+        }
+        String typeStr = stringField(object, "version_type");
+        if (typeStr.isBlank()) {
+            typeStr = stringField(object, "type");
+        }
+        if (typeStr.isBlank()) {
+            typeStr = stringField(object, "channel");
+        }
+        considerCandidate(version, typeStr, isAllowed, best, bestRaw);
+    }
+
+    private static void considerCandidate(String version, String typeStr, Predicate<DemonzRelease> isAllowed, SemanticVersion[] best, String[] bestRaw) {
+        if (version == null || version.isBlank()) {
+            return;
+        }
+        VersionType type = VersionType.resolve(typeStr, version);
+        DemonzRelease release = new DemonzRelease(version, type);
+        if (!isAllowed.test(release)) {
+            return;
+        }
+        SemanticVersion parsed = SemanticVersion.parse(version.toLowerCase(Locale.ROOT));
+        if (best[0] == null || parsed.compareTo(best[0]) > 0) {
+            best[0] = parsed;
+            bestRaw[0] = version;
+        }
     }
 
     private static String stringField(JsonObject object, String key) {

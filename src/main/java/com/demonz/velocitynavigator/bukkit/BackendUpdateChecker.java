@@ -101,29 +101,8 @@ public class BackendUpdateChecker {
     private String fetchDemonzVersion() {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(DemonzClient.UPDATES_URL);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("User-Agent", demonzUserAgent);
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-
+            connection = openWithRedirects(DemonzClient.UPDATES_URL, demonzUserAgent);
             int responseCode = connection.getResponseCode();
-            if (responseCode == 301 || responseCode == 302 || responseCode == 307 || responseCode == 308) {
-                String location = connection.getHeaderField("Location");
-                if (location != null && !location.isBlank()) {
-                    connection.disconnect();
-                    url = new URL(location);
-                    connection = (HttpURLConnection) url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setRequestProperty("User-Agent", demonzUserAgent);
-                    connection.setConnectTimeout(5000);
-                    connection.setReadTimeout(5000);
-                    responseCode = connection.getResponseCode();
-                }
-            }
-
             if (responseCode == 429) {
                 rateLimitHit("DemonZ");
                 return null;
@@ -147,14 +126,7 @@ public class BackendUpdateChecker {
     private String fetchModrinthVersion() {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(ModrinthClient.API_URL);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("User-Agent", modrinthUserAgent);
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-
+            connection = openWithRedirects(ModrinthClient.API_URL, modrinthUserAgent);
             int responseCode = connection.getResponseCode();
             if (responseCode == 429) {
                 rateLimitHit("Modrinth");
@@ -174,6 +146,35 @@ public class BackendUpdateChecker {
                 connection.disconnect();
             }
         }
+    }
+
+    private HttpURLConnection openWithRedirects(String initialUrl, String userAgent) throws Exception {
+        URL currentUrl = new URL(initialUrl);
+        for (int i = 0; i < 5; i++) {
+            HttpURLConnection conn = (HttpURLConnection) currentUrl.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", userAgent);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            int code = conn.getResponseCode();
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (location != null && !location.isBlank()) {
+                    currentUrl = new URL(currentUrl, location);
+                    continue;
+                }
+            }
+            return conn;
+        }
+        HttpURLConnection finalConn = (HttpURLConnection) currentUrl.openConnection();
+        finalConn.setRequestMethod("GET");
+        finalConn.setInstanceFollowRedirects(true);
+        finalConn.setRequestProperty("User-Agent", userAgent);
+        finalConn.setConnectTimeout(5000);
+        finalConn.setReadTimeout(5000);
+        return finalConn;
     }
 
     private void rateLimitHit(String service) {
