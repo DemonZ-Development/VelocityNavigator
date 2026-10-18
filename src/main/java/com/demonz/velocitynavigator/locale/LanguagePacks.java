@@ -90,7 +90,7 @@ public final class LanguagePacks {
                     continue;
                 }
                 String key = line.substring(0, eq).trim();
-                String value = line.substring(eq + 1);
+                String value = decodeUnicodeEscapes(line.substring(eq + 1).trim());
 
                 int lastDot = key.lastIndexOf('.');
                 if (lastDot > 0) {
@@ -106,7 +106,7 @@ public final class LanguagePacks {
                     }
                 }
 
-                strings.put(key, value.trim());
+                strings.put(key, value);
             }
         } catch (IOException ignored) {
         } finally {
@@ -123,6 +123,28 @@ public final class LanguagePacks {
         }
 
         return new LanguageBundle(code, code, strings, finalLists);
+    }
+
+    public static String decodeUnicodeEscapes(String text) {
+        if (text == null || !text.contains("\\u")) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder(text.length());
+        int len = text.length();
+        for (int i = 0; i < len; i++) {
+            char c = text.charAt(i);
+            if (c == '\\' && i + 5 < len && text.charAt(i + 1) == 'u') {
+                try {
+                    int unicode = Integer.parseInt(text.substring(i + 2, i + 6), 16);
+                    sb.append((char) unicode);
+                    i += 5;
+                    continue;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     private static String normalize(String code) {

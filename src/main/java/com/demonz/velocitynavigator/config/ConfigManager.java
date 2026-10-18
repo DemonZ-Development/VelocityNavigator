@@ -243,7 +243,9 @@ public final class ConfigManager {
             }
             return external;
         }
-        if (LanguagePacks.isSupported(selectedLanguage) && !selectedLanguage.equals(activeLanguage)) {
+        boolean shouldSwitch = LanguagePacks.isSupported(selectedLanguage)
+                && (!selectedLanguage.equals(activeLanguage) || matchesForeignBaseline(messageToml, selectedLanguage, dataDirectory));
+        if (shouldSwitch) {
             LanguageBundle switched = LanguagePacks.bundle(selectedLanguage, dataDirectory);
             writeMessages(switched);
             state.warnings.add("Switched messages.toml to built-in language '" + selectedLanguage + "'.");
@@ -348,6 +350,22 @@ public final class ConfigManager {
     private String nameOf(String key) {
         int split = key.lastIndexOf('.');
         return split < 0 ? key : key.substring(split + 1);
+    }
+
+    private static boolean matchesForeignBaseline(Toml messageToml, String selectedLanguage, Path dataDirectory) {
+        String sampleKey = "messages.connecting";
+        String currentSample = TomlReaderUtils.stringValue(TomlReaderUtils.rawValue(messageToml, sampleKey), "");
+        if (currentSample.isBlank()) {
+            return false;
+        }
+        if (currentSample.contains("\\u") || currentSample.contains("\\\\u")) {
+            return true;
+        }
+        if ("en".equalsIgnoreCase(selectedLanguage)) {
+            return false;
+        }
+        LanguageBundle english = LanguagePacks.bundle("en", dataDirectory);
+        return english != null && english.text(sampleKey).equals(currentSample);
     }
 
     private GuiConfig loadGui(Toml navigatorToml, ParseState state) throws IOException {
